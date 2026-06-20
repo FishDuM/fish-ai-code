@@ -1,6 +1,8 @@
 spring:
   application:
     name: fish-ai-code
+  profiles:
+    active: local
 server:
   port: 8911
   servlet:
