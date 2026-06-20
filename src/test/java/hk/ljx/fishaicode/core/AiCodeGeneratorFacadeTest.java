@@ -20,19 +20,19 @@ class AiCodeGeneratorFacadeTest {
 
     @Test
     void generateAndSaveHtmlCode() {
-        File file = aiCodeGeneratorFacade.generateAndSaveCode("做个小鱼的博客，不超过20行", CodeGenTypeEnum.HTML);
+        File file = aiCodeGeneratorFacade.generateAndSaveCode("做个小鱼的博客，不超过20行", CodeGenTypeEnum.HTML, 1L);
         Assertions.assertNotNull(file);
     }
 
     @Test
     void generateAndSaveMultiFileCode() {
-        File file = aiCodeGeneratorFacade.generateAndSaveCode("做个小鱼的博客，不超过50行", CodeGenTypeEnum.MULTI_FILE);
+        File file = aiCodeGeneratorFacade.generateAndSaveCode("做个小鱼的博客，不超过50行", CodeGenTypeEnum.MULTI_FILE, 1L);
         Assertions.assertNotNull(file);
     }
 
     @Test
     void generateAndSaveCodeStream() {
-        Flux<String> stringFlux = aiCodeGeneratorFacade.generateAndSaveCodeStream("做个小鱼的博客，不超过20行", CodeGenTypeEnum.HTML);
+        Flux<String> stringFlux = aiCodeGeneratorFacade.generateAndSaveCodeStream("做个小鱼的博客，不超过20行", CodeGenTypeEnum.HTML, 1L);
         List<String> result = stringFlux.collectList().block();
         Assertions.assertNotNull(result);
         String completeContent = String.join("", result);

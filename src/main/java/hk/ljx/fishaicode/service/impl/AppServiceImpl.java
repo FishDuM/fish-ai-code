@@ -3,12 +3,15 @@ package hk.ljx.fishaicode.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import hk.ljx.fishaicode.constant.AppConstant;
+import hk.ljx.fishaicode.core.AiCodeGeneratorFacade;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
+import hk.ljx.fishaicode.exception.ThrowUtils;
 import hk.ljx.fishaicode.modal.dto.app.AdminAppQueryRequest;
 import hk.ljx.fishaicode.modal.dto.app.AppAddRequest;
 import hk.ljx.fishaicode.modal.dto.app.AppQueryRequest;
@@ -18,10 +21,15 @@ import hk.ljx.fishaicode.mapper.AppMapper;
 import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;
 import hk.ljx.fishaicode.modal.vo.AppVO;
 import hk.ljx.fishaicode.service.AppService;
+import jakarta.annotation.Resource;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -31,6 +39,9 @@ import java.util.stream.Collectors;
  */
 @Service
 public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppService {
+
+    @Resource
+    private AiCodeGeneratorFacade aiCodeGeneratorFacade;
 
     @Override
     public long addApp(AppAddRequest appAddRequest, User loginUser) {
@@ -250,5 +261,37 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             return new ArrayList<>();
         }
         return appList.stream().map(this::getAppVO).collect(Collectors.toList());
+    }
+
+    @Override
+    public Flux<ServerSentEvent<String>> chatToGenCode(Long appId, String message, User loginUser) {
+        // 1、校验参数
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
+        ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "用户消息不能为空");
+        // 2、获取应用信息
+        App app = this.getById(appId);
+        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        // 3、权限校验，仅本人可以和自己的应用对话
+        ThrowUtils.throwIf(!app.getUserId().equals(loginUser.getId()), ErrorCode.NO_AUTH_ERROR, "没有权限");
+        // 4、应用代码生成类型
+        String codeGenType = app.getCodeGenType();
+        CodeGenTypeEnum enumByValue = CodeGenTypeEnum.getEnumByValue(codeGenType);
+        if (enumByValue == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR ,"应用代码生成类型错误");
+        }
+        // 5、调用代码生成接口
+        Flux<String> stringFlux = aiCodeGeneratorFacade.generateAndSaveCodeStream(message, enumByValue, appId);
+        return stringFlux.map(code -> {
+            Map<String, String> wrapper = Map.of("d", code);
+            String jsonStr = JSONUtil.toJsonStr(wrapper);
+            return ServerSentEvent.<String>builder()
+                    .data(jsonStr)
+                    .build();
+        }).concatWith(Mono.just(
+                ServerSentEvent.<String>builder()
+                        .event("done")
+                        .data("")
+                        .build()
+        ));
     }
 }

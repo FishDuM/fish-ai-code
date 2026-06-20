@@ -9,6 +9,8 @@ import hk.ljx.fishaicode.modal.dto.app.AppQueryRequest;
 import hk.ljx.fishaicode.modal.entity.App;
 import hk.ljx.fishaicode.modal.entity.User;
 import hk.ljx.fishaicode.modal.vo.AppVO;
+import org.springframework.http.codec.ServerSentEvent;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 
@@ -123,4 +125,13 @@ public interface AppService extends IService<App> {
      * @return 应用视图对象列表
      */
     List<AppVO> getAppVOList(List<App> appList);
+
+    /**
+     * 对话生成应用
+     * @param appId 应用id
+     * @param message 提示词
+     * @param loginUser 登录用户
+     * @return 流
+     */
+    Flux<ServerSentEvent<String>> chatToGenCode(Long appId, String message, User loginUser);
 }

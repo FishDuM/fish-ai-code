@@ -1,5 +1,6 @@
 package hk.ljx.fishaicode.controller;
 
+import cn.hutool.core.util.StrUtil;
 import com.mybatisflex.core.paginate.Page;
 import hk.ljx.fishaicode.annotation.AuthCheck;
 import hk.ljx.fishaicode.common.BaseResponse;
@@ -17,7 +18,10 @@ import hk.ljx.fishaicode.service.AppService;
 import hk.ljx.fishaicode.service.UserService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.MediaType;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
 
 /**
  * 应用 控制层。
@@ -122,6 +126,14 @@ public class AppController {
         ThrowUtils.throwIf(appQueryRequest == null, ErrorCode.PARAMS_ERROR);
         Page<AppVO> result = appService.listFeaturedAppsByPage(appQueryRequest);
         return ResultUtils.success(result);
+    }
+
+    @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam("appId") Long appId, @RequestParam("message") String message, HttpServletRequest request) {
+        ThrowUtils.throwIf(appId == null || appId < 0, ErrorCode.PARAMS_ERROR);
+        ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR);
+        User loginUser = userService.getLoginUser(request);
+        return appService.chatToGenCode(appId, message, loginUser);
     }
 
     // ===== 管理员接口 =====
