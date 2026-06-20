@@ -2,7 +2,7 @@ package hk.ljx.fishaicode.service;
 
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.core.service.IService;
-import hk.ljx.fishaicode.modal.dto.UserQueryRequest;
+import hk.ljx.fishaicode.modal.dto.user.UserQueryRequest;
 import hk.ljx.fishaicode.modal.entity.User;
 import hk.ljx.fishaicode.modal.vo.LoginUserVO;
 import hk.ljx.fishaicode.modal.vo.UserVO;

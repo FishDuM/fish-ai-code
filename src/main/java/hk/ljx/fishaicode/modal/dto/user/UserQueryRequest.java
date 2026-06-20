@@ -1,4 +1,4 @@
-package hk.ljx.fishaicode.modal.dto;
+package hk.ljx.fishaicode.modal.dto.user;
 
 import hk.ljx.fishaicode.common.PageRequest;
 import lombok.Data;

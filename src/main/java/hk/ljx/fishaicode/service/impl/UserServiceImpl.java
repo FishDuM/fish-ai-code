@@ -7,7 +7,7 @@ import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
-import hk.ljx.fishaicode.modal.dto.UserQueryRequest;
+import hk.ljx.fishaicode.modal.dto.user.UserQueryRequest;
 import hk.ljx.fishaicode.modal.entity.User;
 import hk.ljx.fishaicode.mapper.UserMapper;
 import hk.ljx.fishaicode.modal.enums.UserRoleEnum;
