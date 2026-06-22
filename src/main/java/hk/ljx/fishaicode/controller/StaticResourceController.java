@@ -1,5 +1,6 @@
 package hk.ljx.fishaicode.controller;
 
+import hk.ljx.fishaicode.constant.AppConstant;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -17,9 +18,6 @@ import java.io.File;
 @RestController
 @RequestMapping("/static")
 public class StaticResourceController {
-
-    // 应用生成根目录（用于浏览）
-    private static final String PREVIEW_ROOT_DIR = System.getProperty("user.dir") + "/tmp/code_output";
 
     /**
      * 提供静态资源访问，支持目录重定向
@@ -44,7 +42,7 @@ public class StaticResourceController {
                 resourcePath = "/index.html";
             }
             // 构建文件路径
-            String filePath = PREVIEW_ROOT_DIR + "/" + deployKey + resourcePath;
+            String filePath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/" + deployKey + resourcePath;
             File file = new File(filePath);
             // 检查文件是否存在
             if (!file.exists()) {

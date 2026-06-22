@@ -3,6 +3,7 @@ package hk.ljx.fishaicode.core.saver;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
+import hk.ljx.fishaicode.constant.AppConstant;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;
@@ -15,9 +16,6 @@ import java.nio.charset.StandardCharsets;
  *
  */
 public abstract class CodeFileSaverTemplate<T> {
-
-    // 文件保存根目录
-    protected static final String FILE_SAVE_ROOT_DIR = System.getProperty("user.dir") + "/tmp/code_output";
 
     /**
      * 模板方法：保存代码的标准流程
@@ -60,7 +58,7 @@ public abstract class CodeFileSaverTemplate<T> {
         }
         String codeType = getCodeType().getValue();
         String uniqueDirName = StrUtil.format("{}_{}", codeType, appId);
-        String dirPath = FILE_SAVE_ROOT_DIR + File.separator + uniqueDirName;
+        String dirPath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + uniqueDirName;
         FileUtil.mkdir(dirPath);
         return dirPath;
     }
