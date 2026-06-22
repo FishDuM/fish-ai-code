@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Table, Button, Modal, Form, Input, InputNumber, Space, Tag, message, Typography } from 'antd';
+import { Table, Button, Modal, Form, Input, InputNumber, Space, Tag, App, Typography } from 'antd';
 import { EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { adminListApps, adminUpdateApp, adminDeleteApp } from '@/api/app';
@@ -10,6 +10,7 @@ const { Title } = Typography;
 
 export default function AppManage() {
   useTitle('应用管理');
+  const { message } = App.useApp();
   const [apps, setApps] = useState<App[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -25,7 +26,9 @@ export default function AppManage() {
         setApps(res.records);
         setTotal(res.totalRow);
       })
-      .catch(() => {})
+      .catch(() => {
+        message.error('加载应用列表失败');
+      })
       .finally(() => setLoading(false));
   };
 

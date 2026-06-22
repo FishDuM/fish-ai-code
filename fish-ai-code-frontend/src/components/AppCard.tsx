@@ -89,7 +89,7 @@ export default function AppCard({ app, onEdit, onDelete, onOpen, showActions = t
       <Card.Meta
         title={app.appName || '未命名应用'}
         description={
-          <Space direction="vertical" size={4} style={{ width: '100%' }}>
+          <Space orientation="vertical" size={4} style={{ width: '100%' }}>
             <Space>
               <Tag color={app.codeGenType === 'multi_file' ? 'blue' : 'green'}>
                 {codeGenLabel}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Row, Col, Typography, Button, Pagination, Space, Empty } from 'antd';
+import { Row, Col, Typography, Button, Pagination, Space, Empty, App } from 'antd';
 import { RocketOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router';
 import AppCard from '@/components/AppCard';
@@ -16,6 +16,7 @@ export default function Home() {
   useTitle('首页');
   const navigate = useNavigate();
   const { loginUser } = useAuthStore();
+  const { message } = App.useApp();
   const [apps, setApps] = useState<AppVO[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -28,7 +29,9 @@ export default function Home() {
         setApps(res.records);
         setTotal(res.totalRow);
       })
-      .catch(() => {})
+      .catch(() => {
+        message.error('加载精选应用失败');
+      })
       .finally(() => setLoading(false));
   }, [query]);
 

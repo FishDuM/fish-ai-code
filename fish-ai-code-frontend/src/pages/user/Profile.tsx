@@ -29,7 +29,7 @@ export default function Profile() {
           </Tag>
         </div>
 
-        <Descriptions column={1} bordered size="small">
+        <Descriptions column={1} variant="bordered" size="small">
           <Descriptions.Item label="账号">{loginUser.userAccount}</Descriptions.Item>
           <Descriptions.Item label="昵称">{loginUser.userName || '-'}</Descriptions.Item>
           <Descriptions.Item label="简介">{loginUser.userProfile || '-'}</Descriptions.Item>

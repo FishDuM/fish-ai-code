@@ -31,10 +31,8 @@ public class AiCodeGeneratorFacade {
      */
     private Flux<String> processCodeStream(Flux<String> codeStream, CodeGenTypeEnum codeGenType, Long appId) {
         StringBuilder codeBuilder = new StringBuilder();
-        return codeStream.doOnNext(chunk -> {
-            // 实时收集代码片段
-            codeBuilder.append(chunk);
-        }).doOnComplete(() -> {
+        // 实时收集代码片段
+        return codeStream.doOnNext(codeBuilder::append).doOnComplete(() -> {
             // 流式返回完成后保存代码
             try {
                 String completeCode = codeBuilder.toString();

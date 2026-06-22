@@ -85,6 +85,7 @@ export interface AppVO {
   appName: string | null;
   cover: string | null;
   codeGenType: string | null;
+  initPrompt: string | null;
   priority: number | null;
   userId: string;
   createTime: string;
@@ -121,6 +122,10 @@ export interface AppQueryRequest extends PageRequest {
   appName?: string;
 }
 
+export interface AppDeployRequest {
+  appId: string;
+}
+
 export interface DeleteRequest {
   id: string;
 }
@@ -141,4 +146,22 @@ export interface AdminAppQueryRequest extends PageRequest {
   deployKey?: string;
   priority?: number;
   userId?: string;
+}
+
+// ============ ChatHistory ============
+
+export interface ChatHistory {
+  id: string;
+  message: string;
+  messageType: string;
+  appId: string;
+  userId: string;
+  createTime: string;
+  updateTime: string;
+}
+
+export interface AdminChatHistoryQueryRequest extends PageRequest {
+  appId?: string;
+  userId?: string;
+  messageType?: string;
 }

@@ -21,8 +21,10 @@ import hk.ljx.fishaicode.modal.entity.App;
 import hk.ljx.fishaicode.modal.entity.User;
 import hk.ljx.fishaicode.mapper.AppMapper;
 import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;
+import hk.ljx.fishaicode.modal.enums.MessageTypeEnum;
 import hk.ljx.fishaicode.modal.vo.AppVO;
 import hk.ljx.fishaicode.service.AppService;
+import hk.ljx.fishaicode.service.ChatHistoryService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.codec.ServerSentEvent;
@@ -49,6 +51,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     @Resource
     private AiCodeGeneratorFacade aiCodeGeneratorFacade;
 
+    @Resource
+    private ChatHistoryService chatHistoryService;
+
     @Override
     public long addApp(AppAddRequest appAddRequest, User loginUser) {
         // 1. 校验
@@ -74,6 +79,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (app.getPriority() == null) {
             app.setPriority(0);
         }
+        app.setCover("https://api.elaina.cat/random/");
         // 3. 保存
         boolean result = this.save(app);
         if (!result) {
@@ -150,7 +156,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (!oldApp.getUserId().equals(loginUser.getId())) {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
         }
-        // 4. 删除
+        // 4. 删除应用的所有对话历史
+        chatHistoryService.removeByAppId(id);
+        // 5. 删除应用
         return this.removeById(id);
     }
 
@@ -285,20 +293,48 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (enumByValue == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR ,"应用代码生成类型错误");
         }
-        // 5、调用代码生成接口
+        // 5、保存用户消息到对话历史
+        chatHistoryService.addChatHistory(appId, loginUser.getId(), message, MessageTypeEnum.USER.getValue());
+        // 6、调用代码生成接口
         Flux<String> stringFlux = aiCodeGeneratorFacade.generateAndSaveCodeStream(message, enumByValue, appId);
-        return stringFlux.map(code -> {
-            Map<String, String> wrapper = Map.of("d", code);
-            String jsonStr = JSONUtil.toJsonStr(wrapper);
-            return ServerSentEvent.<String>builder()
-                    .data(jsonStr)
-                    .build();
-        }).concatWith(Mono.just(
-                ServerSentEvent.<String>builder()
-                        .event("done")
-                        .data("")
-                        .build()
-        ));
+        StringBuilder responseBuilder = new StringBuilder();
+        return stringFlux
+                .doOnNext(responseBuilder::append)
+                .map(code -> {
+                    Map<String, String> wrapper = Map.of("d", code);
+                    String jsonStr = JSONUtil.toJsonStr(wrapper);
+                    return ServerSentEvent.<String>builder()
+                            .data(jsonStr)
+                            .build();
+                })
+                .concatWith(Mono.fromRunnable(() -> {
+                    // 7、AI 回复完成，保存 AI 消息到对话历史
+                    String aiResponse = responseBuilder.toString();
+                    chatHistoryService.addChatHistory(appId, loginUser.getId(), aiResponse, MessageTypeEnum.AI.getValue());
+                }).then(Mono.just(
+                        ServerSentEvent.<String>builder()
+                                .event("done")
+                                .data("")
+                                .build()
+                )))
+                .onErrorResume(e -> {
+                    // 忽略客户端主动断连（IOException / Cancel），只处理真正的 AI 生成错误
+                    if (e instanceof java.io.IOException
+                            || reactor.core.Exceptions.isCancel(e)) {
+                        log.info("客户端断开连接，跳过保存对话历史");
+                        return Flux.empty();
+                    }
+                    // 生成失败，保存错误信息到对话历史
+                    log.error("AI 生成失败: {}", e.getMessage());
+                    String errorMsg = "AI 生成失败：" + (e.getMessage() != null ? e.getMessage() : "未知错误");
+                    chatHistoryService.addChatHistory(appId, loginUser.getId(), errorMsg, MessageTypeEnum.AI.getValue());
+                    return Flux.just(
+                            ServerSentEvent.<String>builder()
+                                    .event("error")
+                                    .data(errorMsg)
+                                    .build()
+                    );
+                });
     }
 
     @Override

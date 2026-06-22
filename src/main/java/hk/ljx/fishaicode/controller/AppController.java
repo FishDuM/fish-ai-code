@@ -128,6 +128,13 @@ public class AppController {
         return ResultUtils.success(result);
     }
 
+    /**
+     * 聊天生成应用
+     * @param appId 应用id
+     * @param message 消息
+     * @param request http请求
+     * @return sse流
+     */
     @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam("appId") Long appId, @RequestParam("message") String message, HttpServletRequest request) {
         ThrowUtils.throwIf(appId == null || appId < 0, ErrorCode.PARAMS_ERROR);

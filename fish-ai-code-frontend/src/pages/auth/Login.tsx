@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Form, Input, Button, Card, Typography, message, Space } from 'antd';
+import { Form, Input, Button, Card, Typography, App, Space } from 'antd';
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams, Link } from 'react-router';
 import { useAuthStore } from '@/stores/useAuthStore';
@@ -12,6 +12,7 @@ export default function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { login, isLoading } = useAuthStore();
+  const { message } = App.useApp();
   const [form] = Form.useForm();
 
   const handleSubmit = async (values: { userAccount: string; userPassword: string }) => {
@@ -35,7 +36,7 @@ export default function Login() {
         background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
       }}
     >
-      <Card style={{ width: 400, borderRadius: 12 }} bordered={false}>
+      <Card style={{ width: 400, borderRadius: 12 }} variant="borderless">
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <Title level={3} style={{ marginBottom: 4 }}>🐟 Fish AI Code</Title>
           <Text type="secondary">AI 驱动的网站生成平台</Text>

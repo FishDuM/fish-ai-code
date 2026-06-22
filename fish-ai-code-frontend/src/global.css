@@ -10,20 +10,6 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Chat scrollbar */
-.chat-messages::-webkit-scrollbar {
-  width: 6px;
-}
-
-.chat-messages::-webkit-scrollbar-thumb {
-  background: #d9d9d9;
-  border-radius: 3px;
-}
-
-.chat-messages::-webkit-scrollbar-thumb:hover {
-  background: #bfbfbf;
-}
-
 /* Typing animation */
 .typing-dots span {
   animation: typing 1.4s infinite;

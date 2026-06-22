@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Table, Button, Modal, Form, Input, Select, Space, Tag, message, Avatar, Typography } from 'antd';
-import { EditOutlined, DeleteOutlined, UserOutlined } from '@ant-design/icons';
+import { Table, Button, Modal, Form, Input, Select, Space, Tag, App, Avatar, Typography } from 'antd';
+import { EditOutlined, DeleteOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { listUsers, updateUser, deleteUser } from '@/api/user';
+import { listUsers, updateUser, deleteUser, addUser } from '@/api/user';
 import { useTitle } from '@/hooks/useTitle';
 import type { UserVO, UserQueryRequest } from '@/api/types';
 
@@ -10,6 +10,7 @@ const { Title } = Typography;
 
 export default function UserManage() {
   useTitle('用户管理');
+  const { message } = App.useApp();
   const [users, setUsers] = useState<UserVO[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -17,6 +18,9 @@ export default function UserManage() {
   const [editUser, setEditUser] = useState<UserVO | null>(null);
   const [editLoading, setEditLoading] = useState(false);
   const [form] = Form.useForm();
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [addLoading, setAddLoading] = useState(false);
+  const [addForm] = Form.useForm();
 
   const fetchUsers = () => {
     setLoading(true);
@@ -25,7 +29,9 @@ export default function UserManage() {
         setUsers(res.records);
         setTotal(res.totalRow);
       })
-      .catch(() => {})
+      .catch(() => {
+        message.error('加载用户列表失败');
+      })
       .finally(() => setLoading(false));
   };
 
@@ -54,6 +60,22 @@ export default function UserManage() {
       if (err.message) message.error(err.message);
     } finally {
       setEditLoading(false);
+    }
+  };
+
+  const handleAddOk = async () => {
+    setAddLoading(true);
+    try {
+      const values = await addForm.validateFields();
+      await addUser(values);
+      message.success('新增用户成功（默认密码：12345678）');
+      setAddModalOpen(false);
+      addForm.resetFields();
+      fetchUsers();
+    } catch (err: any) {
+      if (err.message) message.error(err.message);
+    } finally {
+      setAddLoading(false);
     }
   };
 
@@ -136,24 +158,35 @@ export default function UserManage() {
     <div>
       <Title level={4} style={{ marginBottom: 16 }}>用户管理</Title>
 
-      <Space style={{ marginBottom: 16 }}>
-        <Input.Search
-          placeholder="搜索账号或昵称"
-          allowClear
-          onSearch={(v) => setQuery((prev) => ({ ...prev, userAccount: v || undefined, pageNum: 1 }))}
-          style={{ width: 240 }}
-        />
-        <Select
-          placeholder="角色筛选"
-          allowClear
-          style={{ width: 120 }}
-          onChange={(v) => setQuery((prev) => ({ ...prev, userRole: v || undefined, pageNum: 1 }))}
-          options={[
-            { label: '用户', value: 'user' },
-            { label: '管理员', value: 'admin' },
-          ]}
-        />
-      </Space>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <Space>
+          <Input.Search
+            placeholder="搜索账号"
+            allowClear
+            onSearch={(v) => setQuery((prev) => ({ ...prev, userAccount: v || undefined, pageNum: 1 }))}
+            style={{ width: 180 }}
+          />
+          <Input.Search
+            placeholder="搜索昵称"
+            allowClear
+            onSearch={(v) => setQuery((prev) => ({ ...prev, userName: v || undefined, pageNum: 1 }))}
+            style={{ width: 180 }}
+          />
+          <Select
+            placeholder="角色筛选"
+            allowClear
+            style={{ width: 120 }}
+            onChange={(v) => setQuery((prev) => ({ ...prev, userRole: v || undefined, pageNum: 1 }))}
+            options={[
+              { label: '用户', value: 'user' },
+              { label: '管理员', value: 'admin' },
+            ]}
+          />
+        </Space>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setAddModalOpen(true)}>
+          新增用户
+        </Button>
+      </div>
 
       <Table
         rowKey="id"
@@ -179,6 +212,43 @@ export default function UserManage() {
         cancelText="取消"
       >
         <Form form={form} layout="vertical">
+          <Form.Item name="userName" label="昵称">
+            <Input placeholder="用户昵称" />
+          </Form.Item>
+          <Form.Item name="userRole" label="角色">
+            <Select
+              options={[
+                { label: '普通用户', value: 'user' },
+                { label: '管理员', value: 'admin' },
+              ]}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title="新增用户"
+        open={addModalOpen}
+        onOk={handleAddOk}
+        onCancel={() => {
+          setAddModalOpen(false);
+          addForm.resetFields();
+        }}
+        confirmLoading={addLoading}
+        okText="创建"
+        cancelText="取消"
+      >
+        <Form form={addForm} layout="vertical">
+          <Form.Item
+            name="userAccount"
+            label="账号"
+            rules={[
+              { required: true, message: '请输入账号' },
+              { min: 4, message: '账号至少 4 个字符' },
+            ]}
+          >
+            <Input placeholder="用户账号" />
+          </Form.Item>
           <Form.Item name="userName" label="昵称">
             <Input placeholder="用户昵称" />
           </Form.Item>

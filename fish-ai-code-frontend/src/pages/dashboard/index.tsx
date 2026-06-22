@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Row, Col, Button, Pagination, Empty, Modal, Input, message, Typography, Space } from 'antd';
+import { Row, Col, Button, Pagination, Empty, Modal, Input, App, Typography, Space } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router';
 import AppCard from '@/components/AppCard';
@@ -14,6 +14,7 @@ const { Title } = Typography;
 export default function Dashboard() {
   useTitle('我的应用');
   const navigate = useNavigate();
+  const { message } = App.useApp();
   const [apps, setApps] = useState<AppVO[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -29,7 +30,9 @@ export default function Dashboard() {
         setApps(res.records);
         setTotal(res.totalRow);
       })
-      .catch(() => {})
+      .catch(() => {
+        message.error('加载应用列表失败');
+      })
       .finally(() => setLoading(false));
   };
 

@@ -1,4 +1,4 @@
-import { Button, message } from 'antd';
+import { Button, App } from 'antd';
 import { CopyOutlined, CheckOutlined } from '@ant-design/icons';
 import { useState } from 'react';
 
@@ -8,6 +8,7 @@ interface CodePreviewProps {
 }
 
 export default function CodePreview({ code }: CodePreviewProps) {
+  const { message } = App.useApp();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {

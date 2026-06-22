@@ -32,6 +32,11 @@ public class AppVO implements Serializable {
     private String codeGenType;
 
     /**
+     * 初始化 prompt
+     */
+    private String initPrompt;
+
+    /**
      * 优先级
      */
     private Integer priority;

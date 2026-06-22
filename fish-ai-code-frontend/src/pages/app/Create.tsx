@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, Form, Input, Button, Radio, Typography, message } from 'antd';
+import { Card, Form, Input, Button, Radio, Typography, App } from 'antd';
 import { RocketOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router';
 import { createApp } from '@/api/app';
@@ -12,6 +12,7 @@ export default function AppCreate() {
   useTitle('创建应用');
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const { message } = App.useApp();
   const [form] = Form.useForm();
 
   const handleSubmit = async (values: { initPrompt: string; appName?: string; codeGenType: string }) => {

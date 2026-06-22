@@ -5,6 +5,7 @@ import type {
   App,
   AppAddRequest,
   AppUpdateRequest,
+  AppDeployRequest,
   AppQueryRequest,
   PageResult,
   AdminAppUpdateRequest,
@@ -23,6 +24,11 @@ export async function updateMyApp(data: AppUpdateRequest): Promise<boolean> {
 
 export async function deleteMyApp(id: string): Promise<boolean> {
   const res = await api.post<BaseResponse<boolean>>('/app/delete', { id });
+  return res.data.data;
+}
+
+export async function deployApp(data: AppDeployRequest): Promise<string> {
+  const res = await api.post<BaseResponse<string>>('/app/deploy', data);
   return res.data.data;
 }
 

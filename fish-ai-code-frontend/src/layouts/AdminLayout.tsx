@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router';
-import { Layout, Menu, Button, Avatar, Space, Dropdown } from 'antd';
+import { Layout, Menu, Button, Avatar, Space, Dropdown, App } from 'antd';
 import {
   UserOutlined,
   AppstoreOutlined,
@@ -9,6 +9,7 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  MessageOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { APP_NAME } from '@/constants';
@@ -19,16 +20,23 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { loginUser, logout } = useAuthStore();
+  const { message } = App.useApp();
   const [collapsed, setCollapsed] = useState(false);
 
   const handleLogout = async () => {
-    await logout();
-    navigate('/login');
+    try {
+      await logout();
+    } catch {
+      message.error('退出登录失败');
+    } finally {
+      navigate('/login');
+    }
   };
 
   const siderItems = [
     { key: '/admin/users', icon: <UserOutlined />, label: '用户管理' },
     { key: '/admin/apps', icon: <AppstoreOutlined />, label: '应用管理' },
+    { key: '/admin/chatHistory', icon: <MessageOutlined />, label: '对话管理' },
   ];
 
   const userMenuItems = [
@@ -91,6 +99,7 @@ export default function AdminLayout() {
               type="text"
               icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
               onClick={() => setCollapsed(!collapsed)}
+              aria-label={collapsed ? '展开菜单' : '收起菜单'}
             />
             <Button
               type="text"

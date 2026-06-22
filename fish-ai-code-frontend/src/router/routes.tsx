@@ -15,6 +15,7 @@ const AppChat = lazy(() => import('@/pages/app/Chat'));
 const Profile = lazy(() => import('@/pages/user/Profile'));
 const UserManage = lazy(() => import('@/pages/admin/UserManage'));
 const AppManage = lazy(() => import('@/pages/admin/AppManage'));
+const ChatManage = lazy(() => import('@/pages/admin/ChatManage'));
 
 function SuspenseWrap({ children }: { children: React.ReactNode }) {
   return (
@@ -125,6 +126,14 @@ export const routes = [
         element: (
           <SuspenseWrap>
             <AppManage />
+          </SuspenseWrap>
+        ),
+      },
+      {
+        path: '/admin/chatHistory',
+        element: (
+          <SuspenseWrap>
+            <ChatManage />
           </SuspenseWrap>
         ),
       },

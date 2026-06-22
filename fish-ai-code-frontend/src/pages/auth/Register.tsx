@@ -1,4 +1,4 @@
-import { Form, Input, Button, Card, Typography, message } from 'antd';
+import { Form, Input, Button, Card, Typography, App } from 'antd';
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { useNavigate, Link } from 'react-router';
 import { useAuthStore } from '@/stores/useAuthStore';
@@ -10,6 +10,7 @@ export default function Register() {
   useTitle('注册');
   const navigate = useNavigate();
   const { register, isLoading } = useAuthStore();
+  const { message } = App.useApp();
   const [form] = Form.useForm();
 
   const handleSubmit = async (values: { userAccount: string; userPassword: string; checkPassword: string }) => {
@@ -32,7 +33,7 @@ export default function Register() {
         background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
       }}
     >
-      <Card style={{ width: 400, borderRadius: 12 }} bordered={false}>
+      <Card style={{ width: 400, borderRadius: 12 }} variant="borderless">
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <Title level={3} style={{ marginBottom: 4 }}>🐟 Fish AI Code</Title>
           <Text type="secondary">创建你的账号</Text>
