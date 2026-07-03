@@ -3,6 +3,7 @@ package hk.ljx.fishaicode.service;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.core.service.IService;
+import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import hk.ljx.fishaicode.modal.dto.chathistory.AdminChatHistoryQueryRequest;
 import hk.ljx.fishaicode.modal.entity.ChatHistory;
 
@@ -26,6 +27,8 @@ public interface ChatHistoryService extends IService<ChatHistory> {
      * @return 是否保存成功
      */
     boolean addChatHistory(Long appId, Long userId, String message, String messageType);
+
+    int loadChatHistoryToMemory(Long appId, MessageWindowChatMemory chatMemory, int maxCount);
 
     /**
      * 游标分页：获取某个应用在指定时间之前的消息（按时间正序返回）

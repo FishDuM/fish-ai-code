@@ -1,6 +1,7 @@
 package hk.ljx.fishaicode.core;
 
 import hk.ljx.fishaicode.ai.AiCodeGeneratorService;
+import hk.ljx.fishaicode.ai.AiCodeGeneratorServiceFactory;
 import hk.ljx.fishaicode.ai.modal.HtmlCodeResult;
 import hk.ljx.fishaicode.ai.modal.MultiFileCodeResult;
 import hk.ljx.fishaicode.core.parser.CodeParserExecutor;
@@ -20,7 +21,7 @@ import java.io.File;
 public class AiCodeGeneratorFacade {
 
     @Resource
-    private AiCodeGeneratorService aiCodeGeneratorService;
+    private AiCodeGeneratorServiceFactory aiCodeGeneratorServiceFactory;
 
     /**
      * 通用流式代码处理方法
@@ -59,6 +60,7 @@ public class AiCodeGeneratorFacade {
         if (codeGenTypeEnum == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "生成类型为空");
         }
+        AiCodeGeneratorService aiCodeGeneratorService = aiCodeGeneratorServiceFactory.createAiCodeGeneratorService(appId);
         return switch (codeGenTypeEnum) {
             case HTML -> {
                 HtmlCodeResult result = aiCodeGeneratorService.generateHtmlCode(userMessage);
@@ -86,6 +88,7 @@ public class AiCodeGeneratorFacade {
         if (codeGenTypeEnum == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "生成类型为空");
         }
+        AiCodeGeneratorService aiCodeGeneratorService = aiCodeGeneratorServiceFactory.createAiCodeGeneratorService(appId);
         return switch (codeGenTypeEnum) {
             case HTML -> {
                 Flux<String> codeStream = aiCodeGeneratorService.generateHtmlCodeStream(userMessage);

@@ -1,11 +1,21 @@
 spring:
   application:
     name: fish-ai-code
+  session:
+    store-type: redis
+    # session 30 天过期
+    timeout: 2592000
 #  datasource:
 #    driver-class-name: com.mysql.cj.jdbc.Driver
 #    url: jdbc:mysql://localhost:3306/fish_ai_code
 #    username:
 #    password:
+  # redis
+#  data:
+#    redis:
+#      host: localhost
+#      port: 6379
+#      ttl: 3600
   profiles:
     active: local
 
@@ -13,6 +23,10 @@ server:
   port: 8911
   servlet:
     context-path: /api
+    # cookie 30 天过期
+    session:
+      cookie:
+        max-age: 2592000
 
 # springdoc-openapi
 springdoc:
@@ -30,7 +44,16 @@ knife4j:
 #  open-ai:
 #    chat-model:
 #      base-url: https://api.deepseek.com
-#      api-key: <Your API Key>
+#      api-key:
+#      model-name: deepseek-v4-flash
+#      log-requests: true
+#      log-responses: true
+#      response-format: json_object
+#      strict-json-schema: true
+#      max-retries: 1
+#    streaming-chat-model:
+#      base-url: https://api.deepseek.com
+#      api-key:
 #      model-name: deepseek-v4-flash
 #      log-requests: true
 #      log-responses: true
