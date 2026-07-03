@@ -8,6 +8,7 @@ import {
   UserOutlined,
   LogoutOutlined,
   SettingOutlined,
+  MenuOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { APP_NAME, USER_ROLES } from '@/constants';
@@ -59,7 +60,7 @@ export default function BasicLayout() {
   };
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
+    <Layout style={{ minHeight: '100vh', background: '#fff' }}>
       <Header
         style={{
           position: 'sticky',
@@ -69,44 +70,51 @@ export default function BasicLayout() {
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '0 24px',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+          background: '#fff',
+          borderBottom: '1px solid rgba(17,25,37,0.1)',
+          height: 56,
+          lineHeight: '56px',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center' }}>
           <div
-            style={{ fontSize: 18, fontWeight: 700, color: '#fff', cursor: 'pointer', marginRight: 32 }}
+            style={{ fontSize: 18, fontWeight: 700, color: '#111925', cursor: 'pointer', marginRight: 32, display: 'flex', alignItems: 'center', gap: 8 }}
             onClick={() => navigate('/')}
           >
-            🐟 {APP_NAME}
+            <span style={{ color: '#36D2BE', fontSize: 22 }}>🐟</span>
+            <span>{APP_NAME}</span>
           </div>
           <Menu
-            theme="dark"
             mode="horizontal"
             selectedKeys={[location.pathname]}
             items={navItems}
             onClick={({ key }) => navigate(key)}
-            style={{ flex: 1, minWidth: 0, background: 'transparent' }}
+            style={{ flex: 1, minWidth: 0, background: 'transparent', borderBottom: 'none' }}
           />
         </div>
 
         <div>
           {loginUser ? (
             <Dropdown menu={{ items: userMenuItems, onClick: handleUserMenuClick }} placement="bottomRight">
-              <Space style={{ cursor: 'pointer', color: '#fff' }}>
+              <Space style={{ cursor: 'pointer', color: '#111925' }}>
                 <Avatar
                   size="small"
                   src={loginUser.userAvatar}
                   icon={!loginUser.userAvatar ? <UserOutlined /> : undefined}
+                  style={{ backgroundColor: 'rgba(17,25,37,0.15)' }}
                 />
-                <span>{loginUser.userName || loginUser.userAccount}</span>
+                <span style={{ fontSize: 14 }}>{loginUser.userName || loginUser.userAccount}</span>
               </Space>
             </Dropdown>
           ) : (
             <Space>
-              <Button type="text" style={{ color: '#fff' }} onClick={() => navigate('/login')}>
+              <Button type="text" style={{ color: 'rgba(17,25,37,0.65)' }} onClick={() => navigate('/login')}>
                 登录
               </Button>
-              <Button type="primary" onClick={() => navigate('/register')}>
+              <Button
+                className="btn-gradient"
+                onClick={() => navigate('/register')}
+              >
                 注册
               </Button>
             </Space>
@@ -118,8 +126,8 @@ export default function BasicLayout() {
         <Outlet />
       </Content>
 
-      <Footer style={{ textAlign: 'center', color: '#999' }}>
-        {APP_NAME} ©{new Date().getFullYear()} - AI 驱动的网站生成平台
+      <Footer style={{ textAlign: 'center', color: 'rgba(17,25,37,0.45)', borderTop: '1px solid rgba(17,25,37,0.1)' }}>
+        {APP_NAME} ©{new Date().getFullYear()} — AI 驱动的网站生成平台
       </Footer>
     </Layout>
   );

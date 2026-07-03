@@ -57,7 +57,7 @@ export default function ChatManage() {
       dataIndex: 'messageType',
       width: 100,
       render: (type: string) => (
-        <Tag color={type === 'user' ? 'blue' : 'green'}>
+        <Tag color={type === 'user' ? 'cyan' : 'green'}>
           {type === 'user' ? '用户' : 'AI'}
         </Tag>
       ),

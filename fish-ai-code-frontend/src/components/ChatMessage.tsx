@@ -1,8 +1,6 @@
 import { Avatar, Button, App } from 'antd';
 import { UserOutlined, RobotOutlined, CopyOutlined, CheckOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import React, { useState, useCallback } from 'react';
 
 interface ChatMessageProps {
@@ -13,7 +11,37 @@ interface ChatMessageProps {
 
 function CodeBlock({ language, children }: { language: string; children: string }) {
   const [copied, setCopied] = useState(false);
+  const [Highlighter, setHighlighter] = useState<React.ComponentType<any> | null>(null);
+  const [highlighterStyle, setHighlighterStyle] = useState<any>(null);
   const { message } = App.useApp();
+
+  // Lazy-load the heavy syntax highlighter (~400KB) on first code block render
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [hlMod, styleMod] = await Promise.all([
+          import('react-syntax-highlighter/dist/esm/prism-light'),
+          import('react-syntax-highlighter/dist/esm/styles/prism/one-dark'),
+        ]);
+        if (cancelled) return;
+        setHighlighter(() => hlMod.default);
+        setHighlighterStyle(styleMod.default);
+      } catch {
+        // Fallback for different bundler resolutions
+        try {
+          const hlFull = await import('react-syntax-highlighter');
+          if (cancelled) return;
+          setHighlighter(() => hlFull.Prism);
+          const styleFull = await import('react-syntax-highlighter/dist/esm/styles/prism');
+          if (!cancelled) setHighlighterStyle(styleFull.oneDark);
+        } catch {
+          // Stay with fallback <pre> rendering
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleCopy = useCallback(async () => {
     try {
@@ -50,18 +78,37 @@ function CodeBlock({ language, children }: { language: string; children: string 
           {copied ? '已复制' : '复制'}
         </Button>
       </div>
-      <SyntaxHighlighter
-        language={language || 'text'}
-        style={oneDark}
-        customStyle={{
-          margin: 0,
-          borderRadius: '0 0 8px 8px',
-          fontSize: 13,
-          lineHeight: 1.5,
-        }}
-      >
-        {children}
-      </SyntaxHighlighter>
+      {Highlighter && highlighterStyle ? (
+        <Highlighter
+          language={language || 'text'}
+          style={highlighterStyle}
+          customStyle={{
+            margin: 0,
+            borderRadius: '0 0 8px 8px',
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          {children}
+        </Highlighter>
+      ) : (
+        <pre
+          style={{
+            margin: 0,
+            padding: 16,
+            background: '#1e1e1e',
+            color: '#d4d4d4',
+            borderRadius: '0 0 8px 8px',
+            fontSize: 13,
+            lineHeight: 1.5,
+            overflow: 'auto',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+          }}
+        >
+          {children}
+        </pre>
+      )}
     </div>
   );
 }
@@ -125,7 +172,7 @@ const markdownComponents = {
   },
   a({ href, children }: any) {
     return (
-      <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: '#1677ff' }}>
+      <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: '#36D2BE' }}>
         {children}
       </a>
     );
@@ -189,7 +236,7 @@ function ChatMessageInner({ role, content, isStreaming }: ChatMessageProps) {
         <Avatar
           size="small"
           icon={<RobotOutlined />}
-          style={{ backgroundColor: '#1677ff', flexShrink: 0 }}
+          style={{ backgroundColor: '#36D2BE', flexShrink: 0 }}
         />
       )}
       <div
@@ -197,8 +244,8 @@ function ChatMessageInner({ role, content, isStreaming }: ChatMessageProps) {
           maxWidth: '85%',
           padding: '10px 14px',
           borderRadius: 12,
-          backgroundColor: isUser ? '#1677ff' : '#f5f5f5',
-          color: isUser ? '#fff' : '#333',
+          backgroundColor: isUser ? '#111925' : 'rgba(17,25,37,0.05)',
+          color: isUser ? '#fff' : '#111925',
           fontSize: 14,
           lineHeight: 1.6,
           overflow: 'hidden',
@@ -210,13 +257,19 @@ function ChatMessageInner({ role, content, isStreaming }: ChatMessageProps) {
           </div>
         ) : (
           <div className="markdown-body">
-            <ReactMarkdown components={markdownComponents}>
-              {content || ''}
-            </ReactMarkdown>
-            {isStreaming && !content && (
-              <span className="typing-dots">
-                <span>●</span><span>●</span><span>●</span>
-              </span>
+            {isStreaming ? (
+              // During streaming: skip heavy markdown/syntax-highlighter, render as plain code
+              <div style={{ fontFamily: 'Menlo, Consolas, monospace', fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                {content || (
+                  <span className="typing-dots">
+                    <span>●</span><span>●</span><span>●</span>
+                  </span>
+                )}
+              </div>
+            ) : (
+              <ReactMarkdown components={markdownComponents}>
+                {content || ''}
+              </ReactMarkdown>
             )}
           </div>
         )}
@@ -225,7 +278,7 @@ function ChatMessageInner({ role, content, isStreaming }: ChatMessageProps) {
         <Avatar
           size="small"
           icon={<UserOutlined />}
-          style={{ backgroundColor: '#87d068', flexShrink: 0 }}
+          style={{ backgroundColor: '#111925', flexShrink: 0 }}
         />
       )}
     </div>

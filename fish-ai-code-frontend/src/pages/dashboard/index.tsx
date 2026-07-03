@@ -86,10 +86,10 @@ export default function Dashboard() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <Title level={4} style={{ margin: 0 }}>我的应用</Title>
+        <Title level={4} style={{ margin: 0, color: '#111925' }}>我的应用</Title>
         <Space>
           <SearchInput onSearch={handleSearch} placeholder="搜索应用..." style={{ width: 200 }} />
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/app/create')}>
+          <Button className="btn-gradient" icon={<PlusOutlined />} onClick={() => navigate('/app/create')}>
             创建应用
           </Button>
         </Space>

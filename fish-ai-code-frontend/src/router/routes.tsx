@@ -1,10 +1,10 @@
 import { lazy, Suspense } from 'react';
-import { Spin } from 'antd';
 import BasicLayout from '@/layouts/BasicLayout';
 import AdminLayout from '@/layouts/AdminLayout';
 import BlankLayout from '@/layouts/BlankLayout';
 import { RequireAuth } from './RequireAuth';
 import { RequireAdmin } from './RequireAdmin';
+import PageSkeleton from '@/components/PageSkeleton';
 
 const Home = lazy(() => import('@/pages/home'));
 const Login = lazy(() => import('@/pages/auth/Login'));
@@ -17,15 +17,9 @@ const UserManage = lazy(() => import('@/pages/admin/UserManage'));
 const AppManage = lazy(() => import('@/pages/admin/AppManage'));
 const ChatManage = lazy(() => import('@/pages/admin/ChatManage'));
 
-function SuspenseWrap({ children }: { children: React.ReactNode }) {
+function SuspenseWrap({ children, skeletonType }: { children: React.ReactNode; skeletonType?: 'default' | 'card' | 'chat' }) {
   return (
-    <Suspense
-      fallback={
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-          <Spin size="large" />
-        </div>
-      }
-    >
+    <Suspense fallback={<PageSkeleton type={skeletonType} />}>
       {children}
     </Suspense>
   );
@@ -38,7 +32,7 @@ export const routes = [
       {
         path: '/',
         element: (
-          <SuspenseWrap>
+          <SuspenseWrap skeletonType="card">
             <Home />
           </SuspenseWrap>
         ),
@@ -47,7 +41,7 @@ export const routes = [
         path: '/dashboard',
         element: (
           <RequireAuth>
-            <SuspenseWrap>
+            <SuspenseWrap skeletonType="card">
               <Dashboard />
             </SuspenseWrap>
           </RequireAuth>
@@ -98,7 +92,7 @@ export const routes = [
         path: '/app/:id/chat',
         element: (
           <RequireAuth>
-            <SuspenseWrap>
+            <SuspenseWrap skeletonType="chat">
               <AppChat />
             </SuspenseWrap>
           </RequireAuth>

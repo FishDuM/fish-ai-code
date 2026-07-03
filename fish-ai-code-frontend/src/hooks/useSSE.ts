@@ -7,42 +7,42 @@ export function useSSE(onComplete?: (finalCode: string) => void) {
   const [error, setError] = useState<Error | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const isStreamingRef = useRef(false);
-  const rafRef = useRef<number>(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const start = useCallback((appId: string, message: string) => {
     abortRef.current?.abort();
-    cancelAnimationFrame(rafRef.current);
+    if (timerRef.current) clearTimeout(timerRef.current);
     isStreamingRef.current = true;
     setIsStreaming(true);
     setCurrentCode('');
     setError(null);
 
     let accumulated = '';
-    let dirty = false;
+    timerRef.current = null;
 
-    const flush = () => {
-      if (dirty) {
+    const scheduleFlush = () => {
+      if (timerRef.current) return;
+      // Throttle to ~5fps (200ms) — more than enough for AI code output display
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null;
         setCurrentCode(accumulated);
-        dirty = false;
-      }
-      rafRef.current = requestAnimationFrame(flush);
+      }, 200);
     };
-    rafRef.current = requestAnimationFrame(flush);
 
     abortRef.current = startCodeGenSSE(appId, message, {
       onChunk: (chunk) => {
         accumulated += chunk;
-        dirty = true;
+        scheduleFlush();
       },
       onDone: () => {
-        cancelAnimationFrame(rafRef.current);
+        if (timerRef.current) clearTimeout(timerRef.current);
         setCurrentCode(accumulated);
         isStreamingRef.current = false;
         setIsStreaming(false);
         onComplete?.(accumulated);
       },
       onError: (err) => {
-        cancelAnimationFrame(rafRef.current);
+        if (timerRef.current) clearTimeout(timerRef.current);
         isStreamingRef.current = false;
         setIsStreaming(false);
         setError(err);
@@ -52,14 +52,14 @@ export function useSSE(onComplete?: (finalCode: string) => void) {
 
   const cancel = useCallback(() => {
     abortRef.current?.abort();
-    cancelAnimationFrame(rafRef.current);
+    if (timerRef.current) clearTimeout(timerRef.current);
     isStreamingRef.current = false;
     setIsStreaming(false);
   }, []);
 
   const reset = useCallback(() => {
     abortRef.current?.abort();
-    cancelAnimationFrame(rafRef.current);
+    if (timerRef.current) clearTimeout(timerRef.current);
     isStreamingRef.current = false;
     setIsStreaming(false);
     setCurrentCode('');
@@ -69,7 +69,7 @@ export function useSSE(onComplete?: (finalCode: string) => void) {
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
-      cancelAnimationFrame(rafRef.current);
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, []);
 

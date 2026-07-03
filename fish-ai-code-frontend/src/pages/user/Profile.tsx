@@ -14,17 +14,18 @@ export default function Profile() {
 
   return (
     <div style={{ maxWidth: 600, margin: '0 auto' }}>
-      <Card>
+      <Card style={{ borderRadius: 8, boxShadow: '0px 4px 20px rgba(17,25,37,0.08)' }}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <Avatar
             size={80}
             src={loginUser.userAvatar}
             icon={!loginUser.userAvatar ? <UserOutlined /> : undefined}
+            style={{ backgroundColor: 'rgba(17,25,37,0.15)' }}
           />
-          <Title level={4} style={{ marginTop: 12, marginBottom: 0 }}>
+          <Title level={4} style={{ marginTop: 12, marginBottom: 0, color: '#111925' }}>
             {loginUser.userName || loginUser.userAccount}
           </Title>
-          <Tag color={loginUser.userRole === 'admin' ? 'red' : 'blue'} style={{ marginTop: 4 }}>
+          <Tag color={loginUser.userRole === 'admin' ? 'red' : 'cyan'} style={{ marginTop: 4 }}>
             {loginUser.userRole === 'admin' ? '管理员' : '普通用户'}
           </Tag>
         </div>

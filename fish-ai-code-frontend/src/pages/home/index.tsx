@@ -45,23 +45,42 @@ export default function Home() {
       <div
         style={{
           textAlign: 'center',
-          padding: '48px 0 32px',
-          background: 'linear-gradient(135deg, #667eea20 0%, #764ba220 100%)',
-          borderRadius: 16,
-          marginBottom: 32,
+          padding: '56px 0 40px',
+          marginBottom: 40,
         }}
       >
-        <Title level={2} style={{ marginBottom: 8 }}>
-          🐟 用 AI 一句话生成网站
+        <Title
+          level={1}
+          style={{
+            marginBottom: 12,
+            fontSize: 40,
+            fontWeight: 700,
+            color: '#111925',
+            letterSpacing: '-0.02em',
+          }}
+        >
+          <span>用 AI 一句话</span>
+          <br />
+          <span className="text-gradient">生成网站</span>
         </Title>
-        <Paragraph style={{ fontSize: 16, color: '#666', marginBottom: 24 }}>
+        <Paragraph
+          style={{
+            fontSize: 16,
+            color: 'rgba(17,25,37,0.65)',
+            marginBottom: 32,
+            maxWidth: 480,
+            margin: '0 auto 32px',
+            lineHeight: 1.6,
+          }}
+        >
           描述你想要的网站，AI 帮你实时生成代码并预览
         </Paragraph>
         <Button
-          type="primary"
+          className="btn-gradient"
           size="large"
           icon={<RocketOutlined />}
           onClick={() => navigate(loginUser ? '/app/create' : '/register')}
+          style={{ height: 44, paddingInline: 28, fontSize: 15, fontWeight: 600 }}
         >
           {loginUser ? '开始创建' : '免费注册'}
         </Button>

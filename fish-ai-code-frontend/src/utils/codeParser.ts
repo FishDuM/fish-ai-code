@@ -11,6 +11,10 @@ const HTML_CODE_PATTERN = /```html\s*\n([\s\S]*?)```/i;
 const CSS_CODE_PATTERN = /```css\s*\n([\s\S]*?)```/i;
 const JS_CODE_PATTERN = /```(?:js|javascript)\s*\n([\s\S]*?)```/i;
 
+// Simple LRU cache to avoid repeated regex parsing of the same raw code
+const parseCache = new Map<string, ParsedCode>();
+const CACHE_MAX = 20;
+
 function extractFirst(pattern: RegExp, content: string): string {
   const match = pattern.exec(content);
   return match ? match[1].trim() : '';
@@ -19,13 +23,25 @@ function extractFirst(pattern: RegExp, content: string): string {
 /**
  * Parse multi-file code from AI's markdown response.
  * Extracts ```html, ```css, ```js code blocks.
+ * Results are cached by rawCode to avoid redundant regex execution.
  */
 export function parseMultiFileCode(rawCode: string): ParsedCode {
-  return {
+  const cached = parseCache.get(rawCode);
+  if (cached) return cached;
+
+  const result: ParsedCode = {
     htmlCode: extractFirst(HTML_CODE_PATTERN, rawCode),
     cssCode: extractFirst(CSS_CODE_PATTERN, rawCode),
     jsCode: extractFirst(JS_CODE_PATTERN, rawCode),
   };
+
+  if (parseCache.size >= CACHE_MAX) {
+    const firstKey = parseCache.keys().next().value;
+    if (firstKey !== undefined) parseCache.delete(firstKey);
+  }
+  parseCache.set(rawCode, result);
+
+  return result;
 }
 
 /**

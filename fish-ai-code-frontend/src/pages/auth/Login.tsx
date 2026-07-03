@@ -33,13 +33,14 @@ export default function Login() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: 'rgba(17,25,37,0.02)',
       }}
     >
-      <Card style={{ width: 400, borderRadius: 12 }} variant="borderless">
+      <Card style={{ width: 400, borderRadius: 12, boxShadow: '0px 4px 20px rgba(17,25,37,0.08)' }} variant="borderless">
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <Title level={3} style={{ marginBottom: 4 }}>🐟 Fish AI Code</Title>
-          <Text type="secondary">AI 驱动的网站生成平台</Text>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>🐟</div>
+          <Title level={3} style={{ marginBottom: 4, color: '#111925' }}>Fish AI Code</Title>
+          <Text style={{ color: 'rgba(17,25,37,0.65)' }}>AI 驱动的网站生成平台</Text>
         </div>
 
         <Form form={form} onFinish={handleSubmit} size="large" autoComplete="off">
@@ -64,14 +65,15 @@ export default function Login() {
           </Form.Item>
 
           <Form.Item>
-            <Button type="primary" htmlType="submit" block loading={isLoading}>
+            <Button className="btn-gradient" htmlType="submit" block loading={isLoading} size="large">
               登录
             </Button>
           </Form.Item>
         </Form>
 
         <div style={{ textAlign: 'center' }}>
-          <Text type="secondary">还没有账号？</Text> <Link to="/register">立即注册</Link>
+          <Text style={{ color: 'rgba(17,25,37,0.45)' }}>还没有账号？</Text>{' '}
+          <Link to="/register" style={{ color: '#36D2BE' }}>立即注册</Link>
         </div>
       </Card>
     </div>

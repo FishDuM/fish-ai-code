@@ -39,7 +39,7 @@ export default function AppCreate() {
         <Paragraph type="secondary">描述你想要的网站，AI 将为你生成代码</Paragraph>
       </div>
 
-      <Card>
+      <Card style={{ boxShadow: '0px 4px 20px rgba(17,25,37,0.08)', borderRadius: 8 }}>
         <Form
           form={form}
           onFinish={handleSubmit}
@@ -75,7 +75,7 @@ export default function AppCreate() {
           </Form.Item>
 
           <Form.Item>
-            <Button type="primary" htmlType="submit" icon={<RocketOutlined />} loading={loading} block size="large">
+            <Button className="btn-gradient" htmlType="submit" icon={<RocketOutlined />} loading={loading} block size="large">
               开始生成
             </Button>
           </Form.Item>

@@ -97,7 +97,7 @@ export default function AppManage() {
       dataIndex: 'codeGenType',
       width: 120,
       render: (type: string | null) => (
-        <Tag color={type === 'multi_file' ? 'blue' : 'green'}>
+        <Tag color={type === 'multi_file' ? 'cyan' : 'green'}>
           {type === 'multi_file' ? '多文件' : 'HTML'}
         </Tag>
       ),

@@ -127,7 +127,7 @@ export default function UserManage() {
       dataIndex: 'userRole',
       width: 100,
       render: (role: string) => (
-        <Tag color={role === 'admin' ? 'red' : 'blue'}>
+        <Tag color={role === 'admin' ? 'red' : 'cyan'}>
           {role === 'admin' ? '管理员' : '用户'}
         </Tag>
       ),
@@ -183,7 +183,7 @@ export default function UserManage() {
             ]}
           />
         </Space>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setAddModalOpen(true)}>
+        <Button type="primary" icon={<PlusOutlined />} className="btn-gradient" onClick={() => setAddModalOpen(true)}>
           新增用户
         </Button>
       </div>

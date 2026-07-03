@@ -1,18 +1,13 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { Button, Input, Typography, Space, App, Tabs, Spin, Modal } from 'antd';
+import { Button, Typography, App, Tabs, Spin, Modal, Input } from 'antd';
 import {
-  ArrowLeftOutlined,
-  SendOutlined,
-  DeleteOutlined,
-  EditOutlined,
   CodeOutlined,
   EyeOutlined,
-  CloudUploadOutlined,
-  HistoryOutlined,
-  LoadingOutlined,
 } from '@ant-design/icons';
-import ChatMessage from '@/components/ChatMessage';
+import ChatHeader from '@/components/ChatHeader';
+import ChatMessageList from '@/components/ChatMessageList';
+import ChatInput from '@/components/ChatInput';
 import CodePreview from '@/components/CodePreview';
 import { useSSE } from '@/hooks/useSSE';
 import { useTitle } from '@/hooks/useTitle';
@@ -57,7 +52,6 @@ export default function AppChat() {
   const [app, setApp] = useState<AppVO | null>(null);
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
   const [previewCode, setPreviewCode] = useState('');
   const [previewTab, setPreviewTab] = useState('preview');
   const [deployUrl, setDeployUrl] = useState('');
@@ -70,11 +64,6 @@ export default function AppChat() {
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const historyInitedRef = useRef(false);
-
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const shouldAutoScrollRef = useRef(true);
-  const inputRef = useRef('');
   const autoSentRef = useRef(false);
   const oldestCreateTimeRef = useRef<string>('');
 
@@ -101,7 +90,6 @@ export default function AppChat() {
   // Load app info, then load chat history
   useEffect(() => {
     if (!appId) return;
-    // Reset states for new app
     autoSentRef.current = false;
     historyInitedRef.current = false;
     setMessages([]);
@@ -109,7 +97,6 @@ export default function AppChat() {
     getAppVO(appId)
       .then((appData) => {
         setApp(appData);
-        // After app loads, fetch latest chat history
         return getLatestChatHistory(appId, PAGE_SIZE);
       })
       .then((history) => {
@@ -122,12 +109,9 @@ export default function AppChat() {
         }));
         setMessages(loaded);
         setHasMoreHistory(history.length >= PAGE_SIZE);
-        // Store oldest createTime for cursor
         if (history.length > 0) {
           oldestCreateTimeRef.current = history[0].createTime;
         }
-        // Auto-scroll to bottom after loading history
-        shouldAutoScrollRef.current = true;
       })
       .catch(() => {
         historyInitedRef.current = true;
@@ -150,7 +134,6 @@ export default function AppChat() {
     ) return;
     autoSentRef.current = true;
     setMessages([{ id: newMsgId(), role: 'user', content: app.initPrompt, createTime: new Date().toISOString() }]);
-    shouldAutoScrollRef.current = true;
     start(appId, app.initPrompt);
   }, [messages, app, isOwner, appId, start]);
 
@@ -181,70 +164,32 @@ export default function AppChat() {
     }
   }, [appId, loadingMore, hasMoreHistory]);
 
-  // Debounced preview update during streaming
-  useEffect(() => {
-    if (!isStreaming) {
-      if (currentCode) setPreviewCode(buildPreviewHtml(currentCode, app?.codeGenType ?? null));
-      return;
-    }
-    const timer = setTimeout(
-      () => setPreviewCode(buildPreviewHtml(currentCode, app?.codeGenType ?? null)),
-      500
-    );
-    return () => clearTimeout(timer);
-  }, [currentCode, isStreaming, app?.codeGenType, buildPreviewHtml]);
-
-  // Update preview from completed AI messages when not streaming
+  // Update preview: skip during streaming to avoid iframe rebuild on every chunk.
+  // currentCode is in deps so that when streaming ends with final code,
+  // the effect runs with the latest currentCode value.
   useEffect(() => {
     if (isStreaming) return;
-    // Find the latest AI message
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'ai') {
-        setPreviewCode(buildPreviewHtml(messages[i].content, app?.codeGenType ?? null));
-        return;
+    const code = currentCode || (() => {
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === 'ai') return messages[i].content;
       }
+      return '';
+    })();
+    if (code) {
+      setPreviewCode(buildPreviewHtml(code, app?.codeGenType ?? null));
     }
-    setPreviewCode('');
-  }, [messages, isStreaming, app?.codeGenType, buildPreviewHtml]);
-
-  // Auto-scroll: only when user is at the bottom
-  useEffect(() => {
-    if (shouldAutoScrollRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages, currentCode]);
-
-  // Track if user is near the bottom (within 100px)
-  const handleScroll = useCallback(() => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    shouldAutoScrollRef.current = distanceFromBottom < 100;
-  }, []);
+  }, [isStreaming, currentCode, messages, app?.codeGenType, buildPreviewHtml]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => cancel();
   }, [cancel]);
 
-  const handleSend = useCallback(() => {
-    const text = inputRef.current.trim();
+  const handleSend = useCallback((text: string) => {
     if (!text || isStreamingRef.current || justFinishedStreamingRef.current || !appId) return;
-
-    setInput('');
-    inputRef.current = '';
     setMessages((prev) => [...prev, { id: newMsgId(), role: 'user', content: text, createTime: new Date().toISOString() }]);
-    shouldAutoScrollRef.current = true;
-
     start(appId, text);
   }, [appId, start, isStreamingRef]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  }, [handleSend]);
 
   const handleDelete = () => {
     if (!app) return;
@@ -310,43 +255,14 @@ export default function AppChat() {
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
-      <div
-        style={{
-          height: 56,
-          padding: '0 16px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          borderBottom: '1px solid #f0f0f0',
-          background: '#fff',
-          flexShrink: 0,
-        }}
-      >
-        <Space>
-          <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate('/dashboard')}>
-            返回
-          </Button>
-          <Text strong>{app?.appName || '未命名应用'}</Text>
-        </Space>
-        <Space>
-          <Button
-            type="primary"
-            icon={<CloudUploadOutlined />}
-            onClick={handleDeploy}
-            loading={deploying}
-            disabled={!showPreview}
-          >
-            部署
-          </Button>
-          <Button type="text" icon={<EditOutlined />} onClick={handleRename}>
-            重命名
-          </Button>
-          <Button type="text" danger icon={<DeleteOutlined />} onClick={handleDelete}>
-            删除
-          </Button>
-        </Space>
-      </div>
+      <ChatHeader
+        appName={app?.appName || '未命名应用'}
+        showPreview={showPreview}
+        deploying={deploying}
+        onDeploy={handleDeploy}
+        onRename={handleRename}
+        onDelete={handleDelete}
+      />
 
       {/* Deploy success Modal */}
       <Modal
@@ -405,72 +321,24 @@ export default function AppChat() {
             minWidth: 320,
             display: 'flex',
             flexDirection: 'column',
-            borderRight: '1px solid #f0f0f0',
+            borderRight: '1px solid rgba(17,25,37,0.1)',
           }}
         >
-          {/* Messages */}
-          <div ref={scrollContainerRef} style={{ flex: 1, overflow: 'auto', padding: 16 }} onScroll={handleScroll}>
-            {/* Load more button */}
-            {hasMoreHistory && messages.length > 0 && (
-              <div style={{ textAlign: 'center', marginBottom: 12 }}>
-                <Button
-                  type="link"
-                  icon={loadingMore ? <LoadingOutlined /> : <HistoryOutlined />}
-                  onClick={handleLoadMore}
-                  disabled={loadingMore}
-                  size="small"
-                >
-                  {loadingMore ? '加载中...' : '加载更多历史消息'}
-                </Button>
-              </div>
-            )}
-            {messages.length === 0 && !isStreaming && (
-              <div style={{ textAlign: 'center', color: '#999', marginTop: 80 }}>
-                <CodeOutlined style={{ fontSize: 48, marginBottom: 16 }} />
-                <div>输入描述，AI 将为你生成网站代码</div>
-              </div>
-            )}
-            {messages.map((msg) => (
-              <ChatMessage key={msg.id} role={msg.role} content={msg.content} />
-            ))}
-            {isStreaming && (
-              <ChatMessage role="ai" content={currentCode} isStreaming />
-            )}
-            {sseError && (
-              <div style={{ textAlign: 'center', color: '#ff4d4f', padding: '8px 0', fontSize: 13 }}>
-                生成失败：{sseError.message || '未知错误'}，请重试
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
+          <ChatMessageList
+            messages={messages}
+            isStreaming={isStreaming}
+            currentCode={currentCode}
+            hasMoreHistory={hasMoreHistory}
+            loadingMore={loadingMore}
+            sseError={sseError}
+            onLoadMore={handleLoadMore}
+          />
 
-          {/* Input */}
-          <div style={{ padding: 12, borderTop: '1px solid #f0f0f0', background: '#fff' }}>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Input.TextArea
-                value={input}
-                onChange={(e) => { setInput(e.target.value); inputRef.current = e.target.value; }}
-                onKeyDown={handleKeyDown}
-                placeholder={isStreaming ? 'AI 正在生成中...' : '描述你想要的网站... (Enter 发送, Shift+Enter 换行)'}
-                autoSize={{ minRows: 1, maxRows: 4 }}
-                disabled={isStreaming}
-              />
-              {isStreaming ? (
-                <Button danger onClick={cancel}>
-                  停止
-                </Button>
-              ) : (
-                <Button
-                  type="primary"
-                  icon={<SendOutlined />}
-                  onClick={handleSend}
-                  disabled={!input.trim()}
-                >
-                  发送
-                </Button>
-              )}
-            </div>
-          </div>
+          <ChatInput
+            isStreaming={isStreaming}
+            onSend={handleSend}
+            onCancel={cancel}
+          />
         </div>
 
         {/* Right: Preview panel */}
@@ -508,13 +376,13 @@ export default function AppChat() {
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          background: '#fafafa',
+                          background: 'rgba(17,25,37,0.02)',
                           borderRadius: 8,
-                          color: '#999',
+                          color: 'rgba(17,25,37,0.45)',
                         }}
                       >
                         <div style={{ textAlign: 'center' }}>
-                          <EyeOutlined style={{ fontSize: 48, marginBottom: 16 }} />
+                          <EyeOutlined style={{ fontSize: 48, marginBottom: 16, color: 'rgba(17,25,37,0.15)' }} />
                           <div>发送消息后，预览将在这里显示</div>
                         </div>
                       </div>

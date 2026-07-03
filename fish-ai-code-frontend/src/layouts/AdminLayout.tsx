@@ -72,7 +72,7 @@ export default function AdminLayout() {
           }}
           onClick={() => navigate('/')}
         >
-          {collapsed ? '🐟' : `🐟 ${APP_NAME}`}
+          {collapsed ? '🐟' : <><span style={{ color: '#36D2BE' }}>🐟</span> {APP_NAME}</>}
         </div>
         <Menu
           theme="dark"
@@ -91,7 +91,9 @@ export default function AdminLayout() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+            borderBottom: '1px solid rgba(17,25,37,0.1)',
+            height: 56,
+            lineHeight: '56px',
           }}
         >
           <Space>
@@ -105,6 +107,7 @@ export default function AdminLayout() {
               type="text"
               icon={<ArrowLeftOutlined />}
               onClick={() => navigate('/')}
+              style={{ color: 'rgba(17,25,37,0.65)' }}
             >
               返回前台
             </Button>
@@ -118,7 +121,7 @@ export default function AdminLayout() {
           </Dropdown>
         </Header>
 
-        <Content style={{ margin: 24, padding: 24, background: '#fff', borderRadius: 8 }}>
+        <Content style={{ margin: 24, padding: 24, background: '#fff', borderRadius: 8, border: '1px solid rgba(17,25,37,0.1)' }}>
           <Outlet />
         </Content>
       </Layout>
