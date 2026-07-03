@@ -133,7 +133,7 @@ public interface AppService extends IService<App> {
      * @param loginUser 登录用户
      * @return 流
      */
-    Flux<ServerSentEvent<String>> chatToGenCode(Long appId, String message, User loginUser);
+    Flux<String> chatToGenCode(Long appId, String message, User loginUser);
 
     /**
      * 应用部署

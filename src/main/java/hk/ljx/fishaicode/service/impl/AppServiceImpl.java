@@ -5,12 +5,12 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.json.JSONUtil;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import hk.ljx.fishaicode.constant.AppConstant;
 import hk.ljx.fishaicode.core.AiCodeGeneratorFacade;
+import hk.ljx.fishaicode.core.handler.StreamHandlerExecutor;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.exception.ThrowUtils;
@@ -30,13 +30,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 
 import java.io.File;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -53,6 +51,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     @Resource
     private ChatHistoryService chatHistoryService;
+
+    @Resource
+    private StreamHandlerExecutor streamHandlerExecutor;
+
 
     @Override
     public long addApp(AppAddRequest appAddRequest, User loginUser) {
@@ -278,7 +280,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     }
 
     @Override
-    public Flux<ServerSentEvent<String>> chatToGenCode(Long appId, String message, User loginUser) {
+    public Flux<String>  chatToGenCode(Long appId, String message, User loginUser) {
         // 1、校验参数
         ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
         ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "用户消息不能为空");
@@ -297,44 +299,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         chatHistoryService.addChatHistory(appId, loginUser.getId(), message, MessageTypeEnum.USER.getValue());
         // 6、调用代码生成接口
         Flux<String> stringFlux = aiCodeGeneratorFacade.generateAndSaveCodeStream(message, enumByValue, appId);
-        StringBuilder responseBuilder = new StringBuilder();
-        return stringFlux
-                .doOnNext(responseBuilder::append)
-                .map(code -> {
-                    Map<String, String> wrapper = Map.of("d", code);
-                    String jsonStr = JSONUtil.toJsonStr(wrapper);
-                    return ServerSentEvent.<String>builder()
-                            .data(jsonStr)
-                            .build();
-                })
-                .concatWith(Mono.fromRunnable(() -> {
-                    // 7、AI 回复完成，保存 AI 消息到对话历史
-                    String aiResponse = responseBuilder.toString();
-                    chatHistoryService.addChatHistory(appId, loginUser.getId(), aiResponse, MessageTypeEnum.AI.getValue());
-                }).then(Mono.just(
-                        ServerSentEvent.<String>builder()
-                                .event("done")
-                                .data("")
-                                .build()
-                )))
-                .onErrorResume(e -> {
-                    // 忽略客户端主动断连（IOException / Cancel），只处理真正的 AI 生成错误
-                    if (e instanceof java.io.IOException
-                            || reactor.core.Exceptions.isCancel(e)) {
-                        log.info("客户端断开连接，跳过保存对话历史");
-                        return Flux.empty();
-                    }
-                    // 生成失败，保存错误信息到对话历史
-                    log.error("AI 生成失败: {}", e.getMessage());
-                    String errorMsg = "AI 生成失败：" + (e.getMessage() != null ? e.getMessage() : "未知错误");
-                    chatHistoryService.addChatHistory(appId, loginUser.getId(), errorMsg, MessageTypeEnum.AI.getValue());
-                    return Flux.just(
-                            ServerSentEvent.<String>builder()
-                                    .event("error")
-                                    .data(errorMsg)
-                                    .build()
-                    );
-                });
+        return streamHandlerExecutor.doExecute(stringFlux, chatHistoryService, appId, loginUser, enumByValue);
     }
 
     @Override

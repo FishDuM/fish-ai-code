@@ -60,6 +60,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
         User user = new User();
         user.setUserAccount(userAccount);
         user.setUserPassword(encryptPassword);
+        user.setUserAvatar("https://api.elaina.cat/random/");
         user.setUserName("无名");
         user.setUserRole(UserRoleEnum.USER.getValue());
         boolean saveResult = this.save(user);

@@ -1,9 +1,16 @@
 package hk.ljx.fishaicode.core;
 
+import cn.hutool.json.JSONUtil;
+import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.service.TokenStream;
+import dev.langchain4j.service.tool.ToolExecution;
 import hk.ljx.fishaicode.ai.AiCodeGeneratorService;
 import hk.ljx.fishaicode.ai.AiCodeGeneratorServiceFactory;
 import hk.ljx.fishaicode.ai.modal.HtmlCodeResult;
 import hk.ljx.fishaicode.ai.modal.MultiFileCodeResult;
+import hk.ljx.fishaicode.ai.modal.message.AiResponseMessage;
+import hk.ljx.fishaicode.ai.modal.message.ToolExecutedMessage;
+import hk.ljx.fishaicode.ai.modal.message.ToolRequestMessage;
 import hk.ljx.fishaicode.core.parser.CodeParserExecutor;
 import hk.ljx.fishaicode.core.saver.CodeFileSaverExecutor;
 import hk.ljx.fishaicode.exception.BusinessException;
@@ -99,14 +106,45 @@ public class AiCodeGeneratorFacade {
                 yield processCodeStream(codeStream, CodeGenTypeEnum.MULTI_FILE, appId);
             }
             case VUE_PROJECT -> {
-                Flux<String> codeStream = aiCodeGeneratorService.generateVueProjectCodeStream(appId, userMessage);
-                yield processCodeStream(codeStream, CodeGenTypeEnum.MULTI_FILE, appId);
+                TokenStream tokenStream = aiCodeGeneratorService.generateVueProjectCodeStream(appId, userMessage);
+                yield processTokenStream(tokenStream);
             }
             default -> {
                 String errorMessage = "不支持的生成类型：" + codeGenTypeEnum.getValue();
                 throw new BusinessException(ErrorCode.SYSTEM_ERROR, errorMessage);
             }
         };
+    }
+
+    /**
+     * TokenStream转换为Flux<String>
+     * @param tokenStream
+     * @return
+     */
+    private Flux<String> processTokenStream(TokenStream tokenStream) {
+        return Flux.create(sink -> {
+            tokenStream.onPartialResponse((String partialResponse) -> {
+                        AiResponseMessage aiResponseMessage = new AiResponseMessage(partialResponse);
+                        sink.next(JSONUtil.toJsonStr(aiResponseMessage));
+                    })
+                    .onPartialToolExecutionRequest((index, toolExecutionRequest) -> {
+                        ToolRequestMessage toolRequestMessage = new ToolRequestMessage(toolExecutionRequest);
+                        sink.next(JSONUtil.toJsonStr(toolRequestMessage));
+                    })
+                    .onToolExecuted((ToolExecution toolExecution) -> {
+                        ToolExecutedMessage toolExecutedMessage = new ToolExecutedMessage(toolExecution);
+                        sink.next(JSONUtil.toJsonStr(toolExecutedMessage));
+                    })
+                    .onCompleteResponse((ChatResponse response) -> {
+                        sink.complete();
+                    })
+                    .onError((Throwable error) -> {
+                        error.printStackTrace();
+                        sink.error(error);
+                    })
+                    .start();
+        });
+
     }
 
 

@@ -136,7 +136,7 @@ public class AppController {
      * @return sse流
      */
     @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam("appId") Long appId, @RequestParam("message") String message, HttpServletRequest request) {
+    public Flux<String> chatToGenCode(@RequestParam("appId") Long appId, @RequestParam("message") String message, HttpServletRequest request) {
         ThrowUtils.throwIf(appId == null || appId < 0, ErrorCode.PARAMS_ERROR);
         ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR);
         User loginUser = userService.getLoginUser(request);
