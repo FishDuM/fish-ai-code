@@ -18,5 +18,12 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // Our codebase uses the "fetch in useEffect, setState in .then" pattern
+      // heavily for data loading. The new react-hooks/set-state-in-effect
+      // rule is too strict for this — the pattern is correct here, just
+      // not the React-19-idiomatic way. Demote to warning.
+      'react-hooks/set-state-in-effect': 'warn',
+    },
   },
 ])

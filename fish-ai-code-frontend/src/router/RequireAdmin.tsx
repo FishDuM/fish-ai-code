@@ -1,9 +1,8 @@
 import { useEffect } from 'react';
-import { Navigate, useLocation } from 'react-router';
-import { Spin, Result, Button } from 'antd';
+import { Navigate, useLocation, useNavigate } from 'react-router';
+import { Result, Button } from 'antd';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { USER_ROLES } from '@/constants';
-import { useNavigate } from 'react-router';
 
 export function RequireAdmin({ children }: { children: React.ReactNode }) {
   const { loginUser, isFetched, fetchLoginUser } = useAuthStore();
@@ -16,12 +15,9 @@ export function RequireAdmin({ children }: { children: React.ReactNode }) {
     }
   }, [isFetched, fetchLoginUser]);
 
+  // 鉴权 fetch 完成前先渲染 null，避免非 admin 先看到 AdminLayout 一帧再被换为 403
   if (!isFetched) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <Spin size="large" />
-      </div>
-    );
+    return null;
   }
 
   if (!loginUser) {

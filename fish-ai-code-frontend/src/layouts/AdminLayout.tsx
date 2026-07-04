@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router';
 import { Layout, Menu, Button, Avatar, Space, Dropdown, App } from 'antd';
 import {
@@ -16,6 +16,26 @@ import { APP_NAME } from '@/constants';
 
 const { Header, Sider, Content } = Layout;
 
+// 静态样式提到模块级常量，避免每次 render 重建新对象导致下游组件 memo 失效
+const LAYOUT_STYLE: React.CSSProperties = { minHeight: '100vh' };
+const HEADER_STYLE: React.CSSProperties = {
+  background: '#fff',
+  padding: '0 24px',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  borderBottom: '1px solid rgba(17,25,37,0.1)',
+  height: 56,
+  lineHeight: '56px',
+};
+const CONTENT_STYLE: React.CSSProperties = {
+  margin: 24,
+  padding: 24,
+  background: '#fff',
+  borderRadius: 8,
+  border: '1px solid rgba(17,25,37,0.1)',
+};
+
 export default function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -23,7 +43,7 @@ export default function AdminLayout() {
   const { message } = App.useApp();
   const [collapsed, setCollapsed] = useState(false);
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     try {
       await logout();
     } catch {
@@ -31,27 +51,37 @@ export default function AdminLayout() {
     } finally {
       navigate('/login');
     }
-  };
+  }, [logout, message, navigate]);
 
-  const siderItems = [
-    { key: '/admin/users', icon: <UserOutlined />, label: '用户管理' },
-    { key: '/admin/apps', icon: <AppstoreOutlined />, label: '应用管理' },
-    { key: '/admin/chatHistory', icon: <MessageOutlined />, label: '对话管理' },
-  ];
+  // 这些菜单项完全不依赖 props，empty deps 即可稳定引用
+  const siderItems = useMemo(
+    () => [
+      { key: '/admin/users', icon: <UserOutlined />, label: '用户管理' },
+      { key: '/admin/apps', icon: <AppstoreOutlined />, label: '应用管理' },
+      { key: '/admin/chatHistory', icon: <MessageOutlined />, label: '对话管理' },
+    ],
+    []
+  );
 
-  const userMenuItems = [
-    { key: 'home', label: '返回前台', icon: <HomeOutlined /> },
-    { type: 'divider' as const },
-    { key: 'logout', label: '退出登录', icon: <LogoutOutlined />, danger: true },
-  ];
+  const userMenuItems = useMemo(
+    () => [
+      { key: 'home', label: '返回前台', icon: <HomeOutlined /> },
+      { type: 'divider' as const },
+      { key: 'logout', label: '退出登录', icon: <LogoutOutlined />, danger: true },
+    ],
+    []
+  );
 
-  const handleUserMenuClick = ({ key }: { key: string }) => {
-    if (key === 'home') navigate('/');
-    else if (key === 'logout') handleLogout();
-  };
+  const handleUserMenuClick = useCallback(
+    ({ key }: { key: string }) => {
+      if (key === 'home') navigate('/');
+      else if (key === 'logout') handleLogout();
+    },
+    [navigate, handleLogout]
+  );
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
+    <Layout style={LAYOUT_STYLE}>
       <Sider
         collapsible
         collapsed={collapsed}
@@ -60,6 +90,7 @@ export default function AdminLayout() {
         theme="dark"
       >
         <div
+          // 样式依赖 collapsed（响应式字号），保留 inline
           style={{
             height: 64,
             display: 'flex',
@@ -84,18 +115,7 @@ export default function AdminLayout() {
       </Sider>
 
       <Layout>
-        <Header
-          style={{
-            background: '#fff',
-            padding: '0 24px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            borderBottom: '1px solid rgba(17,25,37,0.1)',
-            height: 56,
-            lineHeight: '56px',
-          }}
-        >
+        <Header style={HEADER_STYLE}>
           <Space>
             <Button
               type="text"
@@ -121,7 +141,7 @@ export default function AdminLayout() {
           </Dropdown>
         </Header>
 
-        <Content style={{ margin: 24, padding: 24, background: '#fff', borderRadius: 8, border: '1px solid rgba(17,25,37,0.1)' }}>
+        <Content style={CONTENT_STYLE}>
           <Outlet />
         </Content>
       </Layout>

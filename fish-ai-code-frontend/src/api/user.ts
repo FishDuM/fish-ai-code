@@ -25,18 +25,23 @@ export async function register(data: UserRegisterRequest): Promise<string> {
 /**
  * Probe the current session. Uses raw fetch to avoid the axios interceptor
  * treating a normal "not logged in" (40100) as a session-expired redirect.
- * Returns null when the user is not logged in.
+ * Returns null when the user is not logged in or the request fails/times out.
  */
 export async function getLoginUser(): Promise<LoginUserVO | null> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
   try {
     const res = await fetch(`${API_BASE_URL}/user/get/login`, {
       credentials: 'include',
+      signal: controller.signal,
     });
     const json: BaseResponse<LoginUserVO> = await res.json();
     if (json.code === 0) return json.data;
     return null;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 

@@ -18,8 +18,8 @@ export default function Register() {
       await register(values.userAccount, values.userPassword, values.checkPassword);
       message.success('注册成功，请登录');
       navigate('/login', { replace: true });
-    } catch (err: any) {
-      message.error(err.message || '注册失败');
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '注册失败');
     }
   };
 

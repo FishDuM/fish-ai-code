@@ -14,6 +14,7 @@ import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;
 import hk.ljx.fishaicode.service.ChatHistoryService;
+import hk.ljx.fishaicode.utils.SpringContextUtil;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
@@ -25,14 +26,8 @@ import java.time.Duration;
 @Slf4j
 public class AiCodeGeneratorServiceFactory {
 
-    @Resource
+    @Resource(name = "openAiChatModel")
     private ChatModel chatModel;
-
-    @Resource
-    private StreamingChatModel openAiStreamingChatModel;
-
-    @Resource
-    private StreamingChatModel reasoningStreamingChatModel;
 
     @Resource
     private RedisChatMemoryStore redisChatMemoryStore;
@@ -64,8 +59,9 @@ public class AiCodeGeneratorServiceFactory {
         // 从数据库加载对话历史到记忆中
         chatHistoryService.loadChatHistoryToMemory(appId, chatMemory, 20);
         return switch (type) {
-            case VUE_PROJECT ->
-                         AiServices.builder(AiCodeGeneratorService.class)
+            case VUE_PROJECT -> {
+                StreamingChatModel reasoningStreamingChatModel = SpringContextUtil.getBean("reasoningStreamingChatModelPrototype", StreamingChatModel.class);
+                yield AiServices.builder(AiCodeGeneratorService.class)
                         .chatModel(chatModel)
                         .chatMemoryProvider(memoryId -> chatMemory)
                         .streamingChatModel(reasoningStreamingChatModel)
@@ -73,12 +69,15 @@ public class AiCodeGeneratorServiceFactory {
                         // 处理工具调用幻觉问题
                         .hallucinatedToolNameStrategy(toolExecutionRequest -> ToolExecutionResultMessage.from(toolExecutionRequest, "Error: there is no tool called " + toolExecutionRequest.name()))
                         .build();
-            case HTML,MULTI_FILE ->
-                    AiServices.builder(AiCodeGeneratorService.class)
+            }
+            case HTML,MULTI_FILE ->{
+                StreamingChatModel openAiStreamingChatModel = SpringContextUtil.getBean("streamingChatModelPrototype", StreamingChatModel.class);
+                yield AiServices.builder(AiCodeGeneratorService.class)
                         .chatMemory(chatMemory)
                         .chatModel(chatModel)
                         .streamingChatModel(openAiStreamingChatModel)
                         .build();
+            }
             default -> throw new BusinessException(ErrorCode.SYSTEM_ERROR, "不支持的代码生成类型" + type.getValue());
         };
     }

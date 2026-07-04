@@ -29,7 +29,7 @@ function getGradient(id: string) {
 }
 
 export default function AppCard({ app, onEdit, onDelete, onOpen, showActions = true }: AppCardProps) {
-  const codeGenLabel = app.codeGenType === 'multi_file' ? '多文件' : 'HTML';
+  const codeGenLabel = app.codeGenType === 'multi_file' ? '多文件' : app.codeGenType === 'vue_project' ? 'Vue 工程' : 'HTML';
   const [imageError, setImageError] = useState(false);
   const showGradient = !app.cover || imageError;
 
@@ -56,7 +56,7 @@ export default function AppCard({ app, onEdit, onDelete, onOpen, showActions = t
         ) : (
           <div style={{ height: 160, overflow: 'hidden', borderRadius: '8px 8px 0 0' }}>
             <img
-              src={app.cover}
+              src={app.cover || undefined}
               alt={app.appName || '应用封面'}
               loading="lazy"
               onError={() => setImageError(true)}
@@ -98,7 +98,7 @@ export default function AppCard({ app, onEdit, onDelete, onOpen, showActions = t
         description={
           <Space orientation="vertical" size={4} style={{ width: '100%' }}>
             <Space>
-              <Tag color={app.codeGenType === 'multi_file' ? 'cyan' : 'green'}>
+              <Tag color={app.codeGenType === 'multi_file' ? 'cyan' : app.codeGenType === 'vue_project' ? 'purple' : 'green'}>
                 {codeGenLabel}
               </Tag>
               {app.priority === 99 && <Tag color="gold">精选</Tag>}

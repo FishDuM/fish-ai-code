@@ -1,3 +1,6 @@
+import axios from 'axios';
+import { API_BASE_URL } from '@/constants';
+import { attachResponseInterceptors } from './interceptors';
 import api from './index';
 import type {
   BaseResponse,
@@ -11,6 +14,18 @@ import type {
   AdminAppUpdateRequest,
   AdminAppQueryRequest,
 } from './types';
+
+/**
+ * Axios instance with extended timeout for deploy operations.
+ * Vue project npm install + build can take 2-5 minutes.
+ */
+const apiLongTimeout = axios.create({
+  baseURL: API_BASE_URL,
+  withCredentials: true,
+  timeout: 600000, // 10 minutes
+  headers: { 'Content-Type': 'application/json' },
+});
+attachResponseInterceptors(apiLongTimeout);
 
 export async function createApp(data: AppAddRequest): Promise<string> {
   const res = await api.post<BaseResponse<string>>('/app/add', data);
@@ -28,7 +43,7 @@ export async function deleteMyApp(id: string): Promise<boolean> {
 }
 
 export async function deployApp(data: AppDeployRequest): Promise<string> {
-  const res = await api.post<BaseResponse<string>>('/app/deploy', data);
+  const res = await apiLongTimeout.post<BaseResponse<string>>('/app/deploy', data);
   return res.data.data;
 }
 

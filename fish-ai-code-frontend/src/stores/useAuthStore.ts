@@ -67,8 +67,11 @@ export const useAuthStore = create<AuthState>()(
       logout: async () => {
         try {
           await userApi.logout();
-        } finally {
           set({ loginUser: null });
+        } catch (error) {
+          // 即使后端登出失败也清空本地登录状态，并把错误抛回调用方以便显示反馈
+          set({ loginUser: null });
+          throw error;
         }
       },
 
@@ -81,9 +84,18 @@ export const useAuthStore = create<AuthState>()(
   )
 );
 
-// Listen for external logout events (e.g. from axios interceptor on 401)
-if (typeof window !== 'undefined') {
+// Listen for external logout events (e.g. from axios interceptor on 401).
+// HMR 下此模块会反复执行，模块级 addEventListener 若不加幂等守卫会重复注册，
+// 导致一次 auth:logout 触发多次 setLoginUser(null)。用 window 上的 flag 防重入。
+if (typeof window !== 'undefined' && !window.__fishAuthListenerInstalled) {
   window.addEventListener('auth:logout', () => {
     useAuthStore.getState().setLoginUser(null);
   });
+  window.__fishAuthListenerInstalled = true;
+}
+
+declare global {
+  interface Window {
+    __fishAuthListenerInstalled?: boolean;
+  }
 }

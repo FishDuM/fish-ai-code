@@ -1,25 +1,25 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Table, Button, Modal, Form, Input, InputNumber, Space, Tag, App, Typography } from 'antd';
 import { EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { adminListApps, adminUpdateApp, adminDeleteApp } from '@/api/app';
 import { useTitle } from '@/hooks/useTitle';
-import type { App, AdminAppQueryRequest, AdminAppUpdateRequest } from '@/api/types';
+import type { App as AppType, AdminAppQueryRequest } from '@/api/types';
 
 const { Title } = Typography;
 
 export default function AppManage() {
   useTitle('应用管理');
   const { message } = App.useApp();
-  const [apps, setApps] = useState<App[]>([]);
+  const [apps, setApps] = useState<AppType[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState<AdminAppQueryRequest>({ pageNum: 1, pageSize: 10 });
-  const [editApp, setEditApp] = useState<App | null>(null);
+  const [editApp, setEditApp] = useState<AppType | null>(null);
   const [editLoading, setEditLoading] = useState(false);
   const [form] = Form.useForm();
 
-  const fetchApps = () => {
+  const fetchApps = useCallback(() => {
     setLoading(true);
     adminListApps(query)
       .then((res) => {
@@ -30,13 +30,13 @@ export default function AppManage() {
         message.error('加载应用列表失败');
       })
       .finally(() => setLoading(false));
-  };
+  }, [query, message]);
 
   useEffect(() => {
     fetchApps();
-  }, [query]);
+  }, [fetchApps]);
 
-  const handleEdit = (app: App) => {
+  const handleEdit = (app: AppType) => {
     setEditApp(app);
     form.setFieldsValue({
       appName: app.appName,
@@ -54,14 +54,14 @@ export default function AppManage() {
       message.success('更新成功');
       setEditApp(null);
       fetchApps();
-    } catch (err: any) {
-      if (err.message) message.error(err.message);
+    } catch (err) {
+      if (err instanceof Error && err.message) message.error(err.message);
     } finally {
       setEditLoading(false);
     }
   };
 
-  const handleDelete = (app: App) => {
+  const handleDelete = (app: AppType) => {
     Modal.confirm({
       title: '确认删除',
       content: `确定要删除应用「${app.appName || '未命名'}」吗？`,
@@ -73,8 +73,8 @@ export default function AppManage() {
           await adminDeleteApp(app.id);
           message.success('删除成功');
           fetchApps();
-        } catch (err: any) {
-          message.error(err.message || '删除失败');
+        } catch (err) {
+          message.error(err instanceof Error ? err.message : '删除失败');
         }
       },
     });
@@ -97,8 +97,8 @@ export default function AppManage() {
       dataIndex: 'codeGenType',
       width: 120,
       render: (type: string | null) => (
-        <Tag color={type === 'multi_file' ? 'cyan' : 'green'}>
-          {type === 'multi_file' ? '多文件' : 'HTML'}
+        <Tag color={type === 'multi_file' ? 'cyan' : type === 'vue_project' ? 'purple' : 'green'}>
+          {type === 'multi_file' ? '多文件' : type === 'vue_project' ? 'Vue 工程' : 'HTML'}
         </Tag>
       ),
     },
@@ -132,7 +132,7 @@ export default function AppManage() {
     {
       title: '操作',
       width: 120,
-      render: (_: any, record: App) => (
+      render: (_: unknown, record: AppType) => (
         <Space>
           <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
             编辑

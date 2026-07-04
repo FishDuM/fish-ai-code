@@ -88,6 +88,8 @@ export interface AppVO {
   initPrompt: string | null;
   priority: number | null;
   userId: string;
+  deployKey: string | null;
+  deployedTime: string | null;
   createTime: string;
 }
 

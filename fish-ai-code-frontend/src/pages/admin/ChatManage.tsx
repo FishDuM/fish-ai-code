@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Table, Input, Space, Tag, App, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { adminListChatHistory } from '@/api/chatHistory';
@@ -16,7 +16,7 @@ export default function ChatManage() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState<AdminChatHistoryQueryRequest>({ pageNum: 1, pageSize: 10 });
 
-  const fetchData = () => {
+  const fetchData = useCallback(() => {
     setLoading(true);
     adminListChatHistory(query)
       .then((res) => {
@@ -27,11 +27,11 @@ export default function ChatManage() {
         message.error('加载对话历史失败');
       })
       .finally(() => setLoading(false));
-  };
+  }, [query, message]);
 
   useEffect(() => {
     fetchData();
-  }, [query]);
+  }, [fetchData]);
 
   const columns = [
     {

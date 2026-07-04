@@ -1,10 +1,9 @@
-import { useState, useEffect } from 'react';
-import { Row, Col, Typography, Button, Pagination, Space, Empty, App } from 'antd';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Row, Col, Typography, Button, Pagination, Empty, App } from 'antd';
 import { RocketOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router';
 import AppCard from '@/components/AppCard';
 import SearchInput from '@/components/SearchInput';
-import LoadingSkeleton from '@/components/LoadingSkeleton';
 import { listFeaturedApps } from '@/api/app';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useTitle } from '@/hooks/useTitle';
@@ -22,18 +21,35 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState<AppQueryRequest>({ pageNum: 1, pageSize: 12 });
 
-  useEffect(() => {
+  // 单调递增的 fetch id：每次新请求自增；回调里只有 id 仍是最新值才 setState。
+  // 快速切换搜索/分页或组件卸载时旧的响应不会用旧数据覆盖新结果，
+  // 也不会在已卸载组件上 setState 触发警告。
+  const fetchIdRef = useRef(0);
+
+  const fetchApps = useCallback(() => {
+    const myId = ++fetchIdRef.current;
     setLoading(true);
     listFeaturedApps(query)
       .then((res) => {
+        if (myId !== fetchIdRef.current) return;
         setApps(res.records);
         setTotal(res.totalRow);
       })
       .catch(() => {
+        if (myId !== fetchIdRef.current) return;
         message.error('加载精选应用失败');
       })
-      .finally(() => setLoading(false));
-  }, [query]);
+      .finally(() => {
+        // 注意：loading 也受 fetchId 保护，避免最后一次旧请求把 loading 关掉
+        // 而新请求还在路上导致 UI 提前进入 "已加载" 状态。
+        if (myId !== fetchIdRef.current) return;
+        setLoading(false);
+      });
+  }, [query, message]);
+
+  useEffect(() => {
+    fetchApps();
+  }, [fetchApps]);
 
   const handleSearch = (appName: string) => {
     setQuery((prev) => ({ ...prev, appName: appName || undefined, pageNum: 1 }));
@@ -92,12 +108,11 @@ export default function Home() {
         <SearchInput onSearch={handleSearch} placeholder="搜索应用..." style={{ width: 240 }} />
       </div>
 
-      {/* Grid */}
-      {loading ? (
-        <LoadingSkeleton count={8} />
-      ) : apps.length === 0 ? (
+      {/* Grid — render nothing while loading (no skeleton flash); after load,
+          show Empty when the list is empty, otherwise the card grid. */}
+      {!loading && apps.length === 0 ? (
         <Empty description="暂无精选应用" />
-      ) : (
+      ) : !loading && (
         <>
           <Row gutter={[16, 16]}>
             {apps.map((app) => (

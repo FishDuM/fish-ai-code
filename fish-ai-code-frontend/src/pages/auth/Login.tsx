@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { Form, Input, Button, Card, Typography, App, Space } from 'antd';
+import { Form, Input, Button, Card, Typography, App } from 'antd';
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams, Link } from 'react-router';
 import { useAuthStore } from '@/stores/useAuthStore';
@@ -21,8 +20,8 @@ export default function Login() {
       message.success('登录成功');
       const redirect = searchParams.get('redirect') || '/dashboard';
       navigate(redirect, { replace: true });
-    } catch (err: any) {
-      message.error(err.message || '登录失败');
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '登录失败');
     }
   };
 

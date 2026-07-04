@@ -1,29 +1,21 @@
-import { lazy, Suspense } from 'react';
 import BasicLayout from '@/layouts/BasicLayout';
 import AdminLayout from '@/layouts/AdminLayout';
 import BlankLayout from '@/layouts/BlankLayout';
 import { RequireAuth } from './RequireAuth';
 import { RequireAdmin } from './RequireAdmin';
-import PageSkeleton from '@/components/PageSkeleton';
-
-const Home = lazy(() => import('@/pages/home'));
-const Login = lazy(() => import('@/pages/auth/Login'));
-const Register = lazy(() => import('@/pages/auth/Register'));
-const Dashboard = lazy(() => import('@/pages/dashboard'));
-const AppCreate = lazy(() => import('@/pages/app/Create'));
-const AppChat = lazy(() => import('@/pages/app/Chat'));
-const Profile = lazy(() => import('@/pages/user/Profile'));
-const UserManage = lazy(() => import('@/pages/admin/UserManage'));
-const AppManage = lazy(() => import('@/pages/admin/AppManage'));
-const ChatManage = lazy(() => import('@/pages/admin/ChatManage'));
-
-function SuspenseWrap({ children, skeletonType }: { children: React.ReactNode; skeletonType?: 'default' | 'card' | 'chat' }) {
-  return (
-    <Suspense fallback={<PageSkeleton type={skeletonType} />}>
-      {children}
-    </Suspense>
-  );
-}
+import { SuspenseWrap } from './SuspenseWrap';
+import {
+  Home,
+  Login,
+  Register,
+  Dashboard,
+  AppCreate,
+  AppChat,
+  Profile,
+  UserManage,
+  AppManage,
+  ChatManage,
+} from './lazyModules';
 
 export const routes = [
   {
@@ -32,7 +24,7 @@ export const routes = [
       {
         path: '/',
         element: (
-          <SuspenseWrap skeletonType="card">
+          <SuspenseWrap>
             <Home />
           </SuspenseWrap>
         ),
@@ -41,7 +33,7 @@ export const routes = [
         path: '/dashboard',
         element: (
           <RequireAuth>
-            <SuspenseWrap skeletonType="card">
+            <SuspenseWrap>
               <Dashboard />
             </SuspenseWrap>
           </RequireAuth>
@@ -92,7 +84,7 @@ export const routes = [
         path: '/app/:id/chat',
         element: (
           <RequireAuth>
-            <SuspenseWrap skeletonType="chat">
+            <SuspenseWrap>
               <AppChat />
             </SuspenseWrap>
           </RequireAuth>

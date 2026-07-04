@@ -1,6 +1,6 @@
 import { Input } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
-import { useRef, useCallback, useEffect } from 'react';
+import { useRef, useCallback, useEffect, useLayoutEffect } from 'react';
 
 interface SearchInputProps {
   onSearch: (value: string) => void;
@@ -12,7 +12,10 @@ interface SearchInputProps {
 export default function SearchInput({ onSearch, placeholder = '搜索...', debounceMs = 300, style }: SearchInputProps) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const callbackRef = useRef(onSearch);
-  callbackRef.current = onSearch;
+  // Keep callbackRef pointing at the latest onSearch without writing during render.
+  useLayoutEffect(() => {
+    callbackRef.current = onSearch;
+  }, [onSearch]);
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {

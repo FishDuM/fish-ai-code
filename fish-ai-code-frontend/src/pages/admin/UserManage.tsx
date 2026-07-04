@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Table, Button, Modal, Form, Input, Select, Space, Tag, App, Avatar, Typography } from 'antd';
 import { EditOutlined, DeleteOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -22,7 +22,7 @@ export default function UserManage() {
   const [addLoading, setAddLoading] = useState(false);
   const [addForm] = Form.useForm();
 
-  const fetchUsers = () => {
+  const fetchUsers = useCallback(() => {
     setLoading(true);
     listUsers(query)
       .then((res) => {
@@ -33,11 +33,11 @@ export default function UserManage() {
         message.error('加载用户列表失败');
       })
       .finally(() => setLoading(false));
-  };
+  }, [query, message]);
 
   useEffect(() => {
     fetchUsers();
-  }, [query]);
+  }, [fetchUsers]);
 
   const handleEdit = (user: UserVO) => {
     setEditUser(user);
@@ -56,8 +56,8 @@ export default function UserManage() {
       message.success('更新成功');
       setEditUser(null);
       fetchUsers();
-    } catch (err: any) {
-      if (err.message) message.error(err.message);
+    } catch (err) {
+      if (err instanceof Error && err.message) message.error(err.message);
     } finally {
       setEditLoading(false);
     }
@@ -72,8 +72,8 @@ export default function UserManage() {
       setAddModalOpen(false);
       addForm.resetFields();
       fetchUsers();
-    } catch (err: any) {
-      if (err.message) message.error(err.message);
+    } catch (err) {
+      if (err instanceof Error && err.message) message.error(err.message);
     } finally {
       setAddLoading(false);
     }
@@ -91,8 +91,8 @@ export default function UserManage() {
           await deleteUser(user.id);
           message.success('删除成功');
           fetchUsers();
-        } catch (err: any) {
-          message.error(err.message || '删除失败');
+        } catch (err) {
+          message.error(err instanceof Error ? err.message : '删除失败');
         }
       },
     });
@@ -141,7 +141,7 @@ export default function UserManage() {
     {
       title: '操作',
       width: 120,
-      render: (_: any, record: UserVO) => (
+      render: (_: unknown, record: UserVO) => (
         <Space>
           <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
             编辑

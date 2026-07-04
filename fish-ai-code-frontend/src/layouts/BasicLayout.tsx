@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router';
 import { Layout, Menu, Dropdown, Avatar, Space, Button } from 'antd';
 import {
@@ -8,56 +8,68 @@ import {
   UserOutlined,
   LogoutOutlined,
   SettingOutlined,
-  MenuOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { APP_NAME, USER_ROLES } from '@/constants';
 
 const { Header, Content, Footer } = Layout;
 
+// 当前年份提到模块级常量，避免每次 render 重新计算并产生新的 string
+const CURRENT_YEAR = new Date().getFullYear();
+
 export default function BasicLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { loginUser, logout } = useAuthStore();
-  const [loggingOut, setLoggingOut] = useState(false);
 
-  const handleLogout = async () => {
-    setLoggingOut(true);
+  // 用 useCallback 稳定回调引用，避免 antd Menu/Dropdown 的内部 memo 失效
+  const handleLogout = useCallback(async () => {
     try {
       await logout();
-      navigate('/login');
-    } finally {
-      setLoggingOut(false);
+    } catch {
+      // 后端登出失败也强制跳登录页（本地状态已被 store 清空）
     }
-  };
+    navigate('/login');
+  }, [logout, navigate]);
 
-  const navItems = [
-    { key: '/', label: '首页', icon: <HomeOutlined /> },
-    ...(loginUser
-      ? [
-          { key: '/dashboard', label: '我的应用', icon: <AppstoreOutlined /> },
-          { key: '/app/create', label: '创建应用', icon: <PlusCircleOutlined /> },
-        ]
-      : []),
-    ...(loginUser?.userRole === USER_ROLES.ADMIN
-      ? [{ key: '/admin/users', label: '管理后台', icon: <SettingOutlined /> }]
-      : []),
-  ];
+  // 依赖只放真正用到的字段：loginUser 用于存在性判断，role 用于 admin 入口显隐
+  const navItems = useMemo(
+    () => [
+      { key: '/', label: '首页', icon: <HomeOutlined /> },
+      ...(loginUser
+        ? [
+            { key: '/dashboard', label: '我的应用', icon: <AppstoreOutlined /> },
+            { key: '/app/create', label: '创建应用', icon: <PlusCircleOutlined /> },
+          ]
+        : []),
+      ...(loginUser?.userRole === USER_ROLES.ADMIN
+        ? [{ key: '/admin/users', label: '管理后台', icon: <SettingOutlined /> }]
+        : []),
+    ],
+    [loginUser, loginUser?.userRole]
+  );
 
-  const userMenuItems = [
-    { key: 'profile', label: '个人资料', icon: <UserOutlined /> },
-    ...(loginUser?.userRole === USER_ROLES.ADMIN
-      ? [{ key: 'admin', label: '管理后台', icon: <SettingOutlined /> }]
-      : []),
-    { type: 'divider' as const },
-    { key: 'logout', label: '退出登录', icon: <LogoutOutlined />, danger: true },
-  ];
+  // 这个菜单只读 userRole 决定是否显示 admin 入口，deps 只放 role 即可更精准
+  const userMenuItems = useMemo(
+    () => [
+      { key: 'profile', label: '个人资料', icon: <UserOutlined /> },
+      ...(loginUser?.userRole === USER_ROLES.ADMIN
+        ? [{ key: 'admin', label: '管理后台', icon: <SettingOutlined /> }]
+        : []),
+      { type: 'divider' as const },
+      { key: 'logout', label: '退出登录', icon: <LogoutOutlined />, danger: true },
+    ],
+    [loginUser?.userRole]
+  );
 
-  const handleUserMenuClick = ({ key }: { key: string }) => {
-    if (key === 'profile') navigate('/user/profile');
-    else if (key === 'admin') navigate('/admin/users');
-    else if (key === 'logout') handleLogout();
-  };
+  const handleUserMenuClick = useCallback(
+    ({ key }: { key: string }) => {
+      if (key === 'profile') navigate('/user/profile');
+      else if (key === 'admin') navigate('/admin/users');
+      else if (key === 'logout') handleLogout();
+    },
+    [navigate, handleLogout]
+  );
 
   return (
     <Layout style={{ minHeight: '100vh', background: '#fff' }}>
@@ -127,7 +139,7 @@ export default function BasicLayout() {
       </Content>
 
       <Footer style={{ textAlign: 'center', color: 'rgba(17,25,37,0.45)', borderTop: '1px solid rgba(17,25,37,0.1)' }}>
-        {APP_NAME} ©{new Date().getFullYear()} — AI 驱动的网站生成平台
+        {APP_NAME} ©{CURRENT_YEAR} — AI 驱动的网站生成平台
       </Footer>
     </Layout>
   );

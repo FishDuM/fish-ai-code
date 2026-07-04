@@ -25,8 +25,8 @@ export default function AppCreate() {
       });
       message.success('应用创建成功');
       navigate(`/app/${appId}/chat`, { replace: true });
-    } catch (err: any) {
-      message.error(err.message || '创建失败');
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '创建失败');
     } finally {
       setLoading(false);
     }
@@ -71,6 +71,7 @@ export default function AppCreate() {
             <Radio.Group>
               <Radio.Button value="html">单文件 HTML</Radio.Button>
               <Radio.Button value="multi_file">多文件（HTML + CSS + JS）</Radio.Button>
+              <Radio.Button value="vue_project">Vue 工程</Radio.Button>
             </Radio.Group>
           </Form.Item>
 
