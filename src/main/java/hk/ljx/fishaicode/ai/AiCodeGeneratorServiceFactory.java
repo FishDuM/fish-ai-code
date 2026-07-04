@@ -9,7 +9,7 @@ import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.service.AiServices;
-import hk.ljx.fishaicode.ai.tools.FileWriteTool;
+import hk.ljx.fishaicode.ai.tools.*;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;
@@ -40,6 +40,9 @@ public class AiCodeGeneratorServiceFactory {
     @Resource
     private ChatHistoryService chatHistoryService;
 
+    @Resource
+    private ToolManager toolManager;
+
     @Bean
     public AiCodeGeneratorService aiCodeGeneratorService() {
         return createAiCodeGeneratorService(0);
@@ -66,7 +69,7 @@ public class AiCodeGeneratorServiceFactory {
                         .chatModel(chatModel)
                         .chatMemoryProvider(memoryId -> chatMemory)
                         .streamingChatModel(reasoningStreamingChatModel)
-                        .tools(new FileWriteTool())
+                        .tools(toolManager.getAllTools())
                         // 处理工具调用幻觉问题
                         .hallucinatedToolNameStrategy(toolExecutionRequest -> ToolExecutionResultMessage.from(toolExecutionRequest, "Error: there is no tool called " + toolExecutionRequest.name()))
                         .build();
