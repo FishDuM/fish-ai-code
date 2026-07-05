@@ -72,15 +72,25 @@ const CodeBlock = React.memo(function CodeBlock({
           codeTagProps={{
             // one-dark sets `text-shadow: 0 1px rgba(0,0,0,0.3)` on every
             // token; strip it so the highlighted code reads crisp.
-            style: { textShadow: 'none' },
+            style: {
+              textShadow: 'none',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              overflowWrap: 'anywhere',
+            },
           }}
           customStyle={{
             margin: 0,
             borderRadius: '0 0 8px 8px',
             fontSize: 13,
             lineHeight: 1.5,
+            width: '100%',
             maxWidth: '100%',
             boxSizing: 'border-box',
+            overflowX: 'hidden',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            overflowWrap: 'anywhere',
           }}
         >
           {children}
@@ -98,7 +108,8 @@ const CodeBlock = React.memo(function CodeBlock({
             width: '100%',
             maxWidth: '100%',
             boxSizing: 'border-box',
-            overflow: 'auto',
+            overflowX: 'hidden',
+            overflowY: 'auto',
             whiteSpace: 'pre-wrap',
             wordBreak: 'break-word',
             overflowWrap: 'anywhere',
@@ -343,19 +354,23 @@ function ChatMessageInner({ role, content, isStreaming }: ChatMessageProps) {
         display: 'flex',
         justifyContent: isUser ? 'flex-end' : 'flex-start',
         marginBottom: 16,
-        gap: 8,
+        gap: isUser ? 8 : 6,
+        width: '100%',
+        minWidth: 0,
       }}
     >
       {!isUser && (
         <Avatar
-          size="small"
+          size={22}
           icon={<RobotOutlined />}
           style={{ backgroundColor: '#36D2BE', flexShrink: 0 }}
         />
       )}
       <div
         style={{
-          maxWidth: '85%',
+          width: isUser ? 'fit-content' : 'calc(100% - 28px)',
+          maxWidth: isUser ? '88%' : 'calc(100% - 28px)',
+          minWidth: 0,
           padding: '10px 14px',
           borderRadius: 12,
           backgroundColor: isUser ? '#111925' : 'rgba(17,25,37,0.05)',
@@ -397,7 +412,7 @@ function ChatMessageInner({ role, content, isStreaming }: ChatMessageProps) {
       </div>
       {isUser && (
         <Avatar
-          size="small"
+          size={22}
           icon={<UserOutlined />}
           style={{ backgroundColor: '#111925', flexShrink: 0 }}
         />

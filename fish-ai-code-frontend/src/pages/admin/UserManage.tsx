@@ -110,8 +110,12 @@ export default function UserManage() {
     {
       title: 'ID',
       dataIndex: 'id',
-      width: 120,
-      ellipsis: true,
+      width: 190,
+      render: (id: string) => (
+        <span style={{ fontFamily: 'Menlo, Consolas, monospace', fontSize: 13 }}>
+          {id}
+        </span>
+      ),
     },
     {
       title: '头像',
@@ -124,10 +128,14 @@ export default function UserManage() {
     {
       title: '账号',
       dataIndex: 'userAccount',
+      width: 110,
+      ellipsis: true,
     },
     {
       title: '昵称',
       dataIndex: 'userName',
+      width: 110,
+      ellipsis: true,
       render: (name: string | null) => name || '-',
     },
     {
@@ -135,7 +143,7 @@ export default function UserManage() {
       dataIndex: 'userRole',
       width: 100,
       render: (role: string) => (
-        <Tag color={role === 'admin' ? 'red' : 'cyan'}>
+        <Tag color={role === 'admin' ? 'red' : 'green'}>
           {role === 'admin' ? '管理员' : '用户'}
         </Tag>
       ),
@@ -148,9 +156,10 @@ export default function UserManage() {
     },
     {
       title: '操作',
-      width: 120,
+      width: 180,
+      className: 'admin-action-cell',
       render: (_: unknown, record: UserVO) => (
-        <Space>
+        <Space size={8} wrap={false}>
           <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
             编辑
           </Button>
@@ -163,11 +172,19 @@ export default function UserManage() {
   ];
 
   return (
-    <div>
-      <Title level={4} style={{ marginBottom: 16 }}>用户管理</Title>
+    <div className="admin-page">
+      <div className="page-toolbar">
+        <div>
+          <Title level={3} className="page-title">用户管理</Title>
+          <div className="page-subtitle">管理账号、昵称和角色权限</div>
+        </div>
+        <Button type="primary" icon={<PlusOutlined />} className="btn-gradient" onClick={() => setAddModalOpen(true)}>
+          新增用户
+        </Button>
+      </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Space>
+      <div className="admin-filter-bar admin-filter-row">
+        <Space wrap>
           <Input.Search
             placeholder="搜索账号"
             allowClear
@@ -191,24 +208,24 @@ export default function UserManage() {
             ]}
           />
         </Space>
-        <Button type="primary" icon={<PlusOutlined />} className="btn-gradient" onClick={() => setAddModalOpen(true)}>
-          新增用户
-        </Button>
       </div>
 
-      <Table
-        rowKey="id"
-        columns={columns}
-        dataSource={users}
-        loading={loading}
-        pagination={{
-          current: query.pageNum,
-          pageSize: query.pageSize,
-          total,
-          showTotal: (t) => `共 ${t} 条`,
-          onChange: (page, pageSize) => setQuery((prev) => ({ ...prev, pageNum: page, pageSize })),
-        }}
-      />
+      <div className="glass-panel admin-table-panel">
+        <Table
+          rowKey="id"
+          columns={columns}
+          dataSource={users}
+          loading={loading}
+          scroll={{ x: 960 }}
+          pagination={{
+            current: query.pageNum,
+            pageSize: query.pageSize,
+            total,
+            showTotal: (t) => `共 ${t} 条`,
+            onChange: (page, pageSize) => setQuery((prev) => ({ ...prev, pageNum: page, pageSize })),
+          }}
+        />
+      </div>
 
       <Modal
         title="编辑用户"

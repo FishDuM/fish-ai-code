@@ -15,12 +15,12 @@ interface AppCardProps {
 }
 
 const gradients = [
-  'linear-gradient(135deg, #19cfff 0%, #8429ff 100%)',
-  'linear-gradient(135deg, #36D2BE 0%, #2BA898 100%)',
-  'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-  'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
-  'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+  'linear-gradient(135deg, #111925 0%, #1f6f68 54%, #36D2BE 100%)',
+  'linear-gradient(135deg, #0f2c2a 0%, #2BA898 58%, #b8fff4 100%)',
+  'linear-gradient(135deg, #26323f 0%, #40716d 52%, #9ee9df 100%)',
+  'linear-gradient(135deg, #f7fbfa 0%, #d8f6f1 48%, #36D2BE 100%)',
+  'linear-gradient(135deg, #111925 0%, #344650 48%, #6fd8ca 100%)',
+  'linear-gradient(135deg, #effaf8 0%, #bceee7 46%, #2BA898 100%)',
 ];
 
 function getGradient(id: string) {
@@ -37,7 +37,8 @@ export default function AppCard({ app, onEdit, onDelete, onOpen, showActions = t
     <Card
       hoverable
       onClick={() => onOpen?.(app)}
-      style={{ height: '100%', borderRadius: 8, boxShadow: '0px 4px 20px rgba(17,25,37,0.08)' }}
+      className="app-card"
+      style={{ height: '100%' }}
       styles={{ body: { padding: 16 } }}
       cover={
         showGradient ? (
@@ -98,7 +99,7 @@ export default function AppCard({ app, onEdit, onDelete, onOpen, showActions = t
         description={
           <Space orientation="vertical" size={4} style={{ width: '100%' }}>
             <Space>
-              <Tag color={app.codeGenType === 'multi_file' ? 'cyan' : app.codeGenType === 'vue_project' ? 'purple' : 'green'}>
+              <Tag color={app.codeGenType === 'multi_file' ? 'default' : app.codeGenType === 'vue_project' ? 'lime' : 'green'}>
                 {codeGenLabel}
               </Tag>
               {app.priority === 99 && <Tag color="gold">精选</Tag>}

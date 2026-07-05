@@ -3,6 +3,7 @@ import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { useNavigate, Link } from 'react-router';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useTitle } from '@/hooks/useTitle';
+import logoUrl from '@/assets/logo.png';
 
 const { Title, Text } = Typography;
 
@@ -24,20 +25,12 @@ export default function Register() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'rgba(17,25,37,0.02)',
-      }}
-    >
-      <Card style={{ width: 400, borderRadius: 12, boxShadow: '0px 4px 20px rgba(17,25,37,0.08)' }} variant="borderless">
-        <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>🐟</div>
-          <Title level={3} style={{ marginBottom: 4, color: '#111925' }}>Fish AI Code</Title>
-          <Text style={{ color: 'rgba(17,25,37,0.65)' }}>创建你的账号</Text>
+    <div className="auth-page">
+      <Card className="auth-card" variant="borderless">
+        <div className="auth-card-head">
+          <img src={logoUrl} alt="Fish AI Code" className="auth-logo-image" />
+          <Title level={3}>Fish AI Code</Title>
+          <Text>创建你的账号</Text>
         </div>
 
         <Form form={form} onFinish={handleSubmit} size="large" autoComplete="off">
@@ -86,7 +79,7 @@ export default function Register() {
           </Form.Item>
         </Form>
 
-        <div style={{ textAlign: 'center' }}>
+        <div className="auth-switch">
           <Text style={{ color: 'rgba(17,25,37,0.45)' }}>已有账号？</Text>{' '}
           <Link to="/login" style={{ color: '#36D2BE' }}>立即登录</Link>
         </div>

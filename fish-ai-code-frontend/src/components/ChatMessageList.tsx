@@ -1,5 +1,5 @@
 import { memo, useRef, useCallback, useLayoutEffect } from 'react';
-import { Button } from 'antd';
+import { Button, Spin } from 'antd';
 import { CodeOutlined, HistoryOutlined, LoadingOutlined } from '@ant-design/icons';
 import ChatMessage from './ChatMessage';
 
@@ -21,6 +21,7 @@ interface ChatMessageListProps {
    *  unmount/remount at the moment the stream finishes. */
   streamingMessage?: Message | null;
   hasMoreHistory: boolean;
+  initialLoading: boolean;
   loadingMore: boolean;
   sseError: Error | null;
   onLoadMore: () => void;
@@ -30,6 +31,7 @@ function ChatMessageList({
   messages,
   streamingMessage,
   hasMoreHistory,
+  initialLoading,
   loadingMore,
   sseError,
   onLoadMore,
@@ -99,7 +101,7 @@ function ChatMessageList({
   return (
     <div
       ref={scrollContainerRef}
-      style={{ flex: 1, overflow: 'auto', padding: 16 }}
+      style={{ flex: 1, overflow: 'auto', padding: '16px 0' }}
       onScroll={handleScroll}
     >
       {/* Load more button */}
@@ -117,7 +119,12 @@ function ChatMessageList({
         </div>
       )}
 
-      {messages.length === 0 && !isStreaming && (
+      {initialLoading && messages.length === 0 && !isStreaming ? (
+        <div style={{ textAlign: 'center', color: 'rgba(17,25,37,0.45)', marginTop: 80 }}>
+          <Spin size="large" style={{ marginBottom: 16 }} />
+          <div style={{ color: 'rgba(17,25,37,0.45)' }}>加载历史中...</div>
+        </div>
+      ) : messages.length === 0 && !isStreaming && (
         <div style={{ textAlign: 'center', color: 'rgba(17,25,37,0.45)', marginTop: 80 }}>
           <CodeOutlined
             style={{ fontSize: 48, marginBottom: 16, color: 'rgba(17,25,37,0.15)' }}

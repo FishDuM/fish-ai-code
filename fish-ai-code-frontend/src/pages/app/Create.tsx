@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Card, Form, Input, Button, Radio, Typography, App } from 'antd';
 import { RocketOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { createApp } from '@/api/app';
 import { useTitle } from '@/hooks/useTitle';
 
@@ -11,9 +11,13 @@ const { TextArea } = Input;
 export default function AppCreate() {
   useTitle('创建应用');
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(false);
   const { message } = App.useApp();
   const [form] = Form.useForm();
+  const promptFromQuery = new URLSearchParams(location.search).get('prompt') || '';
+  const initialPrompt =
+    typeof location.state?.initPrompt === 'string' ? location.state.initPrompt : promptFromQuery;
 
   const handleSubmit = async (values: { initPrompt: string; appName?: string; codeGenType: string }) => {
     setLoading(true);
@@ -24,7 +28,7 @@ export default function AppCreate() {
         codeGenType: values.codeGenType,
       });
       message.success('应用创建成功');
-      navigate(`/app/${appId}/chat`, { replace: true });
+      navigate(`/app/${appId}/chat`, { replace: true, state: { autoSendInit: true } });
     } catch (err) {
       message.error(err instanceof Error ? err.message : '创建失败');
     } finally {
@@ -33,19 +37,19 @@ export default function AppCreate() {
   };
 
   return (
-    <div style={{ maxWidth: 700, margin: '0 auto', padding: '32px 0' }}>
-      <div style={{ textAlign: 'center', marginBottom: 32 }}>
-        <Title level={3}>✨ 创建新应用</Title>
-        <Paragraph type="secondary">描述你想要的网站，AI 将为你生成代码</Paragraph>
+    <div className="page-surface create-page">
+      <div className="page-hero-heading">
+        <Title level={2}>创建新应用</Title>
+        <Paragraph>描述你想要的网站，AI 将为你生成代码</Paragraph>
       </div>
 
-      <Card style={{ boxShadow: '0px 4px 20px rgba(17,25,37,0.08)', borderRadius: 8 }}>
+      <Card className="glass-card create-card">
         <Form
           form={form}
           onFinish={handleSubmit}
           layout="vertical"
           size="large"
-          initialValues={{ codeGenType: 'html' }}
+          initialValues={{ codeGenType: 'html', initPrompt: initialPrompt }}
         >
           <Form.Item
             name="initPrompt"

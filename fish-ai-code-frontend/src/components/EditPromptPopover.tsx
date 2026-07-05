@@ -62,13 +62,15 @@ export default function EditPromptPopover({
     onSend(text);
   }, [draft, sending, onSend]);
 
-  // Esc cancels; Cmd/Ctrl+Enter sends.
+  // Esc cancels; Enter sends; Shift+Enter keeps the normal textarea newline.
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Escape') {
         e.preventDefault();
         onCancel();
-      } else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        return;
+      }
+      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
         e.preventDefault();
         handleSend();
       }
@@ -137,7 +139,7 @@ export default function EditPromptPopover({
           flexWrap: 'wrap',
         }}
       >
-        <Tag color="cyan" style={{ margin: 0, fontFamily: 'Menlo, Consolas, monospace' }}>
+        <Tag color="green" style={{ margin: 0, fontFamily: 'Menlo, Consolas, monospace' }}>
           {element.tag.toLowerCase()}
         </Tag>
         {element.id && (

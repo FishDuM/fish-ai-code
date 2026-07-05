@@ -31,8 +31,8 @@ function ChatInputInner({ isStreaming, onSend, onCancel }: ChatInputProps) {
   }, [onSend, value]);
 
   return (
-    <div style={{ padding: 12, borderTop: '1px solid rgba(17,25,37,0.1)', background: '#fff' }}>
-      <div style={{ display: 'flex', gap: 8 }}>
+    <div className="chat-input-shell">
+      <div className="chat-input-row">
         <Input.TextArea
           value={value}
           onChange={(e) => setValue(e.target.value)}

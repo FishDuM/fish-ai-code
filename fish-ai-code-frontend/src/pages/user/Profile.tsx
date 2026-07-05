@@ -13,19 +13,19 @@ export default function Profile() {
   if (!loginUser) return null;
 
   return (
-    <div style={{ maxWidth: 600, margin: '0 auto' }}>
-      <Card style={{ borderRadius: 8, boxShadow: '0px 4px 20px rgba(17,25,37,0.08)' }}>
-        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+    <div className="page-surface profile-page">
+      <Card className="glass-card profile-card">
+        <div className="profile-head">
           <Avatar
             size={80}
             src={loginUser.userAvatar}
             icon={!loginUser.userAvatar ? <UserOutlined /> : undefined}
-            style={{ backgroundColor: 'rgba(17,25,37,0.15)' }}
+            className="profile-avatar"
           />
-          <Title level={4} style={{ marginTop: 12, marginBottom: 0, color: '#111925' }}>
+          <Title level={4} className="profile-name">
             {loginUser.userName || loginUser.userAccount}
           </Title>
-          <Tag color={loginUser.userRole === 'admin' ? 'red' : 'cyan'} style={{ marginTop: 4 }}>
+          <Tag color={loginUser.userRole === 'admin' ? 'red' : 'green'} className="profile-role">
             {loginUser.userRole === 'admin' ? '管理员' : '普通用户'}
           </Tag>
         </div>

@@ -27,14 +27,15 @@ export function buildEditModeScript(): string {
   // sequence backslash-s, `\$` is a literal dollar sign, etc.
   const script = `
 (function () {
-  if (window.__fishEditModeInjected) return;
-  window.__fishEditModeInjected = true;
+  function initFishEditMode() {
+    if (window.__fishEditModeInjected) return;
+    window.__fishEditModeInjected = true;
 
-  var SOURCE = 'fish-edit-mode';
-  var HOVER_BORDER = '2px solid #36D2BE';
-  var SELECT_BORDER = '2px solid #f5222d';
-  var PREFIX = '__em-';
-  var enabled = true;
+    var SOURCE = 'fish-edit-mode';
+    var HOVER_BORDER = '2px solid #36D2BE';
+    var SELECT_BORDER = '2px solid #f5222d';
+    var PREFIX = '__em-';
+    var enabled = true;
 
   function cssEscape(s) {
     try {
@@ -256,12 +257,19 @@ export function buildEditModeScript(): string {
     }
   }
 
-  document.addEventListener('mousemove', onMouseMove, true);
-  document.addEventListener('click', onClick, true);
-  document.addEventListener('mouseleave', clearHover, true);
-  window.addEventListener('message', onMessage);
-  document.documentElement.style.cursor = 'crosshair';
-  window.parent.postMessage({ source: SOURCE, type: 'ready' }, '*');
+    document.addEventListener('mousemove', onMouseMove, true);
+    document.addEventListener('click', onClick, true);
+    document.addEventListener('mouseleave', clearHover, true);
+    window.addEventListener('message', onMessage);
+    document.documentElement.style.cursor = 'crosshair';
+    window.parent.postMessage({ source: SOURCE, type: 'ready' }, '*');
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initFishEditMode, { once: true });
+  } else {
+    initFishEditMode();
+  }
 })();
 `;
   // Defensive: if the script ever contains a literal closing tag we split

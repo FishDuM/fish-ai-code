@@ -65,7 +65,7 @@ export default function ChatManage() {
       dataIndex: 'messageType',
       width: 100,
       render: (type: string) => (
-        <Tag color={type === 'user' ? 'cyan' : 'green'}>
+        <Tag color={type === 'user' ? 'default' : 'green'}>
           {type === 'user' ? '用户' : 'AI'}
         </Tag>
       ),
@@ -92,10 +92,15 @@ export default function ChatManage() {
   ];
 
   return (
-    <div>
-      <Title level={4} style={{ marginBottom: 16 }}>对话管理</Title>
+    <div className="admin-page">
+      <div className="page-toolbar">
+        <div>
+          <Title level={3} className="page-title">对话管理</Title>
+          <div className="page-subtitle">检索用户与 AI 的历史对话</div>
+        </div>
+      </div>
 
-      <Space style={{ marginBottom: 16 }} wrap>
+      <Space className="admin-filter-bar" wrap>
         <Input.Search
           placeholder="应用ID"
           allowClear
@@ -116,20 +121,22 @@ export default function ChatManage() {
         />
       </Space>
 
-      <Table
-        rowKey="id"
-        columns={columns}
-        dataSource={records}
-        loading={loading}
-        scroll={{ x: 900 }}
-        pagination={{
-          current: query.pageNum,
-          pageSize: query.pageSize,
-          total,
-          showTotal: (t) => `共 ${t} 条`,
-          onChange: (page, pageSize) => setQuery((prev) => ({ ...prev, pageNum: page, pageSize })),
-        }}
-      />
+      <div className="glass-panel admin-table-panel">
+        <Table
+          rowKey="id"
+          columns={columns}
+          dataSource={records}
+          loading={loading}
+          scroll={{ x: 900 }}
+          pagination={{
+            current: query.pageNum,
+            pageSize: query.pageSize,
+            total,
+            showTotal: (t) => `共 ${t} 条`,
+            onChange: (page, pageSize) => setQuery((prev) => ({ ...prev, pageNum: page, pageSize })),
+          }}
+        />
+      </div>
     </div>
   );
 }

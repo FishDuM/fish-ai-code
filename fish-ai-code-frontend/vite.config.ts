@@ -2,6 +2,7 @@ import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 import fs from 'fs'
+import { buildEditModeScript, wrapEditModeScript } from './src/utils/editModeInjector'
 
 /**
  * Vite plugin: serve built Vue project dist files directly from the code_output directory.
@@ -18,6 +19,23 @@ import fs from 'fs'
  */
 function vuePreviewPlugin(): Plugin {
   const CODE_OUTPUT_DIR = path.resolve(__dirname, '../tmp/code_output');
+
+  function injectEditModeScript(html: string): string {
+    const wrapper = wrapEditModeScript(buildEditModeScript());
+    const closeHead = /<\/head\s*>/i;
+    if (closeHead.test(html)) {
+      return html.replace(closeHead, `${wrapper}</head>`);
+    }
+    const closeBody = /<\/body\s*>/i;
+    if (closeBody.test(html)) {
+      return html.replace(closeBody, `${wrapper}</body>`);
+    }
+    const closeHtml = /<\/html\s*>/i;
+    if (closeHtml.test(html)) {
+      return html.replace(closeHtml, `${wrapper}</html>`);
+    }
+    return html + wrapper;
+  }
 
   // True iff `resolvedPath` is `distDir` itself or sits strictly inside it
   // (no traversal, no sibling with a shared prefix like `/dist_evil`).
@@ -42,7 +60,9 @@ function vuePreviewPlugin(): Plugin {
         // existence check on the dist dir always fails.
         const pathname = url.split('?')[0];
         const query = url.includes('?') ? url.slice(url.indexOf('?') + 1) : '';
-        const requestedSince = Number(new URLSearchParams(query).get('since') || 0);
+        const searchParams = new URLSearchParams(query);
+        const requestedSince = Number(searchParams.get('since') || 0);
+        const shouldInjectEditMode = searchParams.get('fish_edit_mode') === '1';
 
         // Extract appId and file path from URL.
         // /vue-preview/{appId}/some/path.js  →  appId, some/path.js
@@ -106,6 +126,10 @@ function vuePreviewPlugin(): Plugin {
         };
         res.setHeader('Content-Type', mime[ext] || 'application/octet-stream');
         res.setHeader('Cache-Control', 'no-cache');
+        if (filePath === 'index.html' && shouldInjectEditMode) {
+          res.end(injectEditModeScript(fs.readFileSync(resolvedPath, 'utf8')));
+          return;
+        }
         res.end(fs.readFileSync(resolvedPath));
       });
     },

@@ -2,15 +2,13 @@ import { useCallback, useMemo } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router';
 import { Layout, Menu, Dropdown, Avatar, Space, Button } from 'antd';
 import {
-  HomeOutlined,
-  AppstoreOutlined,
-  PlusCircleOutlined,
   UserOutlined,
   LogoutOutlined,
   SettingOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { APP_NAME, USER_ROLES } from '@/constants';
+import logoUrl from '@/assets/logo.png';
 
 const { Header, Content, Footer } = Layout;
 
@@ -21,6 +19,7 @@ export default function BasicLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { loginUser, logout } = useAuthStore();
+  const isHomePage = location.pathname === '/';
 
   // 用 useCallback 稳定回调引用，避免 antd Menu/Dropdown 的内部 memo 失效
   const handleLogout = useCallback(async () => {
@@ -35,15 +34,15 @@ export default function BasicLayout() {
   // 依赖只放真正用到的字段：loginUser 用于存在性判断，role 用于 admin 入口显隐
   const navItems = useMemo(
     () => [
-      { key: '/', label: '首页', icon: <HomeOutlined /> },
+      { key: '/', label: '首页' },
       ...(loginUser
         ? [
-            { key: '/dashboard', label: '我的应用', icon: <AppstoreOutlined /> },
-            { key: '/app/create', label: '创建应用', icon: <PlusCircleOutlined /> },
+            { key: '/dashboard', label: '我的应用' },
+            { key: '/app/create', label: '创建应用' },
           ]
         : []),
       ...(loginUser?.userRole === USER_ROLES.ADMIN
-        ? [{ key: '/admin/users', label: '管理后台', icon: <SettingOutlined /> }]
+        ? [{ key: '/admin/users', label: '管理后台' }]
         : []),
     ],
     [loginUser, loginUser?.userRole]
@@ -72,55 +71,43 @@ export default function BasicLayout() {
   );
 
   return (
-    <Layout style={{ minHeight: '100vh', background: '#fff' }}>
+    <Layout className="app-shell">
       <Header
-        style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 100,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 24px',
-          background: '#fff',
-          borderBottom: '1px solid rgba(17,25,37,0.1)',
-          height: 56,
-          lineHeight: '56px',
-        }}
+        className="app-header"
       >
-        <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
+        <div className="app-header-main">
           <div
-            style={{ fontSize: 18, fontWeight: 700, color: '#111925', cursor: 'pointer', marginRight: 32, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}
+            className="brand-logo"
             onClick={() => navigate('/')}
           >
-            <span style={{ color: '#36D2BE', fontSize: 22 }}>🐟</span>
-            <span>{APP_NAME}</span>
+            <img src={logoUrl} alt={APP_NAME} className="brand-logo-image" />
+            <span className="brand-logo-text">{APP_NAME}</span>
           </div>
           <Menu
             mode="horizontal"
             selectedKeys={[location.pathname]}
             items={navItems}
             onClick={({ key }) => navigate(key)}
-            style={{ flex: 1, minWidth: 0, background: 'transparent', borderBottom: 'none' }}
+            className="app-nav-menu"
           />
         </div>
 
-        <div style={{ flexShrink: 0, marginLeft: 16 }}>
+        <div className="app-header-user">
           {loginUser ? (
             <Dropdown menu={{ items: userMenuItems, onClick: handleUserMenuClick }} placement="bottomRight">
-              <Space style={{ cursor: 'pointer', color: '#111925' }}>
+              <Space className="user-pill">
                 <Avatar
                   size="small"
                   src={loginUser.userAvatar}
                   icon={!loginUser.userAvatar ? <UserOutlined /> : undefined}
-                  style={{ backgroundColor: 'rgba(17,25,37,0.15)' }}
+                  className="user-pill-avatar"
                 />
-                <span style={{ fontSize: 14 }}>{loginUser.userName || loginUser.userAccount}</span>
+                <span className="user-pill-name">{loginUser.userName || loginUser.userAccount}</span>
               </Space>
             </Dropdown>
           ) : (
-            <Space>
-              <Button type="text" style={{ color: 'rgba(17,25,37,0.65)' }} onClick={() => navigate('/login')}>
+            <Space size={10}>
+              <Button type="text" className="header-login-button" onClick={() => navigate('/login')}>
                 登录
               </Button>
               <Button
@@ -134,11 +121,19 @@ export default function BasicLayout() {
         </div>
       </Header>
 
-      <Content style={{ padding: '24px', maxWidth: 1200, margin: '0 auto', width: '100%' }}>
+      <Content
+        className={isHomePage ? 'app-content app-content-home' : 'app-content'}
+        style={{
+          padding: isHomePage ? 0 : '24px',
+          maxWidth: isHomePage ? 'none' : 1200,
+          margin: '0 auto',
+          width: '100%',
+        }}
+      >
         <Outlet />
       </Content>
 
-      <Footer style={{ textAlign: 'center', color: 'rgba(17,25,37,0.45)', borderTop: '1px solid rgba(17,25,37,0.1)' }}>
+      <Footer className="app-footer">
         {APP_NAME} ©{CURRENT_YEAR} — AI 驱动的网站生成平台
       </Footer>
     </Layout>

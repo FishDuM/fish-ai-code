@@ -99,10 +99,13 @@ export default function Dashboard() {
   }, [fetchApps]);
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <Title level={4} style={{ margin: 0, color: '#111925' }}>我的应用</Title>
-        <Space>
+    <div className="page-surface">
+      <div className="page-toolbar">
+        <div>
+          <Title level={3} className="page-title">我的应用</Title>
+          <div className="page-subtitle">管理你创建的应用和网站</div>
+        </div>
+        <Space wrap>
           <SearchInput onSearch={handleSearch} placeholder="搜索应用..." style={{ width: 200 }} />
           <Button className="btn-gradient" icon={<PlusOutlined />} onClick={() => navigate('/app/create')}>
             创建应用
@@ -110,8 +113,9 @@ export default function Dashboard() {
         </Space>
       </div>
 
-      {!loading && apps.length === 0 ? (
-        <Empty description="你还没有创建应用">
+      <div className="glass-panel">
+        {!loading && apps.length === 0 ? (
+        <Empty description="你还没有创建应用" className="page-empty">
           <Button type="primary" onClick={() => navigate('/app/create')}>
             创建第一个应用
           </Button>
@@ -143,6 +147,7 @@ export default function Dashboard() {
           )}
         </>
       )}
+      </div>
 
       <Modal
         title="重命名应用"

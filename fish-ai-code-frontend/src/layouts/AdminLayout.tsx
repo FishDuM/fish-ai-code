@@ -13,28 +13,9 @@ import {
 } from '@ant-design/icons';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { APP_NAME } from '@/constants';
+import logoUrl from '@/assets/logo.png';
 
 const { Header, Sider, Content } = Layout;
-
-// 静态样式提到模块级常量，避免每次 render 重建新对象导致下游组件 memo 失效
-const LAYOUT_STYLE: React.CSSProperties = { minHeight: '100vh' };
-const HEADER_STYLE: React.CSSProperties = {
-  background: '#fff',
-  padding: '0 24px',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  borderBottom: '1px solid rgba(17,25,37,0.1)',
-  height: 56,
-  lineHeight: '56px',
-};
-const CONTENT_STYLE: React.CSSProperties = {
-  margin: 24,
-  padding: 24,
-  background: '#fff',
-  borderRadius: 8,
-  border: '1px solid rgba(17,25,37,0.1)',
-};
 
 export default function AdminLayout() {
   const navigate = useNavigate();
@@ -81,13 +62,14 @@ export default function AdminLayout() {
   );
 
   return (
-    <Layout style={LAYOUT_STYLE}>
+    <Layout className="admin-shell">
       <Sider
         collapsible
         collapsed={collapsed}
         onCollapse={setCollapsed}
         trigger={null}
-        theme="dark"
+        theme="light"
+        className="admin-sider"
       >
         <div
           // 样式依赖 collapsed（响应式字号），保留 inline
@@ -96,26 +78,34 @@ export default function AdminLayout() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#fff',
+            color: '#111925',
             fontWeight: 700,
             fontSize: collapsed ? 16 : 18,
             cursor: 'pointer',
           }}
           onClick={() => navigate('/')}
         >
-          {collapsed ? '🐟' : <><span style={{ color: '#36D2BE' }}>🐟</span> {APP_NAME}</>}
+          {collapsed ? (
+            <img src={logoUrl} alt={APP_NAME} className="admin-logo-image" />
+          ) : (
+            <span className="admin-logo-expanded">
+              <img src={logoUrl} alt={APP_NAME} className="admin-logo-image" />
+              <span>{APP_NAME}</span>
+            </span>
+          )}
         </div>
         <Menu
-          theme="dark"
+          theme="light"
           mode="inline"
           selectedKeys={[location.pathname]}
           items={siderItems}
           onClick={({ key }) => navigate(key)}
+          className="admin-menu"
         />
       </Sider>
 
       <Layout>
-        <Header style={HEADER_STYLE}>
+        <Header className="admin-header">
           <Space>
             <Button
               type="text"
@@ -141,7 +131,7 @@ export default function AdminLayout() {
           </Dropdown>
         </Header>
 
-        <Content style={CONTENT_STYLE}>
+        <Content className="admin-content">
           <Outlet />
         </Content>
       </Layout>
