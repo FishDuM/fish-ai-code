@@ -21,7 +21,8 @@ export function RequireAdmin({ children }: { children: React.ReactNode }) {
   }
 
   if (!loginUser) {
-    return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
+    const redirect = `${location.pathname}${location.search}${location.hash}`;
+    return <Navigate to={`/login?redirect=${encodeURIComponent(redirect)}`} replace />;
   }
 
   if (loginUser.userRole !== USER_ROLES.ADMIN) {

@@ -129,6 +129,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (id == null || id <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
+        if (appName != null && StrUtil.isBlank(appName)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "应用名称不能为空");
+        }
         // 2. 检查应用是否存在
         App oldApp = this.getById(id);
         if (oldApp == null) {
@@ -137,9 +140,15 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         // 3. 更新
         App app = new App();
         app.setId(id);
-        app.setAppName(appName);
-        app.setCover(cover);
-        app.setPriority(priority);
+        if (appName != null) {
+            app.setAppName(appName);
+        }
+        if (cover != null) {
+            app.setCover(cover);
+        }
+        if (priority != null) {
+            app.setPriority(priority);
+        }
         boolean result = this.updateById(app);
         if (!result) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "更新应用失败");
@@ -209,8 +218,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         String sortField = appQueryRequest.getSortField();
         String sortOrder = appQueryRequest.getSortOrder();
         QueryWrapper queryWrapper = QueryWrapper.create()
-                .eq("userId", userId)
-                .like("appName", appName);
+                .eq("userId", userId);
+        if (StrUtil.isNotBlank(appName)) {
+            queryWrapper.like("appName", appName);
+        }
         if (StrUtil.isNotBlank(sortField)) {
             queryWrapper.orderBy(sortField, "ascend".equals(sortOrder));
         }
@@ -227,8 +238,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         String sortOrder = appQueryRequest.getSortOrder();
         // 精选应用：优先级等于 FEATURED_PRIORITY 的应用
         QueryWrapper queryWrapper = QueryWrapper.create()
-                .eq("priority", AppConstant.FEATURED_PRIORITY)
-                .like("appName", appName);
+                .eq("priority", AppConstant.FEATURED_PRIORITY);
+        if (StrUtil.isNotBlank(appName)) {
+            queryWrapper.like("appName", appName);
+        }
         if (StrUtil.isNotBlank(sortField)) {
             queryWrapper.orderBy(sortField, "ascend".equals(sortOrder));
         }

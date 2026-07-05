@@ -20,7 +20,6 @@ interface ChatMessageListProps {
    *  it's rendered through the same ChatMessage path so there's no
    *  unmount/remount at the moment the stream finishes. */
   streamingMessage?: Message | null;
-  currentCode: string;
   hasMoreHistory: boolean;
   loadingMore: boolean;
   sseError: Error | null;
@@ -30,7 +29,6 @@ interface ChatMessageListProps {
 function ChatMessageList({
   messages,
   streamingMessage,
-  currentCode,
   hasMoreHistory,
   loadingMore,
   sseError,

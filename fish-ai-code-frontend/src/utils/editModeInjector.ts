@@ -34,6 +34,7 @@ export function buildEditModeScript(): string {
   var HOVER_BORDER = '2px solid #36D2BE';
   var SELECT_BORDER = '2px solid #f5222d';
   var PREFIX = '__em-';
+  var enabled = true;
 
   function cssEscape(s) {
     try {
@@ -83,8 +84,8 @@ export function buildEditModeScript(): string {
 
   function truncate(s, maxChars, maxLines) {
     if (!s) return '';
-    // 先按换行切分，再对每行单独归一化空白：原实现先 replace(/\s+/g,' ')
-    // 会把换行也吃掉，后续 split('\n') 只能得到 1 行，maxLines 形同虚设。
+    // 先按换行切分，再对每行单独归一化空白：原实现先归一化所有空白
+    // 会把换行也吃掉，后续再按换行切分只能得到 1 行，maxLines 形同虚设。
     var rawLines = String(s).split('\\n');
     var normalized = [];
     for (var i = 0; i < rawLines.length; i++) {
@@ -165,6 +166,7 @@ export function buildEditModeScript(): string {
   }
 
   function onMouseMove(e) {
+    if (!enabled) return;
     var t = e.target;
     if (!t || t === overlay || t === tooltip) return;
     if (selectedEl && (t === selectedEl || selectedEl.contains(t))) {
@@ -176,6 +178,7 @@ export function buildEditModeScript(): string {
   }
 
   function onClick(e) {
+    if (!enabled) return;
     var t = e.target;
     if (!t || t === overlay || t === tooltip) return;
     e.preventDefault();
@@ -233,7 +236,17 @@ export function buildEditModeScript(): string {
   function onMessage(e) {
     var d = e.data;
     if (!d || d.source !== SOURCE) return;
-    if (d.type === 'highlight') {
+    if (d.type === 'enable') {
+      enabled = true;
+      document.documentElement.style.cursor = 'crosshair';
+    } else if (d.type === 'disable') {
+      enabled = false;
+      selectedEl = null;
+      clearHover();
+      if (tooltip && tooltip.parentNode) tooltip.style.display = 'none';
+      document.documentElement.style.cursor = '';
+    } else if (d.type === 'highlight') {
+      if (!enabled) return;
       highlightSelector(d.selector);
     } else if (d.type === 'unselect') {
       selectedEl = null;

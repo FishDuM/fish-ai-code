@@ -36,7 +36,7 @@ export type EditModePostMessage =
   | {
       source: typeof EDIT_MODE_SOURCE;
       type: 'select';
-      element: SelectedElement;
+      element: SelectedElement | null;
     }
   | {
       source: typeof EDIT_MODE_SOURCE;
@@ -47,4 +47,5 @@ export type EditModePostMessage =
 export type EditModeControlMessage =
   | { type: 'enable' }
   | { type: 'disable' }
-  | { type: 'highlight'; selector: string | null };
+  | { type: 'highlight'; selector: string | null }
+  | { type: 'unselect' };

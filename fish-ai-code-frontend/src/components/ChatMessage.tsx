@@ -2,9 +2,10 @@ import { Avatar, Button, App } from 'antd';
 import { UserOutlined, RobotOutlined, CopyOutlined, CheckOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
 import { useHighlighter } from '@/hooks/useHighlighter';
 import { normalizeMarkdownForStreaming } from '@/utils/markdownNormalize';
+import { formatCodeForDisplay } from '@/utils/codeFormatter';
 
 interface ChatMessageProps {
   role: 'user' | 'ai';
@@ -15,7 +16,15 @@ interface ChatMessageProps {
 // React.memo 包裹：流式期间 markdown 节流触发的 re-render 会让 CodeBlock 的 props
 // (language, children) 保持不变，React 会跳过它的整个子树（高亮器不重新 tokenize、
 // 复制按钮不重建）。这是个低成本却收益很高的优化。
-const CodeBlock = React.memo(function CodeBlock({ language, children }: { language: string; children: string }) {
+const CodeBlock = React.memo(function CodeBlock({
+  language,
+  children,
+  isStreaming = false,
+}: {
+  language: string;
+  children: string;
+  isStreaming?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
   const highlighter = useHighlighter();
   const { message } = App.useApp();
@@ -31,7 +40,7 @@ const CodeBlock = React.memo(function CodeBlock({ language, children }: { langua
   }, [children, message]);
 
   return (
-    <div style={{ position: 'relative', margin: '8px 0' }}>
+    <div style={{ position: 'relative', margin: '8px 0', maxWidth: '100%', minWidth: 0 }}>
       <div
         style={{
           display: 'flex',
@@ -42,6 +51,7 @@ const CodeBlock = React.memo(function CodeBlock({ language, children }: { langua
           borderRadius: '8px 8px 0 0',
           fontSize: 12,
           color: '#888',
+          boxSizing: 'border-box',
         }}
       >
         <span>{language || 'code'}</span>
@@ -55,7 +65,7 @@ const CodeBlock = React.memo(function CodeBlock({ language, children }: { langua
           {copied ? '已复制' : '复制'}
         </Button>
       </div>
-      {highlighter ? (
+      {!isStreaming && highlighter ? (
         <highlighter.Component
           language={language || 'text'}
           style={highlighter.style}
@@ -69,6 +79,8 @@ const CodeBlock = React.memo(function CodeBlock({ language, children }: { langua
             borderRadius: '0 0 8px 8px',
             fontSize: 13,
             lineHeight: 1.5,
+            maxWidth: '100%',
+            boxSizing: 'border-box',
           }}
         >
           {children}
@@ -83,9 +95,13 @@ const CodeBlock = React.memo(function CodeBlock({ language, children }: { langua
             borderRadius: '0 0 8px 8px',
             fontSize: 13,
             lineHeight: 1.5,
+            width: '100%',
+            maxWidth: '100%',
+            boxSizing: 'border-box',
             overflow: 'auto',
             whiteSpace: 'pre-wrap',
             wordBreak: 'break-word',
+            overflowWrap: 'anywhere',
           }}
         >
           {children}
@@ -224,17 +240,21 @@ function ChatMessageInner({ role, content, isStreaming }: ChatMessageProps) {
       return '';
     };
 
-    function Code({ className, children, ...props }: CodeProps) {
+    function Code({ className, children, inline, ...props }: CodeProps) {
       const match = /language-(\w+)/.exec(className || '');
       const codeString = toCodeString(children).replace(/\n$/, '');
-      if (!match && !codeString.includes('\n')) {
+      const language = match ? match[1] : '';
+      const displayCode = formatCodeForDisplay(codeString, language);
+      if (inline && !codeString.includes('\n')) {
         return (
           <code
             style={{
-              background: '#e8e8e8',
+              background: 'rgba(17,25,37,0.08)',
               padding: '1px 6px',
               borderRadius: 4,
               fontSize: '0.9em',
+              textShadow: 'none',
+              boxShadow: 'none',
             }}
             {...props}
           >
@@ -242,13 +262,13 @@ function ChatMessageInner({ role, content, isStreaming }: ChatMessageProps) {
           </code>
         );
       }
-      return <CodeBlock language={match ? match[1] : ''} children={codeString} />;
+      return <CodeBlock language={language} children={displayCode} isStreaming={isStreaming} />;
     }
     return {
       ...markdownBaseComponents,
       code: Code,
     };
-  }, []);
+  }, [isStreaming]);
 
   // `useDeferredValue` was previously used here to keep the markdown
   // reparse off the critical path during streaming, but the React 19
@@ -271,8 +291,10 @@ function ChatMessageInner({ role, content, isStreaming }: ChatMessageProps) {
   // 拿到旧值导致丢字符。
   const latestContentRef = useRef(content);
   const latestIsUserRef = useRef(isUser);
-  latestContentRef.current = content;
-  latestIsUserRef.current = isUser;
+  useLayoutEffect(() => {
+    latestContentRef.current = content;
+    latestIsUserRef.current = isUser;
+  }, [content, isUser]);
   useEffect(() => {
     const normalized = isUser ? content : normalizeMarkdownForStreaming(content);
     if (!isStreaming) {

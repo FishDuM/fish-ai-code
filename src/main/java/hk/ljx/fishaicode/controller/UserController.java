@@ -1,6 +1,8 @@
 package hk.ljx.fishaicode.controller;
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.util.StrUtil;
+import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.core.paginate.Page;
 import hk.ljx.fishaicode.annotation.AuthCheck;
 import hk.ljx.fishaicode.common.BaseResponse;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import hk.ljx.fishaicode.modal.entity.User;
+import hk.ljx.fishaicode.modal.enums.UserRoleEnum;
 import hk.ljx.fishaicode.service.UserService;
 import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
@@ -81,8 +84,24 @@ public class UserController {
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<Long> addUser(@RequestBody UserAddRequest userAddRequest) {
         ThrowUtils.throwIf(userAddRequest == null, ErrorCode.PARAMS_ERROR);
+        String userAccount = userAddRequest.getUserAccount();
+        ThrowUtils.throwIf(StrUtil.isBlank(userAccount), ErrorCode.PARAMS_ERROR, "账号不能为空");
+        ThrowUtils.throwIf(userAccount.length() < 4, ErrorCode.PARAMS_ERROR, "用户账号过短");
+        String userRole = userAddRequest.getUserRole();
+        if (StrUtil.isNotBlank(userRole)) {
+            ThrowUtils.throwIf(UserRoleEnum.getEnumByValue(userRole) == null, ErrorCode.PARAMS_ERROR, "用户角色不合法");
+        }
+        QueryWrapper queryWrapper = QueryWrapper.create().eq("userAccount", userAccount);
+        long count = userService.count(queryWrapper);
+        ThrowUtils.throwIf(count > 0, ErrorCode.PARAMS_ERROR, "账号已存在");
         User user = new User();
         BeanUtil.copyProperties(userAddRequest, user);
+        if (StrUtil.isBlank(user.getUserRole())) {
+            user.setUserRole(UserRoleEnum.USER.getValue());
+        }
+        if (StrUtil.isBlank(user.getUserAvatar())) {
+            user.setUserAvatar("https://api.elaina.cat/random/");
+        }
         // 默认密码 12345678
         final String DEFAULT_PASSWORD = "12345678";
         String encryptPassword = userService.getEncryptPassword(DEFAULT_PASSWORD);

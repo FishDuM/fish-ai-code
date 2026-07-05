@@ -7,6 +7,7 @@ const { Text } = Typography;
 
 interface ChatHeaderProps {
   appName: string;
+  isOwner: boolean;
   showPreview: boolean;
   deploying: boolean;
   onDeploy: () => void;
@@ -14,7 +15,7 @@ interface ChatHeaderProps {
   onDelete: () => void;
 }
 
-function ChatHeader({ appName, showPreview, deploying, onDeploy, onRename, onDelete }: ChatHeaderProps) {
+function ChatHeader({ appName, isOwner, showPreview, deploying, onDeploy, onRename, onDelete }: ChatHeaderProps) {
   const navigate = useNavigate();
 
   return (
@@ -37,21 +38,25 @@ function ChatHeader({ appName, showPreview, deploying, onDeploy, onRename, onDel
         <Text strong style={{ color: '#111925' }}>{appName || '未命名应用'}</Text>
       </Space>
       <Space>
-        <Button
-          className="btn-gradient"
-          icon={<CloudUploadOutlined />}
-          onClick={onDeploy}
-          loading={deploying}
-          disabled={!showPreview}
-        >
-          部署
-        </Button>
-        <Button type="text" icon={<EditOutlined />} onClick={onRename}>
-          重命名
-        </Button>
-        <Button type="text" danger icon={<DeleteOutlined />} onClick={onDelete}>
-          删除
-        </Button>
+        {isOwner && (
+          <>
+            <Button
+              className="btn-gradient"
+              icon={<CloudUploadOutlined />}
+              onClick={onDeploy}
+              loading={deploying}
+              disabled={!showPreview}
+            >
+              部署
+            </Button>
+            <Button type="text" icon={<EditOutlined />} onClick={onRename}>
+              重命名
+            </Button>
+            <Button type="text" danger icon={<DeleteOutlined />} onClick={onDelete}>
+              删除
+            </Button>
+          </>
+        )}
       </Space>
     </div>
   );

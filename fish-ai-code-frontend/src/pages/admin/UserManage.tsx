@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Table, Button, Modal, Form, Input, Select, Space, Tag, App, Avatar, Typography } from 'antd';
 import { EditOutlined, DeleteOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -21,18 +21,26 @@ export default function UserManage() {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [addLoading, setAddLoading] = useState(false);
   const [addForm] = Form.useForm();
+  const fetchIdRef = useRef(0);
 
   const fetchUsers = useCallback(() => {
+    const fetchId = ++fetchIdRef.current;
     setLoading(true);
     listUsers(query)
       .then((res) => {
+        if (fetchId !== fetchIdRef.current) return;
         setUsers(res.records);
         setTotal(res.totalRow);
       })
       .catch(() => {
+        if (fetchId !== fetchIdRef.current) return;
         message.error('加载用户列表失败');
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (fetchId === fetchIdRef.current) {
+          setLoading(false);
+        }
+      });
   }, [query, message]);
 
   useEffect(() => {

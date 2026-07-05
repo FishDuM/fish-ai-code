@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Table, Button, Modal, Form, Input, InputNumber, Space, Tag, App, Typography } from 'antd';
 import { EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -18,18 +18,26 @@ export default function AppManage() {
   const [editApp, setEditApp] = useState<AppType | null>(null);
   const [editLoading, setEditLoading] = useState(false);
   const [form] = Form.useForm();
+  const fetchIdRef = useRef(0);
 
   const fetchApps = useCallback(() => {
+    const fetchId = ++fetchIdRef.current;
     setLoading(true);
     adminListApps(query)
       .then((res) => {
+        if (fetchId !== fetchIdRef.current) return;
         setApps(res.records);
         setTotal(res.totalRow);
       })
       .catch(() => {
+        if (fetchId !== fetchIdRef.current) return;
         message.error('加载应用列表失败');
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (fetchId === fetchIdRef.current) {
+          setLoading(false);
+        }
+      });
   }, [query, message]);
 
   useEffect(() => {
@@ -189,7 +197,11 @@ export default function AppManage() {
         cancelText="取消"
       >
         <Form form={form} layout="vertical">
-          <Form.Item name="appName" label="应用名">
+          <Form.Item
+            name="appName"
+            label="应用名"
+            rules={[{ required: true, whitespace: true, message: '请输入应用名' }]}
+          >
             <Input placeholder="应用名称" />
           </Form.Item>
           <Form.Item name="cover" label="封面 URL">

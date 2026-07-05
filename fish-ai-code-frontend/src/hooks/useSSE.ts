@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useLayoutEffect } from 'react';
 import { startCodeGenSSE } from '@/api/sse';
 
 interface ToolExecutedInfo {
@@ -19,12 +19,12 @@ export function useSSE(onComplete?: (finalCode: string) => void, onToolExecuted?
   // closures from old streams overwriting new state.
   const epochRef = useRef(0);
   // Use refs to avoid stale closure issues — always call the LATEST callback.
-  // 直接在 render 期写 ref：ref 赋值不会触发渲染，也不会破坏 React 的渲染约束，
-  // 比无依赖数组的 `useLayoutEffect(() => {...})` 便宜（后者每次 render 都跑一遍）。
   const onCompleteRef = useRef(onComplete);
   const onToolExecutedRef = useRef(onToolExecuted);
-  onCompleteRef.current = onComplete;
-  onToolExecutedRef.current = onToolExecuted;
+  useLayoutEffect(() => {
+    onCompleteRef.current = onComplete;
+    onToolExecutedRef.current = onToolExecuted;
+  }, [onComplete, onToolExecuted]);
 
   const start = useCallback((appId: string, message: string) => {
     abortRef.current?.abort();

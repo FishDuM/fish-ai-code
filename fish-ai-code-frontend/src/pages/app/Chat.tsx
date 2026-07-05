@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { Button, App, Tabs, Spin, Modal, Input, Switch, Tooltip } from 'antd';
+import { Button, App, Tabs, Spin, Modal, Input, Switch, Tooltip, Result } from 'antd';
 import {
   CodeOutlined,
   EyeOutlined,
@@ -17,13 +17,15 @@ import { useSSE } from '@/hooks/useSSE';
 import { useTitle } from '@/hooks/useTitle';
 import { preloadHighlighter } from '@/hooks/useHighlighter';
 import { useAuthStore } from '@/stores/useAuthStore';
-import { applyEditModeToSrcDoc } from '@/utils/editModeInjector';
+import { applyEditModeToSrcDoc, buildEditModeScript } from '@/utils/editModeInjector';
 import { buildEditPrompt } from '@/utils/editPromptBuilder';
 import {
   EDIT_MODE_SOURCE,
   type SelectedElement,
   type EditModeControlMessage,
 } from '@/types/editMode';
+import { API_BASE_URL, ERROR_CODES } from '@/constants';
+import { ApiError } from '@/api/error';
 
 // Warm the highlighter as soon as this module is parsed. The first
 // historical AI message that mounts doesn't have to flash through the
@@ -32,7 +34,7 @@ import {
 preloadHighlighter();
 import { getAppVO, deleteMyApp, updateMyApp, deployApp } from '@/api/app';
 import { getLatestChatHistory, listChatHistoryBefore } from '@/api/chatHistory';
-import { parseHtmlCode, parseMultiFileCode, mergeToHtmlDoc, extractVueProjectFiles, cleanVueOutput } from '@/utils/codeParser';
+import { parseMultiFileCode, extractVueProjectFiles, cleanVueOutput } from '@/utils/codeParser';
 import type { AppVO } from '@/api/types';
 
 const PAGE_SIZE = 10;
@@ -74,7 +76,13 @@ export default function AppChat() {
   // (no unmount/remount, which was the source of the "markdown lost after
   // stream ends" bug).
   const [streamingMessage, setStreamingMessage] = useState<Message | null>(null);
+  // HTML used only for edit mode injection. Normal preview loads the
+  // backend-saved index.html by URL so it matches the real generated files.
   const [previewCode, setPreviewCode] = useState('');
+  const [htmlPreviewUrl, setHtmlPreviewUrl] = useState('');
+  const [htmlPreviewCode, setHtmlPreviewCode] = useState('');
+  const [htmlPreviewLoading, setHtmlPreviewLoading] = useState(false);
+  const [vueEditableSrcDoc, setVueEditableSrcDoc] = useState('');
   const [previewTab, setPreviewTab] = useState('preview');
   const [deployUrl, setDeployUrl] = useState('');
   const [deploying, setDeploying] = useState(false);
@@ -95,30 +103,113 @@ export default function AppChat() {
   // Position of the prompt popover in parent (page) coordinates.
   const [popoverPosition, setPopoverPosition] = useState<{ left: number; top: number } | null>(null);
   const htmlPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
+  const htmlPreviewPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const htmlPreviewFetchAbortRef = useRef<AbortController | null>(null);
+  const vueEditableFetchAbortRef = useRef<AbortController | null>(null);
+  const vueEditModeSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editModeRef = useRef(editMode);
+  const pendingHighlightSelectorRef = useRef<string | null>(pendingHighlightSelector);
+  const vueBuildSinceRef = useRef(0);
   const historyInitedRef = useRef(false);
   const autoSentRef = useRef(false);
   const oldestCreateTimeRef = useRef<string>('');
   // Mirror of `appId` for async callbacks to detect stale responses after navigation.
   const appIdRef = useRef<string>('');
 
-  // Build preview HTML from raw AI code
-  //
-  // 返回 '' 时调用方应保留旧 previewCode：发生在"AI 增量编辑只补 ```css / ```js
-  // 补丁、没重发 ```html"场景 —— parseMultiFileCode 此时返回 htmlCode=''，
-  // 如果我们仍调 mergeToHtmlDoc 会得到 `<body></body>` 把 iframe 清空。
-  // 让上游明确跳过 setPreviewCode 比把空 body 灌进去友好。
-  const buildPreviewHtml = useCallback((rawCode: string, codeGenType: string | null) => {
-    if (!rawCode) return '';
-    if (codeGenType === 'vue_project') {
-      return '';
+  useEffect(() => {
+    editModeRef.current = editMode;
+  }, [editMode]);
+
+  useEffect(() => {
+    pendingHighlightSelectorRef.current = pendingHighlightSelector;
+  }, [pendingHighlightSelector]);
+
+  const postEditModeMessage = useCallback((msg: EditModeControlMessage) => {
+    const iframe = htmlPreviewIframeRef.current;
+    if (!iframe) return;
+    try {
+      iframe.contentWindow?.postMessage(
+        { source: EDIT_MODE_SOURCE, ...msg },
+        '*',
+      );
+    } catch {
+      // cross-origin or detached — ignore
     }
-    if (codeGenType === 'multi_file') {
-      const parsed = parseMultiFileCode(rawCode);
-      if (!parsed.htmlCode) return '';
-      return mergeToHtmlDoc(parsed);
-    }
-    return parseHtmlCode(rawCode);
   }, []);
+
+  const getHtmlPreviewBaseUrl = useCallback((
+    targetAppId: string | undefined = appId,
+    codeGenType: string | null | undefined = app?.codeGenType,
+  ) => {
+    if (!targetAppId || !codeGenType || codeGenType === 'vue_project') return '';
+    return `${API_BASE_URL}/static/${codeGenType}_${targetAppId}/`;
+  }, [app?.codeGenType, appId]);
+
+  const stopHtmlPreviewPolling = useCallback(() => {
+    if (htmlPreviewPollTimerRef.current) {
+      clearTimeout(htmlPreviewPollTimerRef.current);
+      htmlPreviewPollTimerRef.current = null;
+    }
+    htmlPreviewFetchAbortRef.current?.abort();
+    htmlPreviewFetchAbortRef.current = null;
+  }, []);
+
+  const stopVueEditModeSync = useCallback(() => {
+    if (vueEditModeSyncTimerRef.current) {
+      clearTimeout(vueEditModeSyncTimerRef.current);
+      vueEditModeSyncTimerRef.current = null;
+    }
+  }, []);
+
+  const stopVueEditablePreviewFetch = useCallback(() => {
+    vueEditableFetchAbortRef.current?.abort();
+    vueEditableFetchAbortRef.current = null;
+  }, []);
+
+  const refreshHtmlPreviewFromFile = useCallback((
+    targetAppId: string | undefined = appId,
+    codeGenType: string | null | undefined = app?.codeGenType,
+  ) => {
+    const baseUrl = getHtmlPreviewBaseUrl(targetAppId, codeGenType);
+    if (!baseUrl || !targetAppId) return;
+
+    stopHtmlPreviewPolling();
+    setHtmlPreviewLoading(true);
+    setHtmlPreviewCode('');
+
+    let retries = 0;
+    const maxRetries = 60;
+    const poll = () => {
+      const controller = new AbortController();
+      htmlPreviewFetchAbortRef.current = controller;
+      const t = Date.now();
+      fetch(`${baseUrl}?t=${t}`, {
+        cache: 'no-store',
+        credentials: 'include',
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          if (targetAppId !== appIdRef.current) return;
+          if (!response.ok) throw new Error('preview file not ready');
+          const text = await response.text();
+          if (!text || text.length < 20) throw new Error('preview file empty');
+          setHtmlPreviewCode(text);
+          setHtmlPreviewUrl(`${baseUrl}?t=${Date.now()}`);
+          setHtmlPreviewLoading(false);
+        })
+        .catch((error: unknown) => {
+          if ((error as { name?: string })?.name === 'AbortError') return;
+          if (targetAppId !== appIdRef.current) return;
+          if (++retries < maxRetries) {
+            htmlPreviewPollTimerRef.current = setTimeout(poll, 500);
+            return;
+          }
+          setHtmlPreviewLoading(false);
+        });
+    };
+
+    poll();
+  }, [app?.codeGenType, appId, getHtmlPreviewBaseUrl, stopHtmlPreviewPolling]);
 
   // Translate an element's rect (in iframe viewport coords) to page coords,
   // placing the popover just below the element. If the element sits close
@@ -154,7 +245,15 @@ export default function AppChat() {
         | { source?: string; type?: string; element?: SelectedElement | null }
         | undefined;
       if (!data || data.source !== EDIT_MODE_SOURCE) return;
-      if (data.type === 'select') {
+      if (data.type === 'ready') {
+        postEditModeMessage({ type: editModeRef.current ? 'enable' : 'disable' });
+        if (editModeRef.current && pendingHighlightSelectorRef.current) {
+          postEditModeMessage({
+            type: 'highlight',
+            selector: pendingHighlightSelectorRef.current,
+          });
+        }
+      } else if (data.type === 'select') {
         if (!data.element) {
           setSelectedElement(null);
           setPopoverPosition(null);
@@ -167,7 +266,7 @@ export default function AppChat() {
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [computePopoverPosition]);
+  }, [computePopoverPosition, postEditModeMessage]);
 
   // After the iframe has reloaded with fresh content (srcDoc changed),
   // ask the injector to re-paint the highlight on the previously selected
@@ -177,37 +276,22 @@ export default function AppChat() {
     const iframe = htmlPreviewIframeRef.current;
     if (!iframe || !pendingHighlightSelector || !editMode) return;
     const handler = () => {
-      const msg: EditModeControlMessage = {
+      postEditModeMessage({
         type: 'highlight',
         selector: pendingHighlightSelector,
-      };
-      try {
-        iframe.contentWindow?.postMessage(
-          { source: EDIT_MODE_SOURCE, ...msg },
-          '*',
-        );
-      } catch {
-        // cross-origin or detached — ignore
-      }
+      });
     };
     iframe.addEventListener('load', handler);
     // If the iframe is already loaded (e.g. srcDoc didn't change), post
     // immediately on the next tick.
     const t = window.setTimeout(() => {
-      try {
-        iframe.contentWindow?.postMessage(
-          { source: EDIT_MODE_SOURCE, type: 'highlight', selector: pendingHighlightSelector },
-          '*',
-        );
-      } catch {
-        /* ignore */
-      }
+      postEditModeMessage({ type: 'highlight', selector: pendingHighlightSelector });
     }, 0);
     return () => {
       iframe.removeEventListener('load', handler);
       window.clearTimeout(t);
     };
-  }, [previewCode, editMode, pendingHighlightSelector]);
+  }, [previewCode, deployUrl, editMode, pendingHighlightSelector, postEditModeMessage]);
 
   // Clear selection state when edit mode is turned off so the popover
   // doesn't linger after the user disables the feature. The popover is
@@ -217,11 +301,14 @@ export default function AppChat() {
   const handleEditModeChange = useCallback((checked: boolean) => {
     setEditMode(checked);
     if (!checked) {
+      postEditModeMessage({ type: 'disable' });
       setSelectedElement(null);
       setPopoverPosition(null);
       setPendingHighlightSelector(null);
+    } else {
+      postEditModeMessage({ type: 'enable' });
     }
-  }, []);
+  }, [postEditModeMessage]);
 
   // Vue deploy poll handle — used to cancel any in-flight poll when we start
   // a new stream, switch apps, or unmount. Prevents the old poll from
@@ -288,23 +375,14 @@ export default function AppChat() {
       ]);
     }
 
-    // Immediately compute and set preview HTML (no deferred useEffect).
-    // Triggered synchronously from the SSE onDone, BEFORE the React commit
-    // that flips isStreaming=false — that's what the user was missing
-    // when the iframe only updated after a manual reload.
-    //
-    // 同时把 previewHandledRef 置 true，下方合并后的"历史回填 effect"会跳过
-    // —— 避免流结束后又一次正则解析同一段内容。
+    // The backend saves HTML / multi-file projects to tmp/code_output after
+    // the stream completes. Preview should load that saved index.html rather
+    // than parsing the AI chat text into iframe srcDoc; otherwise malformed
+    // streaming markdown can render a different page than the actual file.
     if (app?.codeGenType !== 'vue_project') {
-      const html = buildPreviewHtml(cleaned, app?.codeGenType ?? null);
-      if (html) {
-        setPreviewCode(html);
-        previewHandledRef.current = true;
-      } else {
-        // buildPreviewHtml 返回空（增量编辑只补 CSS/JS、没重发 html 块）：
-        // 保留旧 previewCode，不把聊天窗的 markdown 灌进 iframe。
-        previewHandledRef.current = true;
-      }
+      setPreviewCode('');
+      refreshHtmlPreviewFromFile(appId, app?.codeGenType);
+      previewHandledRef.current = true;
     }
 
     // Vue project: start polling for build completion immediately after SSE ends.
@@ -312,6 +390,9 @@ export default function AppChat() {
     // 没产出 / onError 路径不会到这里（useSSE 在 onError 不调 onComplete）。
     if (app?.codeGenType === 'vue_project' && appId) {
       vueStreamSucceededRef.current = true;
+      stopVuePolling();
+      const buildSince = vueBuildSinceRef.current || Date.now();
+      vueBuildSinceRef.current = buildSince;
       const previewUrl = `/vue-preview/${appId}/`;
       let retries = 0;
       const maxRetries = 90;
@@ -319,13 +400,13 @@ export default function AppChat() {
       const poll = () => {
         if (vuePollCancelledRef.current) return;
         const t = Date.now();
-        fetch(`${previewUrl}?poll=${t}`, { cache: 'no-store' })
+        fetch(`${previewUrl}?poll=${t}&since=${buildSince}`, { cache: 'no-store' })
           .then(async (r) => {
             if (vuePollCancelledRef.current) return;
             if (!r.ok) throw new Error();
             const text = await r.text();
             if (!text || text.includes('Building...') || text.length < 50) throw new Error();
-            setDeployUrl(`${previewUrl}?t=${t}`);
+            setDeployUrl(`${previewUrl}?t=${t}&since=${buildSince}`);
           })
           .catch(() => {
             if (vuePollCancelledRef.current) return;
@@ -336,7 +417,7 @@ export default function AppChat() {
       };
       vuePollTimerRef.current = setTimeout(poll, 2000);
     }
-  }, [app?.codeGenType, appId, buildPreviewHtml, streamingMessage]);
+  }, [app?.codeGenType, appId, refreshHtmlPreviewFromFile, stopVuePolling, streamingMessage]);
 
   const { isStreaming, isStreamingRef, currentCode, error: sseError, start, cancel, reset } = useSSE(
     handleStreamComplete,
@@ -424,12 +505,14 @@ export default function AppChat() {
             // Bail if the user has navigated to a different app meanwhile.
             if (appIdLocal !== appIdRef.current) return;
             const t = Date.now();
-            fetch(`/vue-preview/${appIdLocal}/?retry=${t}`, { cache: 'no-store' })
+            const buildSince = vueBuildSinceRef.current;
+            const sinceQuery = buildSince > 0 ? `&since=${buildSince}` : '';
+            fetch(`/vue-preview/${appIdLocal}/?retry=${t}${sinceQuery}`, { cache: 'no-store' })
               .then((r) => r.text())
               .then((text) => {
                 if (appIdLocal !== appIdRef.current) return;
                 if (text && !text.includes('Building...') && text.length > 50) {
-                  setDeployUrl(`/vue-preview/${appIdLocal}/?t=${t}`);
+                  setDeployUrl(`/vue-preview/${appIdLocal}/?t=${t}${sinceQuery}`);
                 }
               })
               .catch(() => {});
@@ -577,6 +660,11 @@ export default function AppChat() {
     return parseMultiFileCode(currentCode);
   }, [currentCode, app?.codeGenType]);
 
+  const htmlCodeForCodeTab = useMemo(() => {
+    if (app?.codeGenType === 'vue_project') return '';
+    return !isStreaming && htmlPreviewCode ? htmlPreviewCode : currentCode;
+  }, [app?.codeGenType, currentCode, htmlPreviewCode, isStreaming]);
+
   // ── Load app & history ───────────────────────────────────────────
   useEffect(() => {
     if (!appId) return;
@@ -586,7 +674,14 @@ export default function AppChat() {
     reset();
     stopVuePolling();
     stopVueFilesPolling();
+    stopHtmlPreviewPolling();
+    stopVueEditModeSync();
+    stopVueEditablePreviewFetch();
     setPreviewCode('');
+    setHtmlPreviewUrl('');
+    setHtmlPreviewCode('');
+    setHtmlPreviewLoading(false);
+    setVueEditableSrcDoc('');
     setDeployUrl('');
     setProjectFiles([]);
     autoSentRef.current = false;
@@ -594,6 +689,7 @@ export default function AppChat() {
     // 切换应用时清掉"流成功 + 预览已设"的 ref，让新应用能从头判定
     vueStreamSucceededRef.current = false;
     previewHandledRef.current = false;
+    vueBuildSinceRef.current = 0;
     setMessages([]);
     setStreamingMessage(null);
 
@@ -639,6 +735,11 @@ export default function AppChat() {
         if (myAppId !== appIdRef.current) return; // stale response after navigation
         historyInitedRef.current = true;
         const status = (err as { response?: { status?: number } })?.response?.status;
+        if (err instanceof ApiError && err.code === ERROR_CODES.NO_AUTH_ERROR) {
+          message.error('你没有权限访问这个应用');
+          navigate('/dashboard');
+          return;
+        }
         if (status === 404) {
           message.error('应用不存在');
           navigate('/dashboard');
@@ -646,7 +747,7 @@ export default function AppChat() {
           message.error('加载历史消息失败');
         }
       });
-  }, [appId, navigate, reset, stopVuePolling, stopVueFilesPolling, message]);
+  }, [appId, navigate, reset, stopVuePolling, stopVueFilesPolling, stopHtmlPreviewPolling, stopVueEditModeSync, stopVueEditablePreviewFetch, message]);
 
   // Auto-send initPrompt: own app AND no chat history.
   //
@@ -713,6 +814,10 @@ export default function AppChat() {
     // 同 handleSend：新流开始，重置 Vue 成功 / 预览已设 ref。
     vueStreamSucceededRef.current = false;
     previewHandledRef.current = false;
+    if (app.codeGenType === 'vue_project') {
+      vueBuildSinceRef.current = Date.now();
+    }
+    setHtmlPreviewCode('');
     start(appId, app.initPrompt);
   }, [messages, app, isOwner, appId, start, wasAutoSent, markAutoSent]);
 
@@ -743,14 +848,9 @@ export default function AppChat() {
     }
   }, [appId, loadingMore, hasMoreHistory, message]);
 
-  // Update preview for non-Vue projects — fallback for history reload AND
-  // safety net when handleStreamComplete skipped its setPreviewCode (e.g.
-  // stale `app` closure, codeGenType mismatch, buildPreviewHtml returned '').
-  // 合并旧版两个重叠 effect：handleStreamComplete 同步设过 previewCode 时置
-  // previewHandledRef.current = true，这里跳过冗余的"再解析最后一条 AI 消息"。
-  //
-  // 注意：buildPreviewHtml 可能在"增量编辑只补 CSS/JS、没重发 html"时返回 ''，
-  // 此时不 setPreviewCode —— 保留旧预览，比把聊天窗 markdown 灌进 iframe 好。
+  // Update preview for non-Vue projects from the backend-saved files. This
+  // handles history reload and is also a safety net if the SSE completion
+  // callback missed its chance to refresh the file URL.
   useEffect(() => {
     if (isStreaming) {
       // 新一轮流开始：清除 ref，让流结束后的回填能正常工作。
@@ -758,15 +858,16 @@ export default function AppChat() {
       return;
     }
     if (previewHandledRef.current) return;
+    if (!appId || !app?.codeGenType || app.codeGenType === 'vue_project') return;
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
       if (msg.role === 'ai' && msg.content) {
-        const html = buildPreviewHtml(msg.content, app?.codeGenType ?? null);
-        if (html) setPreviewCode(html);
+        refreshHtmlPreviewFromFile(appId, app.codeGenType);
+        previewHandledRef.current = true;
         return;
       }
     }
-  }, [messages, app?.codeGenType, buildPreviewHtml, isStreaming]);
+  }, [messages, appId, app?.codeGenType, refreshHtmlPreviewFromFile, isStreaming]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -774,17 +875,28 @@ export default function AppChat() {
       cancel();
       stopVuePolling();
       stopVueFilesPolling();
+      stopHtmlPreviewPolling();
+      stopVueEditModeSync();
+      stopVueEditablePreviewFetch();
       if (vuePreviewRetryRef.current) {
         clearTimeout(vuePreviewRetryRef.current);
         vuePreviewRetryRef.current = null;
       }
     };
-  }, [cancel, stopVuePolling, stopVueFilesPolling]);
+  }, [cancel, stopVuePolling, stopVueFilesPolling, stopHtmlPreviewPolling, stopVueEditModeSync, stopVueEditablePreviewFetch]);
 
   // Wrap cancel so it also commits whatever the AI had written so far as
   // a non-streaming message (otherwise clicking 停止 mid-stream would orphan
   // the bubble and leave the user staring at a typing-dots AI forever).
   const handleCancel = useCallback(() => {
+    vueStreamSucceededRef.current = false;
+    previewHandledRef.current = false;
+    vueBuildSinceRef.current = 0;
+    if (app?.codeGenType === 'vue_project') {
+      stopVuePolling();
+      setDeployUrl('');
+      setVueEditableSrcDoc('');
+    }
     setStreamingMessage((current) => {
       if (current) {
         setMessages((prev) => {
@@ -802,7 +914,7 @@ export default function AppChat() {
       return null;
     });
     cancel();
-  }, [cancel]);
+  }, [app?.codeGenType, cancel, stopVuePolling]);
 
   // Vue project: clear deployUrl + stop any in-flight build-poll when a new
   // stream starts. Without this, a poll from the previous round can set
@@ -811,12 +923,17 @@ export default function AppChat() {
     if (isStreaming && app?.codeGenType === 'vue_project') {
       stopVuePolling();
       setDeployUrl('');
+      setVueEditableSrcDoc('');
     }
   }, [isStreaming, app?.codeGenType, stopVuePolling]);
 
   // ── Send ─────────────────────────────────────────────────────────
   const handleSend = useCallback((text: string) => {
     if (!text || isStreamingRef.current || !appId) return;
+    if (!isOwner) {
+      message.warning('只有应用创建者可以继续编辑这个应用');
+      return;
+    }
     setMessages((prev) => [...prev, { id: newMsgId(), role: 'user', content: text, createTime: new Date().toISOString() }]);
     // Allocate the live streaming bubble up front, with the same id the
     // final commit in handleStreamComplete will use. React keeps the
@@ -831,14 +948,24 @@ export default function AppChat() {
     // 新一轮流开始：清掉 ref，等 handleStreamComplete 重新置。
     vueStreamSucceededRef.current = false;
     previewHandledRef.current = false;
+    if (app?.codeGenType === 'vue_project') {
+      vueBuildSinceRef.current = Date.now();
+    }
+    setHtmlPreviewCode('');
     start(appId, text);
-  }, [appId, start, isStreamingRef]);
+  }, [app?.codeGenType, appId, isOwner, message, start, isStreamingRef]);
 
   // ── Edit-mode send (element + prompt) ─────────────────────────────
   const handleEditSend = useCallback(
     (instruction: string) => {
       if (!instruction || isStreamingRef.current || !appId || !selectedElement) return;
+      if (!isOwner) {
+        message.warning('只有应用创建者可以使用编辑模式');
+        return;
+      }
       const composed = buildEditPrompt(instruction, selectedElement);
+      editModeRef.current = true;
+      setEditMode(true);
       // Remember the selector so we can re-highlight the same element
       // once the AI finishes rewriting the page.
       setPendingHighlightSelector(selectedElement.selector);
@@ -856,17 +983,23 @@ export default function AppChat() {
       // 同 handleSend：新流开始，重置 Vue 成功 / 预览已设 ref。
       vueStreamSucceededRef.current = false;
       previewHandledRef.current = false;
+      if (app?.codeGenType === 'vue_project') {
+        vueBuildSinceRef.current = Date.now();
+      }
+      setHtmlPreviewCode('');
+      postEditModeMessage({ type: 'unselect' });
       setSelectedElement(null);
       setPopoverPosition(null);
       start(appId, composed);
     },
-    [appId, selectedElement, start, isStreamingRef],
+    [app?.codeGenType, appId, isOwner, message, selectedElement, start, isStreamingRef, postEditModeMessage],
   );
 
   const handleEditCancel = useCallback(() => {
+    postEditModeMessage({ type: 'unselect' });
     setSelectedElement(null);
     setPopoverPosition(null);
-  }, []);
+  }, [postEditModeMessage]);
 
   // Recompute the popover position on viewport resize so the card stays
   // anchored to the (now-shifted) selected element.
@@ -884,10 +1017,184 @@ export default function AppChat() {
     };
   }, [selectedElement, computePopoverPosition]);
 
-  const supportsEditMode = app?.codeGenType !== 'vue_project';
+  const htmlPreviewSrcUrl = htmlPreviewUrl;
+  const supportsEditMode = Boolean(app?.codeGenType);
+  const hasEditablePreview = app?.codeGenType === 'vue_project'
+    ? Boolean(deployUrl)
+    : Boolean(htmlPreviewSrcUrl);
   const editModeTooltip = supportsEditMode
     ? '开启后可点击预览页面中的任意元素进行修改'
-    : 'Vue 项目暂不支持可视化编辑（后续版本）';
+    : '预览加载完成后可开启可视化编辑';
+
+  const injectEditModeIntoIframe = useCallback((
+    iframe: HTMLIFrameElement | null,
+    enabled = editModeRef.current,
+  ) => {
+    if (!iframe || !supportsEditMode) return false;
+    try {
+      const doc = iframe.contentDocument;
+      if (!doc) return false;
+      const win = iframe.contentWindow as (Window & { __fishEditModeInjected?: boolean }) | null;
+      if (!win) return false;
+      if (win?.__fishEditModeInjected) {
+        win.postMessage({ source: EDIT_MODE_SOURCE, type: enabled ? 'enable' : 'disable' }, '*');
+        return true;
+      }
+      const script = doc.createElement('script');
+      script.setAttribute('data-fish-edit-mode-injector', '1');
+      script.textContent = buildEditModeScript();
+      (doc.body || doc.documentElement).appendChild(script);
+      const sync = () => {
+        win.postMessage({ source: EDIT_MODE_SOURCE, type: enabled ? 'enable' : 'disable' }, '*');
+        if (enabled && pendingHighlightSelectorRef.current) {
+          win.postMessage({
+            source: EDIT_MODE_SOURCE,
+            type: 'highlight',
+            selector: pendingHighlightSelectorRef.current,
+          }, '*');
+        }
+      };
+      sync();
+      window.setTimeout(sync, 50);
+      return true;
+    } catch {
+      // Cross-origin / detached iframe. Vue preview is same-origin in dev,
+      // but production deployments may be stricter; fail quietly.
+      return false;
+    }
+  }, [supportsEditMode]);
+
+  const scheduleVueEditModeSync = useCallback(() => {
+    if (app?.codeGenType !== 'vue_project' || !deployUrl) return;
+    if (vueEditModeSyncTimerRef.current) {
+      clearTimeout(vueEditModeSyncTimerRef.current);
+      vueEditModeSyncTimerRef.current = null;
+    }
+
+    let tries = 0;
+    const maxTries = 20;
+    const sync = () => {
+      vueEditModeSyncTimerRef.current = null;
+      const ok = injectEditModeIntoIframe(vueIframeRef.current, editModeRef.current);
+      if (!ok && tries++ < maxTries) {
+        vueEditModeSyncTimerRef.current = setTimeout(sync, 250);
+      }
+    };
+    vueEditModeSyncTimerRef.current = setTimeout(sync, 0);
+  }, [app?.codeGenType, deployUrl, injectEditModeIntoIframe]);
+
+  const handleVueIframeLoad = useCallback(() => {
+    handleVuePreviewLoad();
+    scheduleVueEditModeSync();
+  }, [handleVuePreviewLoad, scheduleVueEditModeSync]);
+
+  const setVuePreviewIframeRef = useCallback((node: HTMLIFrameElement | null) => {
+    vueIframeRef.current = node;
+    if (app?.codeGenType === 'vue_project') {
+      htmlPreviewIframeRef.current = node;
+    }
+  }, [app?.codeGenType]);
+
+  useEffect(() => {
+    if (app?.codeGenType !== 'vue_project' || !deployUrl) return;
+    scheduleVueEditModeSync();
+  }, [app?.codeGenType, deployUrl, editMode, scheduleVueEditModeSync]);
+
+  const htmlPreviewBaseUrl = useMemo(
+    () => getHtmlPreviewBaseUrl(appId, app?.codeGenType),
+    [appId, app?.codeGenType, getHtmlPreviewBaseUrl],
+  );
+  const addBaseHrefForSrcDoc = useCallback((html: string, baseUrl: string) => {
+    if (!html || !baseUrl) return html;
+    const escapedBase = baseUrl.replace(/"/g, '&quot;');
+    const baseTag = `<base href="${escapedBase}">`;
+    const withoutExistingBase = html.replace(/<base\b[^>]*>/i, '');
+    if (/<head(\s[^>]*)?>/i.test(withoutExistingBase)) {
+      return withoutExistingBase.replace(/<head(\s[^>]*)?>/i, `<head$1>\n${baseTag}`);
+    }
+    return `${baseTag}\n${withoutExistingBase}`;
+  }, []);
+
+  const getPreviewBaseHref = useCallback((url: string) => {
+    if (!url) return '';
+    try {
+      const parsed = new URL(url, window.location.origin);
+      parsed.search = '';
+      parsed.hash = '';
+      if (!parsed.pathname.endsWith('/')) {
+        parsed.pathname = parsed.pathname.replace(/[^/]*$/, '');
+      }
+      return parsed.href;
+    } catch {
+      const pathWithoutQuery = url.split('?')[0].split('#')[0];
+      return pathWithoutQuery.endsWith('/')
+        ? pathWithoutQuery
+        : pathWithoutQuery.replace(/[^/]*$/, '');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (app?.codeGenType !== 'vue_project' || !editMode || !deployUrl) {
+      stopVueEditablePreviewFetch();
+      return;
+    }
+
+    stopVueEditablePreviewFetch();
+    const controller = new AbortController();
+    vueEditableFetchAbortRef.current = controller;
+    setVueEditableSrcDoc('');
+
+    fetch(deployUrl, {
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('vue preview not ready');
+        const html = await response.text();
+        if (!html || html.includes('Building...')) throw new Error('vue preview not ready');
+        const withBase = addBaseHrefForSrcDoc(html, getPreviewBaseHref(deployUrl));
+        setVueEditableSrcDoc(applyEditModeToSrcDoc(withBase, true));
+      })
+      .catch((error: unknown) => {
+        if ((error as { name?: string })?.name === 'AbortError') return;
+        setVueEditableSrcDoc('');
+      });
+
+    return () => controller.abort();
+  }, [
+    addBaseHrefForSrcDoc,
+    app?.codeGenType,
+    deployUrl,
+    editMode,
+    getPreviewBaseHref,
+    stopVueEditablePreviewFetch,
+  ]);
+
+  useEffect(() => {
+    if (!editMode || !supportsEditMode || !htmlPreviewSrcUrl || !htmlPreviewBaseUrl) {
+      setPreviewCode('');
+      return;
+    }
+
+    const controller = new AbortController();
+    fetch(htmlPreviewSrcUrl, {
+      cache: 'no-store',
+      credentials: 'include',
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('preview file not available');
+        const html = await response.text();
+        setPreviewCode(addBaseHrefForSrcDoc(html, htmlPreviewBaseUrl));
+      })
+      .catch((error: unknown) => {
+        if ((error as { name?: string })?.name !== 'AbortError') {
+          setPreviewCode('');
+        }
+      });
+
+    return () => controller.abort();
+  }, [addBaseHrefForSrcDoc, editMode, htmlPreviewBaseUrl, htmlPreviewSrcUrl, supportsEditMode]);
 
   // The actual srcDoc passed to the iframe — base preview + edit-mode
   // script injection when applicable.
@@ -910,6 +1217,17 @@ export default function AppChat() {
       iframe.srcdoc = htmlPreviewSrcDoc;
     }
   }, [htmlPreviewSrcDoc]);
+
+  useEffect(() => {
+    const iframe = htmlPreviewIframeRef.current;
+    if (!iframe || editMode || !htmlPreviewSrcUrl) return;
+    if (iframe.getAttribute('srcdoc') != null) {
+      iframe.removeAttribute('srcdoc');
+    }
+    if (iframe.getAttribute('src') !== htmlPreviewSrcUrl) {
+      iframe.setAttribute('src', htmlPreviewSrcUrl);
+    }
+  }, [editMode, htmlPreviewSrcUrl]);
 
   // ── Delete / Rename ──────────────────────────────────────────────
   const handleDelete = () => {
@@ -956,6 +1274,10 @@ export default function AppChat() {
   // ── Deploy (production deployment, explicit user action) ──────────
   const handleDeploy = useCallback(async () => {
     if (!appId) return;
+    if (!isOwner) {
+      message.warning('只有应用创建者可以部署这个应用');
+      return;
+    }
     setDeployError('');
     setDeploying(true);
     try {
@@ -969,17 +1291,40 @@ export default function AppChat() {
     } finally {
       setDeploying(false);
     }
-  }, [appId]);
+  }, [appId, isOwner, message]);
 
   // ── Render ───────────────────────────────────────────────────────
   // No skeleton / spinner for the initial load — it flashes and looks
   // worse than just letting the layout settle. The page below renders
   // its own affordances once the app data is in.
 
+  if (app && loginUser && !isOwner) {
+    return (
+      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <ChatHeader
+          appName={app.appName || '未命名应用'}
+          isOwner={false}
+          showPreview={false}
+          deploying={false}
+          onDeploy={handleDeploy}
+          onRename={handleRename}
+          onDelete={handleDelete}
+        />
+        <Result
+          status="403"
+          title="无权访问"
+          subTitle="这个应用只能由创建者继续编辑。"
+          extra={<Button type="primary" onClick={() => navigate('/dashboard')}>返回我的应用</Button>}
+        />
+      </div>
+    );
+  }
+
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <ChatHeader
         appName={app?.appName || '未命名应用'}
+        isOwner={isOwner}
         showPreview={showPreview}
         deploying={deploying}
         onDeploy={handleDeploy}
@@ -1021,7 +1366,6 @@ export default function AppChat() {
           <ChatMessageList
             messages={messages}
             streamingMessage={streamingMessage}
-            currentCode={cleanedCode}
             hasMoreHistory={hasMoreHistory}
             loadingMore={loadingMore}
             sseError={sseError}
@@ -1054,7 +1398,7 @@ export default function AppChat() {
                     style={{ flex: 1, height: 'calc(100vh - 140px)', display: 'flex', flexDirection: 'column' }}
                   >
                     {/* Edit mode toolbar */}
-                    {showPreview && previewCode && supportsEditMode && (
+                    {showPreview && hasEditablePreview && supportsEditMode && (
                       <div
                         style={{
                           display: 'flex',
@@ -1089,18 +1433,56 @@ export default function AppChat() {
                     <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
                       {app?.codeGenType === 'vue_project' ? (
                         deployUrl ? (
-                          <iframe
-                            ref={vueIframeRef}
-                            src={deployUrl}
-                            onLoad={handleVuePreviewLoad}
-                            style={{
-                              width: '100%',
-                              height: '100%',
-                              border: 'none',
-                              borderRadius: 8,
-                            }}
-                            title="Vue 应用预览"
-                          />
+                          <>
+                            {editMode ? (
+                              vueEditableSrcDoc ? (
+                                <iframe
+                                  ref={setVuePreviewIframeRef}
+                                  srcDoc={vueEditableSrcDoc}
+                                  key={`vue-edit:${deployUrl}:${vueEditableSrcDoc.length}`}
+                                  onLoad={handleVueIframeLoad}
+                                  style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    border: 'none',
+                                    borderRadius: 8,
+                                  }}
+                                  title="Vue 应用预览"
+                                />
+                              ) : (
+                                <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(17,25,37,0.02)', borderRadius: 8, color: 'rgba(17,25,37,0.45)' }}>
+                                  <div style={{ textAlign: 'center' }}>
+                                    <Spin size="large" style={{ marginBottom: 16 }} />
+                                    <div>正在加载可编辑 Vue 预览...</div>
+                                  </div>
+                                </div>
+                              )
+                            ) : (
+                              <iframe
+                                ref={setVuePreviewIframeRef}
+                                src={deployUrl}
+                                key={`vue-url:${deployUrl}`}
+                                onLoad={handleVueIframeLoad}
+                                style={{
+                                  width: '100%',
+                                  height: '100%',
+                                  border: 'none',
+                                  borderRadius: 8,
+                                }}
+                                title="Vue 应用预览"
+                              />
+                            )}
+                            {editMode && selectedElement && popoverPosition && (
+                              <EditPromptPopover
+                                key={selectedElement.selector}
+                                element={selectedElement}
+                                position={popoverPosition}
+                                sending={isStreaming}
+                                onSend={handleEditSend}
+                                onCancel={handleEditCancel}
+                              />
+                            )}
+                          </>
                         ) : deploying ? (
                           <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
                             <Spin size="large" />
@@ -1139,35 +1521,46 @@ export default function AppChat() {
                             </div>
                           </div>
                         )
-                      ) : showPreview && htmlPreviewSrcDoc ? (
+                      ) : showPreview && htmlPreviewSrcUrl ? (
                         <>
-                          <iframe
-                            ref={htmlPreviewIframeRef}
-                            srcDoc={htmlPreviewSrcDoc}
-                            // Force a fresh iframe whenever the preview content
-                            // (or the edit-mode script injection) changes.
-                            // Without this, some browsers keep the previous
-                            // document when only the `srcDoc` attribute is
-                            // updated — the freshly generated page then renders
-                            // without its CSS, or scripts never run, until a
-                            // hard reload. Tying the key to the full srcDoc
-                            // string guarantees React tears down and re-creates
-                            // the iframe, which always loads the new document.
-                            key={htmlPreviewSrcDoc}
-                            sandbox="allow-scripts"
-                            style={{
-                              width: '100%',
-                              height: '100%',
-                              border: 'none',
-                              borderRadius: 8,
-                              // Block direct interaction when edit mode is on so
-                              // the user can't accidentally click links / drag
-                              // scroll while picking elements. The iframe's own
-                              // click handler is the only one that should fire.
-                              pointerEvents: editMode ? 'auto' : 'auto',
-                            }}
-                            title="应用预览"
-                          />
+                          {editMode ? (
+                            htmlPreviewSrcDoc ? (
+                              <iframe
+                                ref={htmlPreviewIframeRef}
+                                srcDoc={htmlPreviewSrcDoc}
+                                key={`srcdoc:${htmlPreviewSrcDoc}`}
+                                sandbox="allow-scripts"
+                                style={{
+                                  width: '100%',
+                                  height: '100%',
+                                  border: 'none',
+                                  borderRadius: 8,
+                                  pointerEvents: 'auto',
+                                }}
+                                title="应用预览"
+                              />
+                            ) : (
+                              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(17,25,37,0.02)', borderRadius: 8, color: 'rgba(17,25,37,0.45)' }}>
+                                <div style={{ textAlign: 'center' }}>
+                                  <Spin size="large" style={{ marginBottom: 16 }} />
+                                  <div>正在加载可编辑预览...</div>
+                                </div>
+                              </div>
+                            )
+                          ) : (
+                            <iframe
+                              ref={htmlPreviewIframeRef}
+                              src={htmlPreviewSrcUrl}
+                              key={`url:${htmlPreviewSrcUrl}`}
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                border: 'none',
+                                borderRadius: 8,
+                              }}
+                              title="应用预览"
+                            />
+                          )}
                           {/* Edit-mode prompt popover, anchored in page coords
                               to the element the user just selected. The `key`
                               forces a remount on every new selection so the
@@ -1196,8 +1589,17 @@ export default function AppChat() {
                           }}
                         >
                           <div style={{ textAlign: 'center' }}>
-                            <EyeOutlined style={{ fontSize: 48, marginBottom: 16, color: 'rgba(17,25,37,0.15)' }} />
-                            <div>发送消息后，预览将在这里显示</div>
+                            {htmlPreviewLoading ? (
+                              <>
+                                <Spin size="large" style={{ marginBottom: 16 }} />
+                                <div>正在加载后端生成的预览文件...</div>
+                              </>
+                            ) : (
+                              <>
+                                <EyeOutlined style={{ fontSize: 48, marginBottom: 16, color: 'rgba(17,25,37,0.15)' }} />
+                                <div>发送消息后，预览将在这里显示</div>
+                              </>
+                            )}
                           </div>
                         </div>
                       )}
@@ -1216,7 +1618,7 @@ export default function AppChat() {
                   <div style={{ height: 'calc(100vh - 140px)' }}>
                     {app?.codeGenType === 'vue_project' ? (
                       <VueProjectViewer files={projectFiles} deploying={deploying} onDeploy={handleDeploy} />
-                    ) : currentCode && app?.codeGenType === 'multi_file' ? (
+                    ) : parsedCode && app?.codeGenType === 'multi_file' ? (
                       <Tabs
                         defaultActiveKey="html"
                         size="small"
@@ -1265,7 +1667,7 @@ export default function AppChat() {
                       />
                     ) : (
                       <CodePreview
-                        code={currentCode || '// 等待 AI 生成代码...'}
+                        code={htmlCodeForCodeTab}
                         language="html"
                         isStreaming={isStreaming}
                       />

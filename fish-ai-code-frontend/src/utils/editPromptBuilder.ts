@@ -1,5 +1,9 @@
 import type { SelectedElement } from '@/types/editMode';
 
+function escapeMarkdownFenceContent(value: string): string {
+  return value.replace(/```/g, '``\\`');
+}
+
 /**
  * Compose the final prompt sent to the AI backend from a user instruction
  * and (optionally) the element the user selected in edit mode.
@@ -19,7 +23,7 @@ export function buildEditPrompt(
   if (!element) return instruction;
 
   const lines: string[] = [];
-  lines.push('用户对页面上的元素提出了修改请求。请只修改下方选中的元素,保持页面其余部分不变,返回修改后的完整 HTML。');
+  lines.push('用户对页面上的元素提出了修改请求。请只修改下方选中的元素,保持页面其余部分不变,并按当前应用类型返回修改后的完整代码。');
   lines.push('');
   lines.push('【选中元素】');
   lines.push(`- 标签: ${element.tag}`);
@@ -29,7 +33,7 @@ export function buildEditPrompt(
   lines.push(`- CSS 选择器路径: ${element.selector}`);
   lines.push(`- HTML 片段:`);
   lines.push('```html');
-  lines.push(element.outerHTML || `<${element.tag.toLowerCase()}>`);
+  lines.push(escapeMarkdownFenceContent(element.outerHTML || `<${element.tag.toLowerCase()}>`));
   lines.push('```');
   lines.push('');
   lines.push('【用户指令】');

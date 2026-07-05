@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Table, Input, Space, Tag, App, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { adminListChatHistory } from '@/api/chatHistory';
@@ -15,18 +15,26 @@ export default function ChatManage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState<AdminChatHistoryQueryRequest>({ pageNum: 1, pageSize: 10 });
+  const fetchIdRef = useRef(0);
 
   const fetchData = useCallback(() => {
+    const fetchId = ++fetchIdRef.current;
     setLoading(true);
     adminListChatHistory(query)
       .then((res) => {
+        if (fetchId !== fetchIdRef.current) return;
         setRecords(res.records);
         setTotal(res.totalRow);
       })
       .catch(() => {
+        if (fetchId !== fetchIdRef.current) return;
         message.error('加载对话历史失败');
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (fetchId === fetchIdRef.current) {
+          setLoading(false);
+        }
+      });
   }, [query, message]);
 
   useEffect(() => {

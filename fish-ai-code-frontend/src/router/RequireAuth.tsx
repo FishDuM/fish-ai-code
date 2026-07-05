@@ -19,7 +19,8 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
 
   // 鉴权完成后再判定：未登录去登录页，否则直接渲染 children
   if (!loginUser) {
-    return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
+    const redirect = `${location.pathname}${location.search}${location.hash}`;
+    return <Navigate to={`/login?redirect=${encodeURIComponent(redirect)}`} replace />;
   }
 
   // 没有 spinner —— cookie-backed session 在几毫秒内就解析完，闪一下反而像 bug

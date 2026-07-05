@@ -1,3 +1,5 @@
+import { normalizeCodeFenceBoundaries } from './markdownNormalize';
+
 /**
  * Parsed code blocks from AI's markdown response
  */
@@ -42,12 +44,24 @@ function extractAll(pattern: RegExp, content: string): string {
   return parts.join('\n\n');
 }
 
-// 判定 rawCode 本身是否已经是一份完整 HTML 文档（用于增量编辑场景的兜底）。
-// AI 在第二轮只补 ```css 补丁、没重发 ```html 时，原始消息里仍然只有 CSS，
-// 我们不能把那段 markdown 当 HTML 灌进 iframe —— 至少要看到 <html|<body|<div>
-// 这类文档级标记才认。
-function looksLikeFullHtmlDoc(rawCode: string): boolean {
-  return /<(html|body|div|main|section|article)\b/i.test(rawCode);
+// Extract a raw HTML document when the model omitted fences. Be conservative:
+// prose that merely contains "<div>" should not be treated as iframe srcDoc.
+function extractRawHtmlDoc(rawCode: string): string {
+  const trimmed = rawCode.trim();
+  if (!trimmed) return '';
+
+  const docStart = trimmed.search(/<!doctype\s+html\b|<html\b/i);
+  if (docStart >= 0) {
+    const doc = trimmed.slice(docStart);
+    const endMatch = /<\/html\s*>/i.exec(doc);
+    if (!endMatch) return doc.trim();
+    return doc.slice(0, endMatch.index + endMatch[0].length).trim();
+  }
+
+  if (/^<(body|div|main|section|article)\b/i.test(trimmed)) {
+    return trimmed;
+  }
+  return '';
 }
 
 // Pattern to extract tool-called files from Vue project output:
@@ -90,16 +104,20 @@ function extractFirst(pattern: RegExp, content: string): string {
  * 决定是清空 iframe 还是保留旧预览。CSS/JS 仍然照常收集（代码预览 tab 用得到）。
  */
 export function parseMultiFileCode(rawCode: string): ParsedCode {
-  const key = hashKey(rawCode);
+  const normalizedRaw = normalizeCodeFenceBoundaries(rawCode);
+  const key = hashKey(normalizedRaw);
   const cached = parseCache.get(key);
   if (cached) return cached;
 
-  const htmlBlocks = extractFirst(HTML_CODE_PATTERN, rawCode);
-  const cssBlocks = extractAll(CSS_CODE_PATTERN, rawCode);
-  const jsBlocks = extractAll(JS_CODE_PATTERN, rawCode);
+  const htmlBlocks = extractFirst(HTML_CODE_PATTERN, normalizedRaw);
+  const cssBlocks = extractAll(CSS_CODE_PATTERN, normalizedRaw);
+  const jsBlocks = extractAll(JS_CODE_PATTERN, normalizedRaw);
 
   let htmlCode = htmlBlocks;
-  if (!htmlCode && !looksLikeFullHtmlDoc(rawCode)) {
+  if (!htmlCode) {
+    htmlCode = extractRawHtmlDoc(normalizedRaw);
+  }
+  if (!htmlCode) {
     // 空标记：调用方需根据此信号决定是否保留旧预览。
     const empty: ParsedCode = { htmlCode: '', cssCode: cssBlocks, jsCode: jsBlocks };
     if (parseCache.size >= CACHE_MAX) {
@@ -109,9 +127,6 @@ export function parseMultiFileCode(rawCode: string): ParsedCode {
     parseCache.set(key, empty);
     return empty;
   }
-
-  // 兼容旧路径：没 ```html 但原文看起来就是 HTML 文档，把全文当 HTML。
-  if (!htmlCode) htmlCode = rawCode.trim();
 
   const result: ParsedCode = {
     htmlCode,
@@ -163,8 +178,10 @@ export function extractVueProjectFiles(rawCode: string): ProjectFile[] {
  */
 export function cleanVueOutput(rawCode: string): string {
   return rawCode
-    .replace(/\[选择工具\][\s\S]*?(?=\[|$)/g, '')
+    .replace(/\[选择工具\][\s\S]*?(?=\n?\[(?:选择工具|工具调用)\]|$)/g, '')
     .replace(/\[工具调用\] 写入文件 /g, '📄 ')
+    .replace(/\[工具调用\] 修改文件 /g, '🛠️ ')
+    .replace(/\[工具调用\] 删除文件 /g, '🗑️ ')
     .replace(/\n{4,}/g, '\n\n')
     .trim();
 }
@@ -178,10 +195,10 @@ export function cleanVueOutput(rawCode: string): string {
  *   决定是清空 iframe 还是保留旧预览。
  */
 export function parseHtmlCode(rawCode: string): string {
-  const extracted = extractFirst(HTML_CODE_PATTERN, rawCode);
+  const normalizedRaw = normalizeCodeFenceBoundaries(rawCode);
+  const extracted = extractFirst(HTML_CODE_PATTERN, normalizedRaw);
   if (extracted) return extracted;
-  if (looksLikeFullHtmlDoc(rawCode)) return rawCode.trim();
-  return '';
+  return extractRawHtmlDoc(normalizedRaw);
 }
 
 /**

@@ -41,6 +41,8 @@ function vuePreviewPlugin(): Plugin {
         // the regex below treats `?poll=xxx` as the file path and the
         // existence check on the dist dir always fails.
         const pathname = url.split('?')[0];
+        const query = url.includes('?') ? url.slice(url.indexOf('?') + 1) : '';
+        const requestedSince = Number(new URLSearchParams(query).get('since') || 0);
 
         // Extract appId and file path from URL.
         // /vue-preview/{appId}/some/path.js  →  appId, some/path.js
@@ -71,6 +73,19 @@ function vuePreviewPlugin(): Plugin {
           res.statusCode = 404;
           res.end('Building...');
           return;
+        }
+
+        if (filePath === 'index.html' && Number.isFinite(requestedSince) && requestedSince > 0) {
+          const indexMtime = fs.statSync(resolvedPath).mtimeMs;
+          if (indexMtime < requestedSince) {
+            // A previous build's dist/index.html still exists. Treat it as
+            // not ready so the chat UI waits for the async backend rebuild
+            // that was triggered by the current SSE completion.
+            res.statusCode = 404;
+            res.end('Building...');
+            return;
+          }
+          res.setHeader('X-Fish-Build-Mtime', String(Math.floor(indexMtime)));
         }
 
         const ext = path.extname(filePath).toLowerCase();

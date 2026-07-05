@@ -9,10 +9,11 @@ import { ApiError } from './error';
 export function buildLoginRedirectUrl(): string {
   const path = window.location.pathname;
   const search = window.location.search;
+  const hash = window.location.hash;
   if (path === '/login' || path === '/register') {
     return '/login';
   }
-  const current = path + search;
+  const current = path + search + hash;
   return `/login?redirect=${encodeURIComponent(current)}`;
 }
 

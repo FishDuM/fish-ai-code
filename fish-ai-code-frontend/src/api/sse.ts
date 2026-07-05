@@ -36,8 +36,8 @@ export interface SSECallbacks {
  * Start an SSE stream for AI code generation.
  * Backend returns Flux<String> (Spring wraps each value as SSE data:xxx\n\n).
  *
- * For HTML / MULTI_FILE: raw text chunks.
- * For VUE_PROJECT: JSON messages with types:
+ * Current backend usually emits markdown/plain-text chunks for every app type.
+ * Older or future VUE_PROJECT streams may emit JSON messages with types:
  *   - ai_response  → { type: "ai_response", data: "..." }
  *   - tool_request → { type: "tool_request", id, name, arguments }
  *   - tool_executed→ { type: "tool_executed", id, name, arguments, result }
@@ -55,6 +55,50 @@ export function startCodeGenSSE(
   callbacks: SSECallbacks
 ): AbortController {
   const controller = new AbortController();
+
+  const handleRawData = (rawData: string) => {
+    if (!rawData) return;
+
+    const maybeJson = rawData.trimStart();
+
+    // Try JSON parse for typed messages; otherwise keep this transport
+    // layer plain-text compatible with the current backend.
+    if (maybeJson.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(maybeJson);
+        const type = parsed.type;
+
+        if (type === 'ai_response' && parsed.data != null) {
+          callbacks.onChunk(parsed.data);
+        } else if (type === 'tool_request') {
+          // AI is requesting to call a tool — silently skip for now
+          // Could show a notification like "正在写入文件..."
+        } else if (type === 'tool_executed') {
+          // Tool execution result — extract file content for display.
+          if (callbacks.onToolExecuted) {
+            try {
+              const args = typeof parsed.arguments === 'string'
+                ? JSON.parse(parsed.arguments)
+                : parsed.arguments;
+              callbacks.onToolExecuted(parsed.name, args?.relativeFilePath || '', args?.content || '');
+            } catch {
+              callbacks.onToolExecuted(parsed.name, '', '');
+            }
+          }
+        } else {
+          // 未知 JSON 类型：不要再把 rawData 当文本吐给 onChunk —— 会把
+          // JSON 串塞进聊天窗污染 markdown 渲染。静默跳过，让上层只看到
+          // ai_response / tool_executed 的内容。
+        }
+      } catch {
+        // Not JSON or parse error, treat as plain text chunk
+        callbacks.onChunk(rawData);
+      }
+    } else {
+      // Plain text chunk (HTML / MULTI_FILE)
+      callbacks.onChunk(rawData);
+    }
+  };
 
   (async () => {
     try {
@@ -103,44 +147,7 @@ export function startCodeGenSSE(
 
           // Strip SSE protocol prefixes (Spring WebFlux adds "data:" prefix)
           const rawData = stripSSEPrefix(event);
-          if (!rawData) continue;
-
-          // Try JSON parse for typed messages (VUE_PROJECT)
-          if (rawData.startsWith('{')) {
-            try {
-              const parsed = JSON.parse(rawData);
-              const type = parsed.type;
-
-              if (type === 'ai_response' && parsed.data != null) {
-                callbacks.onChunk(parsed.data);
-              } else if (type === 'tool_request') {
-                // AI is requesting to call a tool — silently skip for now
-                // Could show a notification like "正在写入文件..."
-              } else if (type === 'tool_executed') {
-                // Tool execution result — extract file content for display
-                if (callbacks.onToolExecuted) {
-                  try {
-                    const args = typeof parsed.arguments === 'string'
-                      ? JSON.parse(parsed.arguments)
-                      : parsed.arguments;
-                    callbacks.onToolExecuted(parsed.name, args?.relativeFilePath || '', args?.content || '');
-                  } catch {
-                    callbacks.onToolExecuted(parsed.name, '', '');
-                  }
-                }
-              } else {
-                // 未知 JSON 类型：不要再把 rawData 当文本吐给 onChunk —— 会把
-                // JSON 串塞进聊天窗污染 markdown 渲染。静默跳过，让上层只看到
-                // ai_response / tool_executed 的内容。
-              }
-            } catch {
-              // Not JSON or parse error, treat as plain text chunk
-              callbacks.onChunk(rawData);
-            }
-          } else {
-            // Plain text chunk (HTML / MULTI_FILE)
-            callbacks.onChunk(rawData);
-          }
+          handleRawData(rawData);
         }
 
         // Trim processed portion to keep the buffer bounded
@@ -169,41 +176,14 @@ export function startCodeGenSSE(
         searchStart = eventEnd + 2;
         if (!event) continue;
         const rawData = stripSSEPrefix(event);
-        if (!rawData) continue;
-        if (rawData.startsWith('{')) {
-          try {
-            const parsed = JSON.parse(rawData);
-            if (parsed.type === 'ai_response' && parsed.data != null) {
-              callbacks.onChunk(parsed.data);
-            }
-            // 未知 JSON 类型同样跳过，理由同主循环。
-          } catch {
-            callbacks.onChunk(rawData);
-          }
-        } else {
-          callbacks.onChunk(rawData);
-        }
+        handleRawData(rawData);
       }
       // 收尾：残留 buffer 没有 `\n\n` 也当成一段事件解析 —— 这是修尾帧丢失的关键。
       if (searchStart < buffer.length) {
         const tailEvent = buffer.slice(searchStart).trim();
         if (tailEvent) {
           const rawData = stripSSEPrefix(tailEvent);
-          if (rawData) {
-            if (rawData.startsWith('{')) {
-              try {
-                const parsed = JSON.parse(rawData);
-                if (parsed.type === 'ai_response' && parsed.data != null) {
-                  callbacks.onChunk(parsed.data);
-                }
-                // 未知 JSON 跳过
-              } catch {
-                callbacks.onChunk(rawData);
-              }
-            } else {
-              callbacks.onChunk(rawData);
-            }
-          }
+          handleRawData(rawData);
         }
       }
 

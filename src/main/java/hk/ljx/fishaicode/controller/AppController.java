@@ -92,10 +92,14 @@ public class AppController {
      * @return 应用视图对象
      */
     @GetMapping("/get/vo")
-    public BaseResponse<AppVO> getAppVOById(long id) {
+    public BaseResponse<AppVO> getAppVOById(long id, HttpServletRequest request) {
         ThrowUtils.throwIf(id <= 0, ErrorCode.PARAMS_ERROR);
+        User loginUser = userService.getLoginUser(request);
         App app = appService.getById(id);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR);
+        boolean isOwner = app.getUserId().equals(loginUser.getId());
+        boolean isAdmin = UserConstant.ADMIN_ROLE.equals(loginUser.getUserRole());
+        ThrowUtils.throwIf(!isOwner && !isAdmin, ErrorCode.NO_AUTH_ERROR, "没有权限访问该应用");
         return ResultUtils.success(appService.getAppVO(app));
     }
 
