@@ -1,7 +1,7 @@
 package hk.ljx.fishaicode.core;
 
-import hk.ljx.fishaicode.ai.modal.HtmlCodeResult;
-import hk.ljx.fishaicode.ai.modal.MultiFileCodeResult;
+import hk.ljx.fishaicode.ai.model.HtmlCodeResult;
+import hk.ljx.fishaicode.ai.model.MultiFileCodeResult;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;

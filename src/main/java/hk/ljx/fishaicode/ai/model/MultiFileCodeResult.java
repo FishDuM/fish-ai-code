@@ -1,4 +1,4 @@
-package hk.ljx.fishaicode.ai.modal;
+package hk.ljx.fishaicode.ai.model;
 
 import dev.langchain4j.model.output.structured.Description;
 import lombok.Data;

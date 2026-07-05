@@ -1,7 +1,7 @@
 package hk.ljx.fishaicode.core.saver;
 
 import cn.hutool.core.util.StrUtil;
-import hk.ljx.fishaicode.ai.modal.HtmlCodeResult;
+import hk.ljx.fishaicode.ai.model.HtmlCodeResult;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;

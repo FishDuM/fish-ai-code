@@ -1,4 +1,4 @@
-package hk.ljx.fishaicode.ai.modal.message;
+package hk.ljx.fishaicode.ai.model.message;
 
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import lombok.Data;

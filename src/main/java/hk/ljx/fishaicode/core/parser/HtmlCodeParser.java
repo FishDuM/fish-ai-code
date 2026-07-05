@@ -1,6 +1,6 @@
 package hk.ljx.fishaicode.core.parser;
 
-import hk.ljx.fishaicode.ai.modal.HtmlCodeResult;
+import hk.ljx.fishaicode.ai.model.HtmlCodeResult;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;

@@ -1,10 +1,9 @@
 package hk.ljx.fishaicode.core.handler;
 
-import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
-import hk.ljx.fishaicode.ai.modal.message.*;
+import hk.ljx.fishaicode.ai.model.message.*;
 import hk.ljx.fishaicode.ai.tools.BaseTool;
 import hk.ljx.fishaicode.ai.tools.ToolManager;
 import hk.ljx.fishaicode.constant.AppConstant;

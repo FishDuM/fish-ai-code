@@ -3,8 +3,8 @@ package hk.ljx.fishaicode.core;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
-import hk.ljx.fishaicode.ai.modal.HtmlCodeResult;
-import hk.ljx.fishaicode.ai.modal.MultiFileCodeResult;
+import hk.ljx.fishaicode.ai.model.HtmlCodeResult;
+import hk.ljx.fishaicode.ai.model.MultiFileCodeResult;
 import hk.ljx.fishaicode.constant.AppConstant;
 import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;
 

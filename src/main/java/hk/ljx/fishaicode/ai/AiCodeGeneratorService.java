@@ -4,8 +4,8 @@ import dev.langchain4j.service.MemoryId;
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.TokenStream;
 import dev.langchain4j.service.UserMessage;
-import hk.ljx.fishaicode.ai.modal.HtmlCodeResult;
-import hk.ljx.fishaicode.ai.modal.MultiFileCodeResult;
+import hk.ljx.fishaicode.ai.model.HtmlCodeResult;
+import hk.ljx.fishaicode.ai.model.MultiFileCodeResult;
 import reactor.core.publisher.Flux;
 
 public interface AiCodeGeneratorService {

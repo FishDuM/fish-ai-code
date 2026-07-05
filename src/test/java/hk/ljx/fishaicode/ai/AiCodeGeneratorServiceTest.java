@@ -1,7 +1,7 @@
 package hk.ljx.fishaicode.ai;
 
-import hk.ljx.fishaicode.ai.modal.HtmlCodeResult;
-import hk.ljx.fishaicode.ai.modal.MultiFileCodeResult;
+import hk.ljx.fishaicode.ai.model.HtmlCodeResult;
+import hk.ljx.fishaicode.ai.model.MultiFileCodeResult;
 import hk.ljx.fishaicode.core.AiCodeGeneratorFacade;
 import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;
 import jakarta.annotation.Resource;
@@ -11,8 +11,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
 class AiCodeGeneratorServiceTest {

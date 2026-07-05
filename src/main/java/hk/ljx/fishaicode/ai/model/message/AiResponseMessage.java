@@ -1,4 +1,4 @@
-package hk.ljx.fishaicode.ai.modal.message;
+package hk.ljx.fishaicode.ai.model.message;
 
 import lombok.Data;
 import lombok.EqualsAndHashCode;
