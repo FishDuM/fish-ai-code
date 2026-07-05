@@ -120,7 +120,18 @@ export default function Home() {
                 <AppCard
                   app={app}
                   showActions={false}
-                  onOpen={(a) => navigate(loginUser ? `/app/${a.id}/chat` : `/login?redirect=${encodeURIComponent(`/app/${a.id}/chat`)}`)}
+                  onOpen={(a) => {
+                    const chatPath = `/app/${a.id}/chat`;
+                    if (!loginUser) {
+                      navigate(`/login?redirect=${encodeURIComponent(chatPath)}`);
+                      return;
+                    }
+                    if (loginUser.id === a.userId || loginUser.userRole === 'admin') {
+                      navigate(chatPath);
+                      return;
+                    }
+                    message.warning('只能打开自己创建的应用');
+                  }}
                 />
               </Col>
             ))}

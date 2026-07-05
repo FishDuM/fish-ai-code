@@ -88,9 +88,9 @@ export default function BasicLayout() {
           lineHeight: '56px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
           <div
-            style={{ fontSize: 18, fontWeight: 700, color: '#111925', cursor: 'pointer', marginRight: 32, display: 'flex', alignItems: 'center', gap: 8 }}
+            style={{ fontSize: 18, fontWeight: 700, color: '#111925', cursor: 'pointer', marginRight: 32, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}
             onClick={() => navigate('/')}
           >
             <span style={{ color: '#36D2BE', fontSize: 22 }}>🐟</span>
@@ -105,7 +105,7 @@ export default function BasicLayout() {
           />
         </div>
 
-        <div>
+        <div style={{ flexShrink: 0, marginLeft: 16 }}>
           {loginUser ? (
             <Dropdown menu={{ items: userMenuItems, onClick: handleUserMenuClick }} placement="bottomRight">
               <Space style={{ cursor: 'pointer', color: '#111925' }}>

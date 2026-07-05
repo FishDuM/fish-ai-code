@@ -18,8 +18,15 @@ export default function Login() {
     try {
       await login(values.userAccount, values.userPassword);
       message.success('登录成功');
-      const redirect = searchParams.get('redirect') || '/dashboard';
-      navigate(redirect, { replace: true });
+      // Only allow same-origin path redirects to prevent open-redirect abuse.
+      // /login?redirect=https://evil.com must NOT bounce the user off-site
+      // after a successful login. Anything that isn't a leading "/" (or that
+      // starts with "//", which the URL parser treats as a protocol-relative
+      // external URL) falls back to a safe in-app destination.
+      const rawRedirect = searchParams.get('redirect');
+      const safeRedirect =
+        rawRedirect && /^\/(?!\/)/.test(rawRedirect) ? rawRedirect : '/dashboard';
+      navigate(safeRedirect, { replace: true });
     } catch (err) {
       message.error(err instanceof Error ? err.message : '登录失败');
     }

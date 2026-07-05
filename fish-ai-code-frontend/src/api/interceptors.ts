@@ -71,6 +71,18 @@ export function attachResponseInterceptors(instance: AxiosInstance): void {
         if (error.response.status === 401) {
           // HTTP 401 也走统一的去重重定向，避免和业务码 40100 的跳转互相覆盖。
           scheduleAuthRedirect();
+        } else {
+          // Backend's GlobalExceptionHandler wraps HTTP errors in the same
+          // BaseResponse envelope as business errors ({code, message, data}).
+          // Surface that message via ApiError so callers like Login show
+          // "用户不存在" instead of axios's English default of
+          // "Request failed with status code 401".
+          const data = error.response.data as ApiEnvelope | undefined;
+          if (data && typeof data.message === 'string' && data.message) {
+            return Promise.reject(
+              new ApiError(data.code ?? error.response.status, data.message),
+            );
+          }
         }
       } else if (error.code === 'ECONNABORTED') {
         // 不直接改 axios 原始 error.message（外部可能保留了引用），改用包一层

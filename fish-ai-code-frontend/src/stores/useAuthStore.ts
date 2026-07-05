@@ -79,7 +79,13 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'fish-ai-code-auth',
-      partialize: (state) => ({ loginUser: state.loginUser }),
+      // Don't persist loginUser. The server-side session is the only source
+      // of truth for who's logged in; persisting stale user info here made
+      // the header briefly show the previous user's avatar/admin menu after
+      // a logout, password change, or a server-side role downgrade.
+      // isFetched is also intentionally excluded — it must start false on
+      // every page load so RequireAuth re-validates the session.
+      partialize: () => ({}),
     }
   )
 );

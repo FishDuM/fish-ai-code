@@ -6,6 +6,8 @@ import {
   EyeOutlined,
   CloudUploadOutlined,
   EditOutlined,
+  CopyOutlined,
+  ExportOutlined,
 } from '@ant-design/icons';
 import ChatHeader from '@/components/ChatHeader';
 import ChatMessageList from '@/components/ChatMessageList';
@@ -59,6 +61,16 @@ function newMsgId(): string {
   return `local_${nextMsgId++}_${Date.now()}`;
 }
 
+// Cross-tab coordination channel: when one tab auto-sends a fresh app's
+// initPrompt, broadcast the claim so any other tab looking at the same
+// appId can mark itself and skip its own auto-send (otherwise both tabs
+// race and the backend gets two identical init messages + two SSE jobs).
+// `BroadcastChannel` is supported in every browser this app targets; the
+// optional-chained usage on the send side keeps the feature no-op if it
+// ever runs in an environment without it (older Safari, JSDOM tests).
+const autoSendChannel: BroadcastChannel | null =
+  typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('fish-auto-send') : null;
+
 export default function AppChat() {
   const { id: appId } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -85,6 +97,7 @@ export default function AppChat() {
   const [vueEditableSrcDoc, setVueEditableSrcDoc] = useState('');
   const [previewTab, setPreviewTab] = useState('preview');
   const [deployUrl, setDeployUrl] = useState('');
+  const [deployModalOpen, setDeployModalOpen] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [deployError, setDeployError] = useState('');
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
@@ -112,6 +125,12 @@ export default function AppChat() {
   const vueBuildSinceRef = useRef(0);
   const historyInitedRef = useRef(false);
   const autoSentRef = useRef(false);
+  // Set to true if the initial chat-history load FAILED (network error /
+  // 5xx). Distinct from "history is empty" — a failed load must NOT
+  // become a green light to auto-send the user's initPrompt, otherwise
+  // a transient backend blip silently turns into a wasted AI generation
+  // and a stray user message in the conversation.
+  const historyLoadFailedRef = useRef(false);
   const oldestCreateTimeRef = useRef<string>('');
   // Mirror of `appId` for async callbacks to detect stale responses after navigation.
   const appIdRef = useRef<string>('');
@@ -448,6 +467,23 @@ export default function AppChat() {
     [currentCode, app?.codeGenType],
   );
 
+  // Cheap djb2-style fingerprint of the editable Vue srcDoc. Used as part
+  // of the <iframe key> so the iframe remounts whenever the rendered HTML
+  // actually changes — using just `srcDoc.length` was the source of a
+  // subtle bug: if a rebuild produced new content with the same character
+  // count (e.g. swapping a closing tag), the iframe key didn't change,
+  // React skipped the remount, and the user kept staring at the old page.
+  const vueEditableSrcDocHash = useMemo(() => {
+    const src = vueEditableSrcDoc;
+    if (!src) return 0;
+    let h = 5381;
+    for (let i = 0; i < src.length; i++) {
+      // `| 0` keeps it a 32-bit int so the dependency comparison stays cheap.
+      h = ((h << 5) + h + src.charCodeAt(i)) | 0;
+    }
+    return h;
+  }, [vueEditableSrcDoc]);
+
   // Sync the SSE stream's accumulating text into the live streaming bubble.
   // Done in an effect (rather than at every render) so React only re-renders
   // the streaming ChatMessage — the rest of `messages` doesn't churn.
@@ -685,6 +721,7 @@ export default function AppChat() {
     setDeployUrl('');
     setProjectFiles([]);
     autoSentRef.current = false;
+    historyLoadFailedRef.current = false;
     historyInitedRef.current = false;
     // 切换应用时清掉"流成功 + 预览已设"的 ref，让新应用能从头判定
     vueStreamSucceededRef.current = false;
@@ -734,6 +771,10 @@ export default function AppChat() {
         // just show a toast.
         if (myAppId !== appIdRef.current) return; // stale response after navigation
         historyInitedRef.current = true;
+        // Flag a history-load failure so the auto-send effect below doesn't
+        // mistake "history unavailable" for "history empty" and start
+        // streaming the user's initPrompt without their consent.
+        historyLoadFailedRef.current = true;
         const status = (err as { response?: { status?: number } })?.response?.status;
         if (err instanceof ApiError && err.code === ERROR_CODES.NO_AUTH_ERROR) {
           message.error('你没有权限访问这个应用');
@@ -790,6 +831,7 @@ export default function AppChat() {
   useEffect(() => {
     if (
       !historyInitedRef.current ||
+      historyLoadFailedRef.current ||
       autoSentRef.current ||
       !appId ||
       !app ||
@@ -800,6 +842,15 @@ export default function AppChat() {
     if (wasAutoSent(appId)) return;
     autoSentRef.current = true;
     markAutoSent(appId);
+    // Best-effort cross-tab coordination: tell any other tab looking at
+    // the same appId that we've claimed the auto-send. Their listener (see
+    // effect below) writes the same localStorage mark, so even if both
+    // tabs reach this point near-simultaneously the second one will skip
+    // its own auto-send the next time the effect re-evaluates. Note:
+    // BroadcastChannel delivery is fast but not synchronous, so there's
+    // still a narrow race if both tabs commit their post() in the same
+    // event loop tick — acceptable trade-off for not blocking init.
+    autoSendChannel?.postMessage({ type: 'auto-sending', appId });
     setMessages([{ id: newMsgId(), role: 'user', content: app.initPrompt, createTime: new Date().toISOString() }]);
     // Same as handleSend: allocate the live streaming bubble up front so the
     // chat panel shows the typing bubble from the very first frame of the
@@ -820,6 +871,21 @@ export default function AppChat() {
     setHtmlPreviewCode('');
     start(appId, app.initPrompt);
   }, [messages, app, isOwner, appId, start, wasAutoSent, markAutoSent]);
+
+  // Cross-tab dedup: when another tab broadcasts that it's auto-sending
+  // for the current appId, mirror the localStorage mark so this tab's
+  // auto-send effect will bail on its next pass.
+  useEffect(() => {
+    if (!autoSendChannel || !appId) return;
+    const handler = (e: MessageEvent) => {
+      const data = e.data as { type?: string; appId?: string } | undefined;
+      if (data?.type === 'auto-sending' && data.appId === appId) {
+        markAutoSent(appId);
+      }
+    };
+    autoSendChannel.addEventListener('message', handler);
+    return () => autoSendChannel.removeEventListener('message', handler);
+  }, [appId, markAutoSent]);
 
   // Show preview when: >= 2 completed messages, or currently streaming
   const showPreview = messages.length >= 2 || isStreaming;
@@ -1271,6 +1337,16 @@ export default function AppChat() {
     }
   };
 
+  const handleCopyDeployUrl = useCallback(async () => {
+    if (!deployUrl) return;
+    try {
+      await navigator.clipboard.writeText(deployUrl);
+      message.success('部署地址已复制');
+    } catch {
+      message.error('复制失败');
+    }
+  }, [deployUrl, message]);
+
   // ── Deploy (production deployment, explicit user action) ──────────
   const handleDeploy = useCallback(async () => {
     if (!appId) return;
@@ -1282,10 +1358,8 @@ export default function AppChat() {
     setDeploying(true);
     try {
       const url = await deployApp({ appId });
-      // Backend returns "http://localhost/{deployKey}" without port/path.
-      const deployKey = url.split('/').pop() || '';
-      const proxiedUrl = `/api/static/${deployKey}/`;
-      setDeployUrl(proxiedUrl);
+      setDeployUrl(url);
+      setDeployModalOpen(true);
     } catch (err) {
       setDeployError(err instanceof Error ? err.message : '部署失败');
     } finally {
@@ -1349,6 +1423,31 @@ export default function AppChat() {
           maxLength={50}
           onPressEnter={handleRenameOk}
         />
+      </Modal>
+
+      <Modal
+        title="部署成功"
+        open={deployModalOpen}
+        onCancel={() => setDeployModalOpen(false)}
+        footer={[
+          <Button key="copy" icon={<CopyOutlined />} onClick={handleCopyDeployUrl}>
+            复制链接
+          </Button>,
+          <Button
+            key="open"
+            type="primary"
+            icon={<ExportOutlined />}
+            disabled={!deployUrl}
+            onClick={() => window.open(deployUrl, '_blank', 'noopener,noreferrer')}
+          >
+            打开链接
+          </Button>,
+        ]}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ color: 'rgba(17,25,37,0.65)' }}>部署地址</div>
+          <Input value={deployUrl} readOnly onClick={(e) => e.currentTarget.select()} />
+        </div>
       </Modal>
 
       {/* Main content: split pane */}
@@ -1439,7 +1538,7 @@ export default function AppChat() {
                                 <iframe
                                   ref={setVuePreviewIframeRef}
                                   srcDoc={vueEditableSrcDoc}
-                                  key={`vue-edit:${deployUrl}:${vueEditableSrcDoc.length}`}
+                                  key={`vue-edit:${deployUrl}:${vueEditableSrcDocHash}`}
                                   onLoad={handleVueIframeLoad}
                                   style={{
                                     width: '100%',
