@@ -21,7 +21,7 @@ import { preloadHighlighter } from '@/hooks/useHighlighter';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { applyEditModeToSrcDoc } from '@/utils/editModeInjector';
 import { buildEditPrompt } from '@/utils/editPromptBuilder';
-import { getVueFilesListUrl, getVuePreviewBaseUrl } from '@/utils/vueProjectUrls';
+import { getVueFilesListUrl } from '@/utils/vueProjectUrls';
 import {
   EDIT_MODE_SOURCE,
   type SelectedElement,
@@ -70,7 +70,7 @@ function buildHtmlPreviewBaseUrl(
   targetAppId: string | undefined,
   codeGenType: string | null | undefined,
 ): string {
-  if (!targetAppId || !codeGenType || codeGenType === 'vue_project') return '';
+  if (!targetAppId || !codeGenType) return '';
   return `${API_BASE_URL}/static/${codeGenType}_${targetAppId}/`;
 }
 
@@ -137,7 +137,6 @@ export default function AppChat() {
   const vueEditModeSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editModeRef = useRef(editMode);
   const pendingHighlightSelectorRef = useRef<string | null>(pendingHighlightSelector);
-  const vueBuildSinceRef = useRef(0);
   const historyInitedRef = useRef(false);
   const autoSentRef = useRef(false);
   // Set to true if the initial chat-history load FAILED (network error /
@@ -320,7 +319,7 @@ export default function AppChat() {
       iframe.removeEventListener('load', handler);
       window.clearTimeout(t);
     };
-  }, [previewCode, deployUrl, editMode, pendingHighlightSelector, postEditModeMessage]);
+  }, [previewCode, htmlPreviewUrl, editMode, pendingHighlightSelector, postEditModeMessage]);
 
   // Clear selection state when edit mode is turned off so the popover
   // doesn't linger after the user disables the feature. The popover is
@@ -339,26 +338,13 @@ export default function AppChat() {
     }
   }, [postEditModeMessage]);
 
-  // Vue deploy poll handle — used to cancel any in-flight poll when we start
-  // a new stream, switch apps, or unmount. Prevents the old poll from
-  // setting deployUrl AFTER the new stream has cleared it (causes flicker).
-  const vuePollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const vuePollCancelledRef = useRef(false);
   // 标记最近一次 SSE 流是否成功完成且有产出。仅在 handleStreamComplete 中
   // 满足条件时置 true；onError / 空内容 / 切到非 vue_project 都不会置 true。
-  // Vue 文件轮询 / 部署轮询都靠它守卫，避免每次进入 vue 应用都打满 20s 404 轮询。
+  // Vue 文件轮询都靠它守卫，避免每次进入 vue 应用都打满 20s 轮询。
   const vueStreamSucceededRef = useRef(false);
   // handleStreamComplete 同步设过 previewCode 后置 true，让下面那个回填 effect
   // 跳过冗余解析。切流 / 切应用时重置。
   const previewHandledRef = useRef(false);
-
-  const stopVuePolling = useCallback(() => {
-    vuePollCancelledRef.current = true;
-    if (vuePollTimerRef.current) {
-      clearTimeout(vuePollTimerRef.current);
-      vuePollTimerRef.current = null;
-    }
-  }, []);
 
   // ── SSE (streaming) ──────────────────────────────────────────────
   const handleStreamComplete = useCallback((finalCode: string) => {
@@ -404,49 +390,20 @@ export default function AppChat() {
       ]);
     }
 
-    // The backend saves HTML / multi-file projects to tmp/code_output after
+    // The backend saves preview files to tmp/code_output after
     // the stream completes. Preview should load that saved index.html rather
     // than parsing the AI chat text into iframe srcDoc; otherwise malformed
     // streaming markdown can render a different page than the actual file.
-    if (app?.codeGenType !== 'vue_project') {
+    if (app?.codeGenType && appId) {
       setPreviewCode('');
-      refreshHtmlPreviewFromFile(appId, app?.codeGenType);
+      refreshHtmlPreviewFromFile(appId, app.codeGenType);
       previewHandledRef.current = true;
     }
 
-    // Vue project: start polling for build completion immediately after SSE ends.
-    // 守卫：必须 vue_project + 真的有产出（cleaned 非空）+ 流正常完成。
-    // 没产出 / onError 路径不会到这里（useSSE 在 onError 不调 onComplete）。
     if (app?.codeGenType === 'vue_project' && appId) {
       vueStreamSucceededRef.current = true;
-      stopVuePolling();
-      const buildSince = vueBuildSinceRef.current || Date.now();
-      vueBuildSinceRef.current = buildSince;
-      const previewUrl = getVuePreviewBaseUrl(appId);
-      let retries = 0;
-      const maxRetries = 90;
-      vuePollCancelledRef.current = false;
-      const poll = () => {
-        if (vuePollCancelledRef.current) return;
-        const t = Date.now();
-        fetch(`${previewUrl}?poll=${t}&since=${buildSince}`, { cache: 'no-store' })
-          .then(async (r) => {
-            if (vuePollCancelledRef.current) return;
-            if (!r.ok) throw new Error();
-            const text = await r.text();
-            if (!text || text.includes('Building...') || text.length < 50) throw new Error();
-            setDeployUrl(`${previewUrl}?t=${t}&since=${buildSince}`);
-          })
-          .catch(() => {
-            if (vuePollCancelledRef.current) return;
-            if (++retries < maxRetries) {
-              vuePollTimerRef.current = setTimeout(poll, 3000);
-            }
-          });
-      };
-      vuePollTimerRef.current = setTimeout(poll, 2000);
     }
-  }, [app?.codeGenType, appId, refreshHtmlPreviewFromFile, stopVuePolling, streamingMessage]);
+  }, [app?.codeGenType, appId, refreshHtmlPreviewFromFile, streamingMessage]);
 
   const { isStreaming, isStreamingRef, currentCode, error: sseError, start, cancel, reset } = useSSE(
     handleStreamComplete,
@@ -517,42 +474,6 @@ export default function AppChat() {
   useTitle(app?.appName || '对话');
 
   const isOwner = loginUser != null && app != null && loginUser.id === app.userId;
-
-  // Vue iframe fallback: if it loaded "Building..." text, re-check the build
-  const vueIframeRef = useRef<HTMLIFrameElement>(null);
-  const vuePreviewRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const handleVuePreviewLoad = useCallback(() => {
-    try {
-      const doc = vueIframeRef.current?.contentDocument;
-      if (doc && doc.body && doc.body.textContent?.includes('Building...')) {
-        // Build not ready yet, re-check with a short delay
-        const appIdLocal = appId;
-        if (appIdLocal) {
-          if (vuePreviewRetryRef.current) clearTimeout(vuePreviewRetryRef.current);
-          vuePreviewRetryRef.current = setTimeout(() => {
-            vuePreviewRetryRef.current = null;
-            // Bail if the user has navigated to a different app meanwhile.
-            if (appIdLocal !== appIdRef.current) return;
-            const t = Date.now();
-            const buildSince = vueBuildSinceRef.current;
-            const sinceQuery = buildSince > 0 ? `&since=${buildSince}` : '';
-            const previewUrl = getVuePreviewBaseUrl(appIdLocal);
-            fetch(`${previewUrl}?retry=${t}${sinceQuery}`, { cache: 'no-store' })
-              .then((r) => r.text())
-              .then((text) => {
-                if (appIdLocal !== appIdRef.current) return;
-                if (text && !text.includes('Building...') && text.length > 50) {
-                  setDeployUrl(`${previewUrl}?t=${t}${sinceQuery}`);
-                }
-              })
-              .catch(() => {});
-          }, 3000);
-        }
-      }
-    } catch {
-      // CORS or cross-origin — ignore
-    }
-  }, [appId]);
 
   // Source of truth for Vue project files: read straight from disk via the
   // dev-only Vite plugin (`/__dev__/vue-files/{appId}/list`). The backend
@@ -664,29 +585,6 @@ export default function AppChat() {
     }
   }, [app?.codeGenType, currentCode, projectFiles.length]);
 
-  // Vue project: check if build exists, then serve via Vite middleware
-  useEffect(() => {
-    if (app?.codeGenType !== 'vue_project' || !appId) return;
-    const controller = new AbortController();
-    const myAppId = appId;
-    const t = Date.now();
-    const previewUrl = getVuePreviewBaseUrl(myAppId);
-    fetch(`${previewUrl}?check=${t}`, {
-      cache: 'no-store',
-      signal: controller.signal,
-    })
-      .then((r) => r.text())
-      .then((text) => {
-        // Bail if the user has navigated to a different app meanwhile.
-        if (myAppId !== appIdRef.current) return;
-        if (text && !text.includes('Building...') && text.length > 50) {
-          setDeployUrl(`${previewUrl}?t=${t}`);
-        }
-      })
-      .catch(() => {});
-    return () => controller.abort();
-  }, [app?.codeGenType, appId]);
-
   // Memoize parsed multi-file code
   const parsedCode = useMemo(() => {
     if (!currentCode || app?.codeGenType !== 'multi_file') return null;
@@ -705,7 +603,6 @@ export default function AppChat() {
     // state so the fallback "build preview from history" effect (line ~270)
     // can re-derive previewCode for the new app.
     reset();
-    stopVuePolling();
     stopVueFilesPolling();
     stopHtmlPreviewPolling();
     stopVueEditModeSync();
@@ -723,7 +620,6 @@ export default function AppChat() {
     // 切换应用时清掉"流成功 + 预览已设"的 ref，让新应用能从头判定
     vueStreamSucceededRef.current = false;
     previewHandledRef.current = false;
-    vueBuildSinceRef.current = 0;
     setMessages([]);
     setStreamingMessage(null);
 
@@ -736,11 +632,11 @@ export default function AppChat() {
         if (myAppId !== appIdRef.current) return; // user navigated away
         setApp(appData);
 
-        // Existing HTML / multi-file apps already have a saved index.html.
+        // Existing apps already have a saved index.html once generated.
         // Point the iframe at it as soon as we know the app type; the chat
         // history request can finish independently, so the preview does not
         // need to wait behind it.
-        if (appData.codeGenType && appData.codeGenType !== 'vue_project') {
+        if (appData.codeGenType) {
           const baseUrl = buildHtmlPreviewBaseUrl(myAppId, appData.codeGenType);
           if (baseUrl) {
             setHtmlPreviewFrameLoading(true);
@@ -822,7 +718,7 @@ export default function AppChat() {
           message.error('加载历史消息失败');
         }
       });
-  }, [appId, navigate, reset, stopVuePolling, stopVueFilesPolling, stopHtmlPreviewPolling, stopVueEditModeSync, message]);
+  }, [appId, navigate, reset, stopVueFilesPolling, stopHtmlPreviewPolling, stopVueEditModeSync, message]);
 
   // Auto-send initPrompt only for the one navigation that comes directly
   // from the create page. A normal refresh/direct link should never start
@@ -896,9 +792,6 @@ export default function AppChat() {
     // 同 handleSend：新流开始，重置 Vue 成功 / 预览已设 ref。
     vueStreamSucceededRef.current = false;
     previewHandledRef.current = false;
-    if (app.codeGenType === 'vue_project') {
-      vueBuildSinceRef.current = Date.now();
-    }
     setHtmlPreviewCode('');
     start(appId, app.initPrompt);
 	  }, [
@@ -956,7 +849,7 @@ export default function AppChat() {
     }
   }, [appId, loadingMore, hasMoreHistory, message]);
 
-  // Update preview for non-Vue projects from the backend-saved files. This
+  // Update preview from the backend-saved files. This
   // handles history reload and is also a safety net if the SSE completion
   // callback missed its chance to refresh the file URL.
   useEffect(() => {
@@ -966,7 +859,7 @@ export default function AppChat() {
       return;
     }
     if (previewHandledRef.current) return;
-    if (!appId || !app?.codeGenType || app.codeGenType === 'vue_project') return;
+    if (!appId || !app?.codeGenType) return;
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
       if (msg.role === 'ai' && msg.content) {
@@ -987,16 +880,11 @@ export default function AppChat() {
   useEffect(() => {
     return () => {
       cancel();
-      stopVuePolling();
       stopVueFilesPolling();
       stopHtmlPreviewPolling();
       stopVueEditModeSync();
-      if (vuePreviewRetryRef.current) {
-        clearTimeout(vuePreviewRetryRef.current);
-        vuePreviewRetryRef.current = null;
-      }
     };
-  }, [cancel, stopVuePolling, stopVueFilesPolling, stopHtmlPreviewPolling, stopVueEditModeSync]);
+  }, [cancel, stopVueFilesPolling, stopHtmlPreviewPolling, stopVueEditModeSync]);
 
   // Wrap cancel so it also commits whatever the AI had written so far as
   // a non-streaming message (otherwise clicking 停止 mid-stream would orphan
@@ -1004,11 +892,6 @@ export default function AppChat() {
   const handleCancel = useCallback(() => {
     vueStreamSucceededRef.current = false;
     previewHandledRef.current = false;
-    vueBuildSinceRef.current = 0;
-    if (app?.codeGenType === 'vue_project') {
-      stopVuePolling();
-      setDeployUrl('');
-    }
     setStreamingMessage((current) => {
       if (current) {
         setMessages((prev) => {
@@ -1026,17 +909,7 @@ export default function AppChat() {
       return null;
     });
     cancel();
-  }, [app?.codeGenType, cancel, stopVuePolling]);
-
-  // Vue project: clear deployUrl + stop any in-flight build-poll when a new
-  // stream starts. Without this, a poll from the previous round can set
-  // deployUrl AFTER we cleared it, causing the iframe to flicker.
-  useEffect(() => {
-    if (isStreaming && app?.codeGenType === 'vue_project') {
-      stopVuePolling();
-      setDeployUrl('');
-    }
-  }, [isStreaming, app?.codeGenType, stopVuePolling]);
+  }, [cancel]);
 
   // ── Send ─────────────────────────────────────────────────────────
   const handleSend = useCallback((text: string) => {
@@ -1059,9 +932,6 @@ export default function AppChat() {
     // 新一轮流开始：清掉 ref，等 handleStreamComplete 重新置。
     vueStreamSucceededRef.current = false;
     previewHandledRef.current = false;
-    if (app?.codeGenType === 'vue_project') {
-      vueBuildSinceRef.current = Date.now();
-    }
     setHtmlPreviewCode('');
     start(appId, text);
   }, [app?.codeGenType, appId, isOwner, message, start, isStreamingRef]);
@@ -1094,9 +964,6 @@ export default function AppChat() {
       // 同 handleSend：新流开始，重置 Vue 成功 / 预览已设 ref。
       vueStreamSucceededRef.current = false;
       previewHandledRef.current = false;
-      if (app?.codeGenType === 'vue_project') {
-        vueBuildSinceRef.current = Date.now();
-      }
       setHtmlPreviewCode('');
       postEditModeMessage({ type: 'unselect' });
       setSelectedElement(null);
@@ -1129,55 +996,12 @@ export default function AppChat() {
   }, [selectedElement, computePopoverPosition]);
 
   const htmlPreviewSrcUrl = htmlPreviewUrl;
-  const vuePreviewSrcUrl = useMemo(() => {
-    if (!deployUrl || !editMode) return deployUrl;
-    return `${deployUrl}${deployUrl.includes('?') ? '&' : '?'}fish_edit_mode=1`;
-  }, [deployUrl, editMode]);
   const supportsEditMode = Boolean(app?.codeGenType);
-  const hasEditablePreview = app?.codeGenType === 'vue_project'
-    ? Boolean(deployUrl)
-    : Boolean(htmlPreviewSrcUrl);
+  const hasEditablePreview = Boolean(htmlPreviewSrcUrl);
   const showPreviewToolbar = (showPreview || Boolean(htmlPreviewSrcUrl)) && hasEditablePreview;
   const editModeTooltip = supportsEditMode
     ? '开启后可点击预览页面中的任意元素进行修改'
     : '预览加载完成后可开启可视化编辑';
-
-  const scheduleVueEditModeSync = useCallback(() => {
-    if (app?.codeGenType !== 'vue_project' || !deployUrl) return;
-    if (vueEditModeSyncTimerRef.current) {
-      clearTimeout(vueEditModeSyncTimerRef.current);
-      vueEditModeSyncTimerRef.current = null;
-    }
-
-    const sync = () => {
-      vueEditModeSyncTimerRef.current = null;
-      postEditModeMessage({ type: editModeRef.current ? 'enable' : 'disable' });
-      if (editModeRef.current && pendingHighlightSelectorRef.current) {
-        postEditModeMessage({
-          type: 'highlight',
-          selector: pendingHighlightSelectorRef.current,
-        });
-      }
-    };
-    vueEditModeSyncTimerRef.current = setTimeout(sync, 0);
-  }, [app?.codeGenType, deployUrl, postEditModeMessage]);
-
-  const handleVueIframeLoad = useCallback(() => {
-    handleVuePreviewLoad();
-    scheduleVueEditModeSync();
-  }, [handleVuePreviewLoad, scheduleVueEditModeSync]);
-
-  const setVuePreviewIframeRef = useCallback((node: HTMLIFrameElement | null) => {
-    vueIframeRef.current = node;
-    if (app?.codeGenType === 'vue_project') {
-      htmlPreviewIframeRef.current = node;
-    }
-  }, [app?.codeGenType]);
-
-  useEffect(() => {
-    if (app?.codeGenType !== 'vue_project' || !deployUrl) return;
-    scheduleVueEditModeSync();
-  }, [app?.codeGenType, deployUrl, editMode, scheduleVueEditModeSync]);
 
   const htmlPreviewBaseUrl = useMemo(
     () => getHtmlPreviewBaseUrl(appId, app?.codeGenType),
@@ -1475,72 +1299,7 @@ export default function AppChat() {
                     className="chat-tab-fill"
                   >
                     <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
-                      {app?.codeGenType === 'vue_project' ? (
-                        deployUrl ? (
-                          <>
-                            <iframe
-                              ref={setVuePreviewIframeRef}
-                              src={vuePreviewSrcUrl}
-                              key={`vue-url:${vuePreviewSrcUrl}`}
-                              onLoad={handleVueIframeLoad}
-                              style={{
-                                width: '100%',
-                                height: '100%',
-                                border: 'none',
-                                borderRadius: 8,
-                              }}
-                              title="Vue 应用预览"
-                            />
-                            {editMode && selectedElement && popoverPosition && (
-                              <EditPromptPopover
-                                key={selectedElement.selector}
-                                element={selectedElement}
-                                position={popoverPosition}
-                                sending={isStreaming}
-                                onSend={handleEditSend}
-                                onCancel={handleEditCancel}
-                              />
-                            )}
-                          </>
-                        ) : deploying ? (
-                          <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
-                            <Spin size="large" />
-                            <div style={{ fontSize: 16, fontWeight: 600, color: '#111925' }}>正在构建 Vue 项目...</div>
-                          </div>
-                        ) : deployError ? (
-                          <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
-                            <div style={{ fontSize: 48 }}>❌</div>
-                            <div style={{ fontSize: 16, fontWeight: 600, color: '#f5222d' }}>构建失败</div>
-                            <div style={{ fontSize: 14, color: 'rgba(17,25,37,0.65)', textAlign: 'center', maxWidth: 360 }}>
-                              {deployError}
-                            </div>
-                            <Button
-                              className="btn-gradient"
-                              icon={<CloudUploadOutlined />}
-                              onClick={handleDeploy}
-                              size="large"
-                            >
-                              重新部署
-                            </Button>
-                          </div>
-                        ) : (
-                          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(17,25,37,0.02)', borderRadius: 8, color: 'rgba(17,25,37,0.45)' }}>
-                            <div style={{ textAlign: 'center' }}>
-                              {isStreaming ? (
-                                <>
-                                  <CodeOutlined style={{ fontSize: 48, marginBottom: 16, color: 'rgba(17,25,37,0.15)' }} />
-                                  <div>AI 正在生成 Vue 工程文件...</div>
-                                </>
-                              ) : (
-                                <>
-                                  <Spin size="large" style={{ marginBottom: 16 }} />
-                                  <div>正在构建并部署 Vue 项目，请稍候...</div>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        )
-                      ) : htmlPreviewSrcUrl ? (
+                      {htmlPreviewSrcUrl ? (
                         <>
                           {editMode ? (
                             htmlPreviewSrcDoc ? (
@@ -1581,7 +1340,7 @@ export default function AppChat() {
                                   opacity: htmlPreviewFrameLoading ? 0 : 1,
                                   transition: 'opacity 120ms ease',
                                 }}
-                                title="应用预览"
+                                title={app?.codeGenType === 'vue_project' ? 'Vue 应用预览' : '应用预览'}
                               />
                               {htmlPreviewFrameLoading && (
                                 <div
@@ -1620,6 +1379,52 @@ export default function AppChat() {
                             />
                           )}
                         </>
+                      ) : app?.codeGenType === 'vue_project' ? (
+                        deploying ? (
+                          <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+                            <Spin size="large" />
+                            <div style={{ fontSize: 16, fontWeight: 600, color: '#111925' }}>正在部署 Vue 项目...</div>
+                          </div>
+                        ) : deployError ? (
+                          <>
+                            <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+                              <div style={{ fontSize: 48 }}>❌</div>
+                              <div style={{ fontSize: 16, fontWeight: 600, color: '#f5222d' }}>部署失败</div>
+                              <div style={{ fontSize: 14, color: 'rgba(17,25,37,0.65)', textAlign: 'center', maxWidth: 360 }}>
+                                {deployError}
+                              </div>
+                              <Button
+                                className="btn-gradient"
+                                icon={<CloudUploadOutlined />}
+                                onClick={handleDeploy}
+                                size="large"
+                              >
+                                重新部署
+                              </Button>
+                            </div>
+                          </>
+                        ) : (
+                          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(17,25,37,0.02)', borderRadius: 8, color: 'rgba(17,25,37,0.45)' }}>
+                            <div style={{ textAlign: 'center' }}>
+                              {isStreaming ? (
+                                <>
+                                  <CodeOutlined style={{ fontSize: 48, marginBottom: 16, color: 'rgba(17,25,37,0.15)' }} />
+                                  <div>AI 正在生成 Vue 工程文件...</div>
+                                </>
+                              ) : htmlPreviewLoading ? (
+                                <>
+                                  <Spin size="large" style={{ marginBottom: 16 }} />
+                                  <div>正在加载后端生成的预览文件...</div>
+                                </>
+                              ) : (
+                                <>
+                                  <EyeOutlined style={{ fontSize: 48, marginBottom: 16, color: 'rgba(17,25,37,0.15)' }} />
+                                  <div>发送消息后，预览将在这里显示</div>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )
                       ) : (
                         <div
                           style={{

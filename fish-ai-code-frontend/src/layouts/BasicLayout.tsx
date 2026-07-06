@@ -107,11 +107,12 @@ export default function BasicLayout() {
             </Dropdown>
           ) : (
             <Space size={10}>
-              <Button type="text" className="header-login-button" onClick={() => navigate('/login')}>
+              <Button type="text" className="header-auth-button" onClick={() => navigate('/login')}>
                 登录
               </Button>
               <Button
-                className="btn-gradient"
+                type="text"
+                className="header-auth-button"
                 onClick={() => navigate('/register')}
               >
                 注册

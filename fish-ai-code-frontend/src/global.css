@@ -225,14 +225,24 @@ body {
   white-space: nowrap;
 }
 
-.header-login-button.ant-btn {
+.header-auth-button.ant-btn {
+  height: 40px;
+  padding-inline: 18px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
   color: rgba(17, 25, 37, 0.65);
   font-weight: 650;
+  box-shadow: none;
+  transition: background var(--dm-transition-base), color var(--dm-transition-base), border-color var(--dm-transition-base), transform var(--dm-transition-base);
 }
 
-.header-login-button.ant-btn:hover {
+.header-auth-button.ant-btn:hover,
+.header-auth-button.ant-btn:focus {
+  border-color: rgba(54, 210, 190, 0.18) !important;
   background: rgba(54, 210, 190, 0.1) !important;
   color: #139f91 !important;
+  transform: translateY(-1px);
 }
 
 @media (max-width: 900px) {
@@ -1043,6 +1053,10 @@ iframe[srcdoc] {
   padding: 32px;
 }
 
+.auth-card .ant-form-item {
+  margin-bottom: 22px;
+}
+
 .auth-card-head {
   margin-bottom: 26px;
   text-align: center;
@@ -1069,6 +1083,56 @@ iframe[srcdoc] {
 .auth-switch a {
   color: #22ad9f;
   font-weight: 650;
+}
+
+.auth-card .ant-input-affix-wrapper,
+.auth-card .ant-input {
+  min-height: 56px;
+  padding-block: 10px;
+  font-size: 18px;
+  line-height: 1.35;
+  caret-color: #18b9a8;
+  transition: border-color var(--dm-transition-base), box-shadow var(--dm-transition-base), background var(--dm-transition-base);
+}
+
+.auth-card .ant-input-affix-wrapper .ant-input {
+  min-height: auto;
+  padding-block: 0;
+  font-size: inherit;
+  line-height: inherit;
+  caret-color: inherit;
+}
+
+.auth-card .ant-input::placeholder,
+.auth-card .ant-input-affix-wrapper input::placeholder {
+  color: rgba(17, 25, 37, 0.36);
+}
+
+.auth-card .ant-input-prefix,
+.auth-card .ant-input-suffix {
+  color: rgba(17, 25, 37, 0.3);
+  transition: color var(--dm-transition-base), transform var(--dm-transition-base);
+}
+
+.auth-card .ant-input-prefix {
+  margin-inline-end: 12px;
+  font-size: 20px;
+}
+
+.auth-card .ant-input-affix-wrapper-focused,
+.auth-card .ant-input:focus,
+.auth-card .ant-input-focused {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(54, 210, 190, 0.62) !important;
+  box-shadow:
+    0 0 0 4px rgba(54, 210, 190, 0.14),
+    0 10px 26px rgba(54, 210, 190, 0.08) !important;
+}
+
+.auth-card .ant-input-affix-wrapper-focused .ant-input-prefix,
+.auth-card .ant-input-affix-wrapper-focused .ant-input-suffix {
+  color: #16ab9c;
+  transform: scale(1.04);
 }
 
 .admin-shell.ant-layout {

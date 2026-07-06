@@ -264,10 +264,11 @@ export default defineConfig({
     },
   },
   server: {
+    host: '0.0.0.0',
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:8911',
+        target: 'http://192.168.0.101:8911',
         changeOrigin: true,
       },
       // Static resources are served via /api/static/{deployKey}/
