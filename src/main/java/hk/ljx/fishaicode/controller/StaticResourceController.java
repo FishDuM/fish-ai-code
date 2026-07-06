@@ -1,6 +1,7 @@
 package hk.ljx.fishaicode.controller;
 
 import hk.ljx.fishaicode.constant.AppConstant;
+import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -28,6 +29,10 @@ public class StaticResourceController {
             @PathVariable String deployKey,
             HttpServletRequest request) {
         try {
+            if (deployKey == null || !deployKey.startsWith(CodeGenTypeEnum.HTML.getValue()) && !deployKey.startsWith(CodeGenTypeEnum.MULTI_FILE.getValue()) && !deployKey.startsWith(CodeGenTypeEnum.VUE_PROJECT.getValue())) {
+                return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            }
+
             // 获取资源路径
             String resourcePath = (String) request.getAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE);
             resourcePath = resourcePath.substring(("/static/" + deployKey).length());
@@ -43,6 +48,9 @@ public class StaticResourceController {
             }
             // 构建文件路径
             String filePath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/" + deployKey + resourcePath;
+            if (deployKey.startsWith(CodeGenTypeEnum.VUE_PROJECT.getValue())) {
+                filePath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/" + deployKey + "/dist" + resourcePath;
+            }
             File file = new File(filePath);
             // 检查文件是否存在
             if (!file.exists()) {
