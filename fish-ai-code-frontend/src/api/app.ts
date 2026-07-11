@@ -82,3 +82,40 @@ export async function adminGetApp(id: string): Promise<App> {
   const res = await api.get<BaseResponse<App>>('/app/admin/get', { params: { id } });
   return res.data.data;
 }
+
+/**
+ * 下载应用代码 ZIP 包
+ * 使用 fetch 而非 axios 以避免 responseType: 'blob' 与 JSON 拦截器的冲突，
+ * 且能通过 Content-Type 区分成功响应（application/zip）和错误响应（application/json）。
+ * @param appId 应用 ID
+ */
+export async function downloadAppCode(appId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/app/download/${appId}`, {
+    credentials: 'include',
+  });
+  const contentType = response.headers.get('content-type') || '';
+  // 后端错误处理返回的是 JSON（BaseResponse），而非 ZIP
+  if (!contentType.includes('application/zip')) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(errorData?.message || '下载失败');
+  }
+  // 从 Content-Disposition 中提取文件名
+  const disposition = response.headers.get('content-disposition');
+  let filename = `${appId}.zip`;
+  if (disposition) {
+    const match = disposition.match(/filename="?(.+?)"?$/);
+    if (match) {
+      filename = match[1];
+    }
+  }
+  // 创建临时下载链接并触发下载
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.URL.revokeObjectURL(url);
+}

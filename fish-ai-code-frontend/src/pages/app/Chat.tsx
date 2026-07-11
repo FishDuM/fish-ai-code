@@ -35,7 +35,7 @@ import { ApiError } from '@/api/error';
 // plain `<pre>` fallback while waiting for the dynamic import to
 // resolve — the fetch has already started by then.
 preloadHighlighter();
-import { getAppVO, deleteMyApp, updateMyApp, deployApp } from '@/api/app';
+import { getAppVO, deleteMyApp, updateMyApp, deployApp, downloadAppCode } from '@/api/app';
 import { getLatestChatHistory, listChatHistoryBefore } from '@/api/chatHistory';
 import { parseMultiFileCode, extractVueProjectFiles, cleanVueOutput } from '@/utils/codeParser';
 import type { AppVO } from '@/api/types';
@@ -137,8 +137,21 @@ export default function AppChat() {
   const vueEditModeSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editModeRef = useRef(editMode);
   const pendingHighlightSelectorRef = useRef<string | null>(pendingHighlightSelector);
+  const streamingMessageRef = useRef(streamingMessage);
+  const codeGenTypeRef = useRef(app?.codeGenType);
+  const refreshHtmlPreviewRef = useRef(refreshHtmlPreviewFromFile);
   const historyInitedRef = useRef(false);
   const autoSentRef = useRef(false);
+
+  useEffect(() => {
+    streamingMessageRef.current = streamingMessage;
+  }, [streamingMessage]);
+  useEffect(() => {
+    codeGenTypeRef.current = app?.codeGenType;
+  }, [app?.codeGenType]);
+  useEffect(() => {
+    refreshHtmlPreviewRef.current = refreshHtmlPreviewFromFile;
+  }, [refreshHtmlPreviewFromFile]);
   // Set to true if the initial chat-history load FAILED (network error /
   // 5xx). Distinct from "history is empty" — a failed load must NOT
   // become a green light to auto-send the user's initPrompt, otherwise
@@ -348,32 +361,22 @@ export default function AppChat() {
 
   // ── SSE (streaming) ──────────────────────────────────────────────
   const handleStreamComplete = useCallback((finalCode: string) => {
-    // Apply same cleaning as cleanedCode so stored message looks like the streaming display
-    const cleaned = app?.codeGenType === 'vue_project' ? cleanVueOutput(finalCode) : finalCode;
+    const codeGenType = codeGenTypeRef.current;
+    const refreshHtmlPreview = refreshHtmlPreviewRef.current;
+    const myAppId = appIdRef.current;
 
-    // 流式期空内容（取消 / SSE 一上来就 done）时不要 append 空气泡 —— 和
-    // handleCancel 那边的 empty-skip 保持一致。仍然要清掉 streamingMessage，
-    // 否则 typing-dots 会永远留在聊天窗里。
+    // Apply same cleaning as cleanedCode so stored message looks like the streaming display
+    const cleaned = codeGenType === 'vue_project' ? cleanVueOutput(finalCode) : finalCode;
+
     if (!cleaned) {
       setStreamingMessage(null);
-      previewHandledRef.current = true; // 防止下方回填 effect 误把聊天内容当预览
+      previewHandledRef.current = true;
       return;
     }
 
-    // Merge the streaming bubble into the committed history. The bubble
-    // keeps the SAME `id` it was created with, so React reconciles the
-    // existing ChatMessage instance — no remount, no markdown swap, no
-    // flicker. This is the path that was breaking before.
-    //
-    // We snapshot the live bubble before resetting state so we don't have
-    // to nest setMessages inside a setStreamingMessage functional updater
-    // (cleaner batching, easier to debug, and avoids React's "Cannot update
-    // a component while rendering a different component" trap).
-    const live = streamingMessage;
+    const live = streamingMessageRef.current;
     if (live) {
       setMessages((prev) => {
-        // Avoid double-appending if the merge already happened (race
-        // between handleStreamComplete firing twice or re-mount).
         if (prev.some((m) => m.id === live.id)) return prev;
         return [
           ...prev,
@@ -382,28 +385,22 @@ export default function AppChat() {
       });
       setStreamingMessage(null);
     } else {
-      // No live streaming bubble (extremely rare — SSE onDone fired with
-      // no bubble, e.g. after a navigation). Append a fresh entry.
       setMessages((prev) => [
         ...prev,
         { id: newMsgId(), role: 'ai', content: cleaned, createTime: new Date().toISOString() },
       ]);
     }
 
-    // The backend saves preview files to tmp/code_output after
-    // the stream completes. Preview should load that saved index.html rather
-    // than parsing the AI chat text into iframe srcDoc; otherwise malformed
-    // streaming markdown can render a different page than the actual file.
-    if (app?.codeGenType && appId) {
+    if (codeGenType && myAppId) {
       setPreviewCode('');
-      refreshHtmlPreviewFromFile(appId, app.codeGenType);
+      refreshHtmlPreview(myAppId, codeGenType);
       previewHandledRef.current = true;
     }
 
-    if (app?.codeGenType === 'vue_project' && appId) {
+    if (codeGenType === 'vue_project' && myAppId) {
       vueStreamSucceededRef.current = true;
     }
-  }, [app?.codeGenType, appId, refreshHtmlPreviewFromFile, streamingMessage]);
+  }, []);
 
   const { isStreaming, isStreamingRef, currentCode, error: sseError, start, cancel, reset } = useSSE(
     handleStreamComplete,
@@ -934,7 +931,7 @@ export default function AppChat() {
     previewHandledRef.current = false;
     setHtmlPreviewCode('');
     start(appId, text);
-  }, [app?.codeGenType, appId, isOwner, message, start, isStreamingRef]);
+  }, [appId, isOwner, message, start, isStreamingRef]);
 
   // ── Edit-mode send (element + prompt) ─────────────────────────────
   const handleEditSend = useCallback(
@@ -970,7 +967,7 @@ export default function AppChat() {
       setPopoverPosition(null);
       start(appId, composed);
     },
-    [app?.codeGenType, appId, isOwner, message, selectedElement, start, isStreamingRef, postEditModeMessage],
+    [appId, isOwner, message, selectedElement, start, isStreamingRef, postEditModeMessage],
   );
 
   const handleEditCancel = useCallback(() => {
@@ -1129,6 +1126,21 @@ export default function AppChat() {
     }
   }, [deployUrl, message]);
 
+  // ── Download code ─────────────────────────────────────────────────
+  const handleDownload = useCallback(async () => {
+    if (!appId) return;
+    if (!isOwner) {
+      message.warning('只有应用创建者可以下载代码');
+      return;
+    }
+    try {
+      await downloadAppCode(appId);
+      message.success('正在下载代码');
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '下载失败');
+    }
+  }, [appId, isOwner, message]);
+
   // ── Deploy (production deployment, explicit user action) ──────────
   const handleDeploy = useCallback(async () => {
     if (!appId) return;
@@ -1163,6 +1175,7 @@ export default function AppChat() {
           showPreview={false}
           deploying={false}
           onDeploy={handleDeploy}
+          onDownload={handleDownload}
           onRename={handleRename}
           onDelete={handleDelete}
         />
@@ -1184,6 +1197,7 @@ export default function AppChat() {
         showPreview={showPreview}
         deploying={deploying}
         onDeploy={handleDeploy}
+        onDownload={handleDownload}
         onRename={handleRename}
         onDelete={handleDelete}
       />

@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { useNavigate } from 'react-router';
 import { Button, Space, Typography } from 'antd';
-import { ArrowLeftOutlined, CloudUploadOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, CloudUploadOutlined, EditOutlined, DeleteOutlined, DownloadOutlined } from '@ant-design/icons';
 import logoUrl from '@/assets/logo.png';
 
 const { Text } = Typography;
@@ -12,11 +12,12 @@ interface ChatHeaderProps {
   showPreview: boolean;
   deploying: boolean;
   onDeploy: () => void;
+  onDownload: () => void;
   onRename: () => void;
   onDelete: () => void;
 }
 
-function ChatHeader({ appName, isOwner, showPreview, deploying, onDeploy, onRename, onDelete }: ChatHeaderProps) {
+function ChatHeader({ appName, isOwner, showPreview, deploying, onDeploy, onDownload, onRename, onDelete }: ChatHeaderProps) {
   const navigate = useNavigate();
 
   return (
@@ -45,6 +46,13 @@ function ChatHeader({ appName, isOwner, showPreview, deploying, onDeploy, onRena
               disabled={!showPreview}
             >
               部署
+            </Button>
+            <Button
+              icon={<DownloadOutlined />}
+              onClick={onDownload}
+              disabled={!showPreview}
+            >
+              下载代码
             </Button>
           </>
         )}
