@@ -229,12 +229,15 @@ export default function AppManage() {
           <Form.Item
             name="appName"
             label="应用名"
-            rules={[{ required: true, whitespace: true, message: '请输入应用名' }]}
+            rules={[
+              { required: true, whitespace: true, message: '请输入应用名' },
+              { max: 20, message: '应用名最长 20 个字符' },
+            ]}
           >
-            <Input placeholder="应用名称" />
+            <Input placeholder="应用名称" maxLength={20} />
           </Form.Item>
           <Form.Item name="cover" label="封面 URL">
-            <Input placeholder="封面图片链接" />
+            <Input placeholder="封面图片链接" maxLength={500} />
           </Form.Item>
           <Form.Item
             name="featuredStatus"

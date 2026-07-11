@@ -47,7 +47,7 @@ export default function Login() {
             name="userAccount"
             rules={[
               { required: true, message: '请输入账号' },
-              { min: 4, message: '账号至少 4 个字符' },
+              { min: 4, max: 15, message: '账号长度需在 4-15 个字符之间' },
             ]}
           >
             <Input prefix={<UserOutlined />} placeholder="账号" />
@@ -57,7 +57,7 @@ export default function Login() {
             name="userPassword"
             rules={[
               { required: true, message: '请输入密码' },
-              { min: 8, message: '密码至少 8 个字符' },
+              { min: 8, max: 16, message: '密码长度需在 8-16 个字符之间' },
             ]}
           >
             <Input.Password prefix={<LockOutlined />} placeholder="密码" />

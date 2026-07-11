@@ -238,7 +238,7 @@ export default function UserManage() {
       >
         <Form form={form} layout="vertical">
           <Form.Item name="userName" label="昵称">
-            <Input placeholder="用户昵称" />
+            <Input placeholder="用户昵称" maxLength={50} />
           </Form.Item>
           <Form.Item name="userRole" label="角色">
             <Select
@@ -269,13 +269,13 @@ export default function UserManage() {
             label="账号"
             rules={[
               { required: true, message: '请输入账号' },
-              { min: 4, message: '账号至少 4 个字符' },
+              { min: 4, max: 15, message: '账号长度需在 4-15 个字符之间' },
             ]}
           >
-            <Input placeholder="用户账号" />
+            <Input placeholder="用户账号" maxLength={15} />
           </Form.Item>
           <Form.Item name="userName" label="昵称">
-            <Input placeholder="用户昵称" />
+            <Input placeholder="用户昵称" maxLength={50} />
           </Form.Item>
           <Form.Item name="userRole" label="角色">
             <Select

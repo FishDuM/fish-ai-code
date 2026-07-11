@@ -155,7 +155,7 @@ export default function Home() {
                 }
               }}
               autoSize={false}
-              maxLength={10000}
+              maxLength={2000}
               className="home-prompt-input"
               aria-label="描述你想创建的应用"
             />

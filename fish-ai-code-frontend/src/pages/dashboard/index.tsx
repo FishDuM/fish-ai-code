@@ -162,7 +162,7 @@ export default function Dashboard() {
           value={editName}
           onChange={(e) => setEditName(e.target.value)}
           placeholder="应用名称"
-          maxLength={50}
+          maxLength={20}
           onPressEnter={handleEditOk}
         />
       </Modal>
