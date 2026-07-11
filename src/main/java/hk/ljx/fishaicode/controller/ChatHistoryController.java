@@ -16,6 +16,10 @@ import hk.ljx.fishaicode.service.ChatHistoryService;
 import hk.ljx.fishaicode.service.UserService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -28,6 +32,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/chatHistory")
+@Validated
 public class ChatHistoryController {
 
     @Resource
@@ -49,11 +54,9 @@ public class ChatHistoryController {
      */
     @GetMapping("/latest")
     public BaseResponse<List<ChatHistory>> listLatestChatHistory(
-            @RequestParam("appId") Long appId,
+            @NotNull(message = "应用 ID 不能为空") @Min(value = 1, message = "应用 ID 不合法") @RequestParam("appId") Long appId,
             @RequestParam(value = "limit", defaultValue = "10") int limit,
             HttpServletRequest request) {
-        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR);
-        // 权限校验：仅应用创建者和管理员可见
         User loginUser = userService.getLoginUser(request);
         App app = appService.getById(appId);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
@@ -75,13 +78,10 @@ public class ChatHistoryController {
      */
     @GetMapping("/list/before")
     public BaseResponse<List<ChatHistory>> listChatHistoryBefore(
-            @RequestParam("appId") Long appId,
-            @RequestParam("before") LocalDateTime before,
+            @NotNull(message = "应用 ID 不能为空") @Min(value = 1, message = "应用 ID 不合法") @RequestParam("appId") Long appId,
+            @NotNull(message = "游标时间不能为空") @RequestParam("before") LocalDateTime before,
             @RequestParam(value = "limit", defaultValue = "10") int limit,
             HttpServletRequest request) {
-        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR);
-        ThrowUtils.throwIf(before == null, ErrorCode.PARAMS_ERROR, "游标时间不能为空");
-        // 权限校验：仅应用创建者和管理员可见
         User loginUser = userService.getLoginUser(request);
         App app = appService.getById(appId);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
@@ -103,8 +103,7 @@ public class ChatHistoryController {
     @PostMapping("/admin/list/page")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<Page<ChatHistory>> adminListChatHistoryByPage(
-            @RequestBody AdminChatHistoryQueryRequest adminChatHistoryQueryRequest) {
-        ThrowUtils.throwIf(adminChatHistoryQueryRequest == null, ErrorCode.PARAMS_ERROR);
+            @Valid @RequestBody AdminChatHistoryQueryRequest adminChatHistoryQueryRequest) {
         Page<ChatHistory> result = chatHistoryService.adminListChatHistoryByPage(adminChatHistoryQueryRequest);
         return ResultUtils.success(result);
     }

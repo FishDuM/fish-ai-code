@@ -2,6 +2,7 @@ package hk.ljx.fishaicode.controller;
 
 import cn.hutool.core.util.StrUtil;
 import com.mybatisflex.core.paginate.Page;
+import hk.ljx.fishaicode.ai.AiCodeGenTypeRoutingService;
 import hk.ljx.fishaicode.annotation.AuthCheck;
 import hk.ljx.fishaicode.common.BaseResponse;
 import hk.ljx.fishaicode.common.DeleteRequest;
@@ -21,8 +22,12 @@ import hk.ljx.fishaicode.service.UserService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.http.MediaType;
-import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 
@@ -35,6 +40,7 @@ import java.io.File;
  */
 @RestController
 @RequestMapping("/app")
+@Validated
 public class AppController {
 
     @Resource
@@ -54,8 +60,7 @@ public class AppController {
      * @return 新应用 id
      */
     @PostMapping("/add")
-    public BaseResponse<Long> addApp(@RequestBody AppAddRequest appAddRequest, HttpServletRequest request) {
-        ThrowUtils.throwIf(appAddRequest == null, ErrorCode.PARAMS_ERROR);
+    public BaseResponse<Long> addApp(@Valid @RequestBody AppAddRequest appAddRequest, HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
         long appId = appService.addApp(appAddRequest, loginUser);
         return ResultUtils.success(appId);
@@ -69,8 +74,7 @@ public class AppController {
      * @return 是否更新成功
      */
     @PostMapping("/update")
-    public BaseResponse<Boolean> updateMyApp(@RequestBody AppUpdateRequest appUpdateRequest, HttpServletRequest request) {
-        ThrowUtils.throwIf(appUpdateRequest == null, ErrorCode.PARAMS_ERROR);
+    public BaseResponse<Boolean> updateMyApp(@Valid @RequestBody AppUpdateRequest appUpdateRequest, HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
         boolean result = appService.updateMyApp(appUpdateRequest.getId(), appUpdateRequest.getAppName(), loginUser);
         return ResultUtils.success(result);
@@ -84,10 +88,7 @@ public class AppController {
      * @return 是否删除成功
      */
     @PostMapping("/delete")
-    public BaseResponse<Boolean> deleteMyApp(@RequestBody DeleteRequest deleteRequest, HttpServletRequest request) {
-        if (deleteRequest == null || deleteRequest.getId() <= 0) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR);
-        }
+    public BaseResponse<Boolean> deleteMyApp(@Valid @RequestBody DeleteRequest deleteRequest, HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
         boolean result = appService.deleteMyApp(deleteRequest.getId(), loginUser);
         return ResultUtils.success(result);
@@ -100,8 +101,7 @@ public class AppController {
      * @return 应用视图对象
      */
     @GetMapping("/get/vo")
-    public BaseResponse<AppVO> getAppVOById(long id, HttpServletRequest request) {
-        ThrowUtils.throwIf(id <= 0, ErrorCode.PARAMS_ERROR);
+    public BaseResponse<AppVO> getAppVOById(@Min(value = 1, message = "id 不合法") long id, HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
         App app = appService.getById(id);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR);
@@ -119,9 +119,8 @@ public class AppController {
      * @return 分页结果
      */
     @PostMapping("/list/page/vo")
-    public BaseResponse<Page<AppVO>> listMyAppsByPage(@RequestBody AppQueryRequest appQueryRequest,
+    public BaseResponse<Page<AppVO>> listMyAppsByPage(@Valid @RequestBody AppQueryRequest appQueryRequest,
                                                       HttpServletRequest request) {
-        ThrowUtils.throwIf(appQueryRequest == null, ErrorCode.PARAMS_ERROR);
         User loginUser = userService.getLoginUser(request);
         Page<AppVO> result = appService.listMyAppsByPage(appQueryRequest, loginUser.getId());
         return ResultUtils.success(result);
@@ -134,8 +133,7 @@ public class AppController {
      * @return 分页结果
      */
     @PostMapping("/list/featured/vo")
-    public BaseResponse<Page<AppVO>> listFeaturedAppsByPage(@RequestBody AppQueryRequest appQueryRequest) {
-        ThrowUtils.throwIf(appQueryRequest == null, ErrorCode.PARAMS_ERROR);
+    public BaseResponse<Page<AppVO>> listFeaturedAppsByPage(@Valid @RequestBody AppQueryRequest appQueryRequest) {
         Page<AppVO> result = appService.listFeaturedAppsByPage(appQueryRequest);
         return ResultUtils.success(result);
     }
@@ -148,9 +146,10 @@ public class AppController {
      * @return sse流
      */
     @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<String> chatToGenCode(@RequestParam("appId") Long appId, @RequestParam("message") String message, HttpServletRequest request) {
-        ThrowUtils.throwIf(appId == null || appId < 0, ErrorCode.PARAMS_ERROR);
-        ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR);
+    public Flux<String> chatToGenCode(
+            @NotNull(message = "应用 ID 不能为空") @Min(value = 1, message = "应用 ID 不合法") @RequestParam("appId") Long appId,
+            @NotBlank(message = "消息内容不能为空") @RequestParam("message") String message,
+            HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
         return appService.chatToGenCode(appId, message, loginUser);
     }
@@ -163,13 +162,9 @@ public class AppController {
      * @return 部署 URL
      */
     @PostMapping("/deploy")
-    public BaseResponse<String> deployApp(@RequestBody AppDeployRequest appDeployRequest, HttpServletRequest request) {
-        ThrowUtils.throwIf(appDeployRequest == null, ErrorCode.PARAMS_ERROR);
+    public BaseResponse<String> deployApp(@Valid @RequestBody AppDeployRequest appDeployRequest, HttpServletRequest request) {
         Long appId = appDeployRequest.getAppId();
-        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
-        // 获取当前登录用户
         User loginUser = userService.getLoginUser(request);
-        // 调用服务部署应用
         String deployUrl = appService.deployApp(appId, loginUser);
         return ResultUtils.success(deployUrl);
     }
@@ -185,10 +180,7 @@ public class AppController {
      */
     @PostMapping("/admin/delete")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
-    public BaseResponse<Boolean> adminDeleteApp(@RequestBody DeleteRequest deleteRequest) {
-        if (deleteRequest == null || deleteRequest.getId() <= 0) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR);
-        }
+    public BaseResponse<Boolean> adminDeleteApp(@Valid @RequestBody DeleteRequest deleteRequest) {
         boolean result = appService.removeById(deleteRequest.getId());
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
         return ResultUtils.success(true);
@@ -202,8 +194,7 @@ public class AppController {
      */
     @PostMapping("/admin/update")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
-    public BaseResponse<Boolean> adminUpdateApp(@RequestBody AdminAppUpdateRequest adminAppUpdateRequest) {
-        ThrowUtils.throwIf(adminAppUpdateRequest == null, ErrorCode.PARAMS_ERROR);
+    public BaseResponse<Boolean> adminUpdateApp(@Valid @RequestBody AdminAppUpdateRequest adminAppUpdateRequest) {
         boolean result = appService.adminUpdateApp(
                 adminAppUpdateRequest.getId(),
                 adminAppUpdateRequest.getAppName(),
@@ -220,8 +211,7 @@ public class AppController {
      */
     @PostMapping("/admin/list/page")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
-    public BaseResponse<Page<App>> adminListAppsByPage(@RequestBody AdminAppQueryRequest adminAppQueryRequest) {
-        ThrowUtils.throwIf(adminAppQueryRequest == null, ErrorCode.PARAMS_ERROR);
+    public BaseResponse<Page<App>> adminListAppsByPage(@Valid @RequestBody AdminAppQueryRequest adminAppQueryRequest) {
         Page<App> result = appService.adminListAppsByPage(adminAppQueryRequest);
         return ResultUtils.success(result);
     }
@@ -234,8 +224,7 @@ public class AppController {
      */
     @GetMapping("/admin/get")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
-    public BaseResponse<App> adminGetAppById(long id) {
-        ThrowUtils.throwIf(id <= 0, ErrorCode.PARAMS_ERROR);
+    public BaseResponse<App> adminGetAppById(@Min(value = 1, message = "id 不合法") long id) {
         App app = appService.getById(id);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR);
         return ResultUtils.success(app);
@@ -250,32 +239,24 @@ public class AppController {
      * @param response 响应
      */
     @GetMapping("/download/{appId}")
-    public void downloadAppCode(@PathVariable Long appId,
-                                HttpServletRequest request,
-                                HttpServletResponse response) {
-        // 1. 基础校验
-        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用ID无效");
-        // 2. 查询应用信息
+    public void downloadAppCode(
+            @Min(value = 1, message = "应用 ID 不合法") @PathVariable Long appId,
+            HttpServletRequest request,
+            HttpServletResponse response) {
         App app = appService.getById(appId);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
-        // 3. 权限校验：只有应用创建者可以下载代码
         User loginUser = userService.getLoginUser(request);
         if (!app.getUserId().equals(loginUser.getId())) {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "无权限下载该应用代码");
         }
-        // 4. 构建应用代码目录路径（生成目录，非部署目录）
         String codeGenType = app.getCodeGenType();
         String sourceDirName = codeGenType + "_" + appId;
         String sourceDirPath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + sourceDirName;
-        // 5. 检查代码目录是否存在
         File sourceDir = new File(sourceDirPath);
         ThrowUtils.throwIf(!sourceDir.exists() || !sourceDir.isDirectory(),
                 ErrorCode.NOT_FOUND_ERROR, "应用代码不存在，请先生成代码");
-        // 6. 生成下载文件名（不建议添加中文内容）
         String downloadFileName = String.valueOf(appId);
-        // 7. 调用通用下载服务
         projectDownloadService.downloadProjectAsZip(sourceDirPath, downloadFileName, response);
     }
-
 
 }

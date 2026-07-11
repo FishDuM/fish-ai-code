@@ -1,5 +1,8 @@
 package hk.ljx.fishaicode.modal.dto.app;
 
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -13,16 +16,20 @@ public class AdminAppUpdateRequest implements Serializable {
     /**
      * id
      */
+    @NotNull(message = "id 不能为空")
+    @Min(value = 1, message = "id 不合法")
     private Long id;
 
     /**
      * 应用名称
      */
+    @Size(max = 20, message = "应用名称最长 20 个字符")
     private String appName;
 
     /**
      * 应用封面
      */
+    @Size(max = 500, message = "封面 URL 最长 500 个字符")
     private String cover;
 
     /**

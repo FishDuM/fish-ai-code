@@ -8,6 +8,7 @@ import cn.hutool.core.util.StrUtil;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
+import hk.ljx.fishaicode.ai.AiCodeGenTypeRoutingService;
 import hk.ljx.fishaicode.constant.AppConstant;
 import hk.ljx.fishaicode.core.AiCodeGeneratorFacade;
 import hk.ljx.fishaicode.core.builder.VueProjectBuilder;
@@ -28,6 +29,7 @@ import hk.ljx.fishaicode.service.AppService;
 import hk.ljx.fishaicode.service.ChatHistoryService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -59,6 +61,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     @Resource
     private VueProjectBuilder vueProjectBuilder;
 
+    @Resource
+    private AiCodeGenTypeRoutingService aiCodeGenTypeRoutingService;
+
 
     @Override
     public long addApp(AppAddRequest appAddRequest, User loginUser) {
@@ -74,13 +79,13 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "初始化 prompt 过长");
         }
         // 2. 构建应用对象
-        App app = new App();
+        App app = App.builder()
+                        .appName(RandomUtil.randomString(19)).build();
         BeanUtil.copyProperties(appAddRequest, app);
         app.setUserId(loginUser.getId());
-        // 代码生成类型默认 html
-        if (StrUtil.isBlank(app.getCodeGenType())) {
-            app.setCodeGenType(CodeGenTypeEnum.HTML.getValue());
-        }
+        // 路由判断生成什么类型的代码
+        CodeGenTypeEnum codeGenTypeEnum = aiCodeGenTypeRoutingService.routeCodeGenType(appAddRequest.getInitPrompt());
+        app.setCodeGenType(codeGenTypeEnum.getValue());
         // 优先级默认 0
         if (app.getPriority() == null) {
             app.setPriority(0);
