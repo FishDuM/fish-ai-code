@@ -106,7 +106,7 @@ export default function AdminLayout() {
 
       <Layout>
         <Header className="admin-header">
-          <Space>
+          <Space className="admin-header-actions">
             <Button
               type="text"
               icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
@@ -124,7 +124,7 @@ export default function AdminLayout() {
           </Space>
 
           <Dropdown menu={{ items: userMenuItems, onClick: handleUserMenuClick }} placement="bottomRight">
-            <Space style={{ cursor: 'pointer' }}>
+            <Space className="admin-header-user" style={{ cursor: 'pointer' }}>
               <Avatar size="small" icon={<UserOutlined />} />
               <span>{loginUser?.userName || loginUser?.userAccount}</span>
             </Space>

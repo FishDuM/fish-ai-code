@@ -6,6 +6,11 @@ import logoUrl from '@/assets/logo.png';
 
 const { Text } = Typography;
 
+function getCompactAppName(appName: string): string {
+  const characters = Array.from(appName);
+  return characters.length > 5 ? `${characters.slice(0, 5).join('')}...` : appName;
+}
+
 interface ChatHeaderProps {
   appName: string;
   isOwner: boolean;
@@ -19,6 +24,7 @@ interface ChatHeaderProps {
 
 function ChatHeader({ appName, isOwner, showPreview, deploying, onDeploy, onDownload, onRename, onDelete }: ChatHeaderProps) {
   const navigate = useNavigate();
+  const displayAppName = appName || '未命名应用';
 
   return (
     <div className="chat-header">
@@ -27,7 +33,10 @@ function ChatHeader({ appName, isOwner, showPreview, deploying, onDeploy, onDown
         <span className="chat-app-icon">
           <img src={logoUrl} alt="" />
         </span>
-        <Text strong className="chat-app-title">{appName || '未命名应用'}</Text>
+        <Text strong className="chat-app-title">
+          <span className="chat-app-title-full">{displayAppName}</span>
+          <span className="chat-app-title-compact">{getCompactAppName(displayAppName)}</span>
+        </Text>
       </Space>
       <Space className="chat-header-actions">
         {isOwner && (

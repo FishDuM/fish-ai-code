@@ -1,4 +1,4 @@
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 import fs from 'fs'
@@ -256,23 +256,28 @@ function vueSourceFilesPlugin(): Plugin {
 }
 
 // https://vite.dev/config/
-export default defineConfig({
-  plugins: [react(), vuePreviewPlugin(), vueSourceFilesPlugin()],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
-  },
-  server: {
-    host: '0.0.0.0',
-    port: 3000,
-    proxy: {
-      '/api': {
-        target: 'http://192.168.0.101:8911',
-        changeOrigin: true,
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, __dirname, '');
+  const backendTarget = env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8911';
+
+  return {
+    plugins: [react(), vuePreviewPlugin(), vueSourceFilesPlugin()],
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, './src'),
       },
-      // Static resources are served via /api/static/{deployKey}/
-      // (handled by the /api proxy rule above since backend has context-path: /api)
     },
-  },
+    server: {
+      host: '0.0.0.0',
+      port: 3000,
+      proxy: {
+        '/api': {
+          target: backendTarget,
+          changeOrigin: true,
+        },
+        // Static resources are served via /api/static/{deployKey}/
+        // (handled by the /api proxy rule above since backend has context-path: /api)
+      },
+    },
+  };
 })

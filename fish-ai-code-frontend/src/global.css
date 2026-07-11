@@ -245,9 +245,21 @@ body {
   transform: translateY(-1px);
 }
 
+.chat-mobile-panel-switch {
+  display: none;
+}
+
 @media (max-width: 900px) {
   .app-header.ant-layout-header {
     padding: 0 16px;
+  }
+
+  @media (min-width: 480px) {
+    .app-nav-menu.ant-menu-horizontal {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+    }
   }
 
   .brand-logo {
@@ -1306,6 +1318,10 @@ iframe[srcdoc] {
   white-space: nowrap;
 }
 
+.chat-app-title-compact {
+  display: none;
+}
+
 .chat-header-actions .ant-btn {
   height: 34px;
   border-radius: 10px;
@@ -1491,6 +1507,7 @@ iframe[srcdoc] {
 }
 
 .chat-input-shell {
+  flex-shrink: 0;
   padding: 14px 0 16px;
   border-top: 0;
   background: #fff;
@@ -1569,6 +1586,68 @@ iframe[srcdoc] {
 }
 
 @media (max-width: 768px) {
+  .chat-workbench {
+    height: 100dvh;
+  }
+
+  .app-header.ant-layout-header {
+    height: 54px;
+    padding: 0 8px;
+    line-height: 54px;
+  }
+
+  .brand-logo {
+    height: 36px;
+    margin-right: 4px;
+    padding: 0 3px;
+  }
+
+  .brand-logo-image {
+    width: 30px;
+    height: 30px;
+  }
+
+  .app-header .ant-menu-horizontal > .ant-menu-item {
+    height: 36px;
+    margin: 0 1px;
+    padding-inline: 5px;
+    font-size: 12px;
+    line-height: 36px;
+  }
+
+  .app-header .ant-menu-horizontal > .ant-menu-item-selected::before {
+    right: 5px;
+    bottom: 2px;
+    left: 5px;
+  }
+
+  .app-header-user {
+    margin-left: 3px;
+  }
+
+  .app-header-user .ant-space {
+    gap: 0 !important;
+  }
+
+  .header-auth-button.ant-btn {
+    height: 34px;
+    padding-inline: 5px;
+    font-size: 12px;
+  }
+
+  .user-pill {
+    height: 32px;
+    padding: 3px;
+  }
+
+  .user-pill-avatar.ant-avatar {
+    font-size: 12px;
+  }
+
+  .app-content:not(.app-content-home) {
+    padding: 16px !important;
+  }
+
   .page-toolbar {
     align-items: stretch;
     flex-direction: column;
@@ -1579,8 +1658,57 @@ iframe[srcdoc] {
     padding: 22px;
   }
 
+  .create-card .ant-radio-group {
+    display: grid;
+    gap: 8px;
+  }
+
+  .create-card .ant-radio-button-wrapper {
+    width: 100%;
+    border-inline-start: 1px solid rgba(17, 25, 37, 0.15) !important;
+    border-radius: 10px !important;
+  }
+
+  .create-card .ant-radio-button-wrapper::before {
+    display: none;
+  }
+
   .admin-content.ant-layout-content {
     margin: 14px;
+  }
+
+  .admin-sider.ant-layout-sider {
+    flex: 0 0 56px !important;
+    width: 56px !important;
+    min-width: 56px !important;
+    max-width: 56px !important;
+  }
+
+  .admin-logo-expanded {
+    gap: 0;
+  }
+
+  .admin-logo-expanded > span:last-child,
+  .admin-menu .ant-menu-title-content,
+  .admin-header-user > span:not(.ant-avatar) {
+    display: none;
+  }
+
+  .admin-menu.ant-menu {
+    padding: 8px 4px;
+  }
+
+  .admin-menu.ant-menu .ant-menu-item {
+    padding-inline: 18px !important;
+  }
+
+  .admin-header.ant-layout-header {
+    height: 58px;
+    padding: 0 12px;
+  }
+
+  .admin-header-actions .ant-btn:not(:first-child) {
+    font-size: 0;
   }
 
   .admin-filter-row {
@@ -1589,13 +1717,90 @@ iframe[srcdoc] {
   }
 
   .chat-main {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
     gap: 10px;
+    min-height: 0;
     padding: 10px;
+    overflow: hidden;
   }
 
   .chat-left-panel {
-    min-width: 360px !important;
+    flex: 1;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 0;
     padding: 0 10px;
+  }
+
+  .chat-preview-panel {
+    display: none;
+    flex: 1;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .chat-main--mobile-preview .chat-left-panel {
+    display: none !important;
+  }
+
+  .chat-main--mobile-preview .chat-preview-panel {
+    display: flex;
+  }
+
+  .chat-mobile-panel-switch {
+    display: flex;
+    flex-shrink: 0;
+    gap: 6px;
+    margin-bottom: 10px;
+    padding: 4px;
+    border-radius: 12px;
+    background: #f4f6f8;
+  }
+
+  .chat-mobile-panel-switch .ant-btn {
+    flex: 1;
+  }
+
+  .chat-header {
+    height: 58px;
+    padding: 0 12px;
+  }
+
+  .chat-app-title.ant-typography {
+    max-width: 8ch;
+  }
+
+  .chat-app-title-full {
+    display: none;
+  }
+
+  .chat-app-title-compact {
+    display: inline;
+  }
+
+  .chat-header-actions .ant-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    padding: 0;
+    font-size: 0;
+    line-height: 1;
+  }
+
+  .chat-header-actions .ant-btn > span:not(.ant-btn-icon) {
+    display: none;
+  }
+
+  .chat-header-actions .ant-btn .ant-btn-icon {
+    display: flex;
+    margin-inline-end: 0;
+  }
+
+  .chat-header-actions .ant-btn .anticon {
+    font-size: 16px;
   }
 
   .chat-edit-hint {

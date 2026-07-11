@@ -109,10 +109,7 @@ export interface App {
 }
 
 export interface AppAddRequest {
-  appName?: string;
-  cover?: string;
   initPrompt: string;
-  codeGenType?: string;
 }
 
 export interface AppUpdateRequest {

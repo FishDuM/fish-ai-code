@@ -36,7 +36,6 @@ function ChatMessageList({
   sseError,
   onLoadMore,
 }: ChatMessageListProps) {
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const lastScrollTimeRef = useRef(0);
   const userScrolledUpRef = useRef(false);
@@ -49,12 +48,9 @@ function ChatMessageList({
     : messages;
   const isStreaming = Boolean(streamingMessage);
 
-  // Force scroll to the bottom on every message / streaming-chunk change.
-  // We use useLayoutEffect (synchronous after DOM commit, before paint) +
-  // requestAnimationFrame (waits one frame so the new DOM has settled) +
-  // the anchor `<div ref={messagesEndRef}>` at the end of the message list
-  // — `scrollIntoView({ block: 'end' })` brings the anchor into view at
-  // the bottom edge of the scroll container.
+  // Force the message container to its bottom on every message or streaming
+  // chunk change. A second pass on the next frame covers syntax-highlighted
+  // code blocks that expand after React's initial DOM commit.
   //
   // We only respect "user manually scrolled up" as a temporary suppression:
   // if the user scrolls up within the last 400ms, we hold the scroll.
@@ -73,13 +69,8 @@ function ChatMessageList({
     userScrolledUpRef.current = false;
 
     const tick = () => {
-      const end = messagesEndRef.current;
-      if (end) {
-        end.scrollIntoView({ block: 'end' });
-      } else {
-        const c = scrollContainerRef.current;
-        if (c) c.scrollTop = c.scrollHeight;
-      }
+      const container = scrollContainerRef.current;
+      if (container) container.scrollTop = container.scrollHeight;
     };
     tick();
     requestAnimationFrame(tick);
@@ -147,8 +138,6 @@ function ChatMessageList({
           生成失败：{sseError.message || '未知错误'}，请重试
         </div>
       )}
-
-      <div ref={messagesEndRef} />
     </div>
   );
 }

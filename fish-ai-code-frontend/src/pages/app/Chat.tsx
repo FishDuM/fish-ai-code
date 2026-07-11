@@ -111,6 +111,7 @@ export default function AppChat() {
   const [htmlPreviewLoading, setHtmlPreviewLoading] = useState(false);
   const [htmlPreviewFrameLoading, setHtmlPreviewFrameLoading] = useState(false);
   const [previewTab, setPreviewTab] = useState('preview');
+  const [mobilePanel, setMobilePanel] = useState<'chat' | 'preview'>('chat');
   const [deployUrl, setDeployUrl] = useState('');
   const [deployModalOpen, setDeployModalOpen] = useState(false);
   const [deploying, setDeploying] = useState(false);
@@ -139,7 +140,9 @@ export default function AppChat() {
   const pendingHighlightSelectorRef = useRef<string | null>(pendingHighlightSelector);
   const streamingMessageRef = useRef(streamingMessage);
   const codeGenTypeRef = useRef(app?.codeGenType);
-  const refreshHtmlPreviewRef = useRef(refreshHtmlPreviewFromFile);
+  // The callback is declared below because it depends on other hooks.  Keep a
+  // stable no-op until the synchronising effect assigns the real callback.
+  const refreshHtmlPreviewRef = useRef<(targetAppId?: string, codeGenType?: string | null) => void>(() => {});
   const historyInitedRef = useRef(false);
   const autoSentRef = useRef(false);
 
@@ -149,9 +152,6 @@ export default function AppChat() {
   useEffect(() => {
     codeGenTypeRef.current = app?.codeGenType;
   }, [app?.codeGenType]);
-  useEffect(() => {
-    refreshHtmlPreviewRef.current = refreshHtmlPreviewFromFile;
-  }, [refreshHtmlPreviewFromFile]);
   // Set to true if the initial chat-history load FAILED (network error /
   // 5xx). Distinct from "history is empty" — a failed load must NOT
   // become a green light to auto-send the user's initPrompt, otherwise
@@ -251,6 +251,10 @@ export default function AppChat() {
 
     poll();
   }, [app?.codeGenType, appId, getHtmlPreviewBaseUrl, stopHtmlPreviewPolling]);
+
+  useEffect(() => {
+    refreshHtmlPreviewRef.current = refreshHtmlPreviewFromFile;
+  }, [refreshHtmlPreviewFromFile]);
 
   // Translate an element's rect (in iframe viewport coords) to page coords,
   // placing the popover just below the element. If the element sits close
@@ -1247,7 +1251,23 @@ export default function AppChat() {
       </Modal>
 
       {/* Main content: split pane */}
-      <div className="chat-main">
+      <div className={`chat-main ${mobilePanel === 'preview' ? 'chat-main--mobile-preview' : ''}`}>
+        <div className="chat-mobile-panel-switch" role="tablist" aria-label="移动端工作区">
+          <Button
+            type={mobilePanel === 'chat' ? 'primary' : 'text'}
+            onClick={() => setMobilePanel('chat')}
+            icon={<CodeOutlined />}
+          >
+            对话
+          </Button>
+          <Button
+            type={mobilePanel === 'preview' ? 'primary' : 'text'}
+            onClick={() => setMobilePanel('preview')}
+            icon={<EyeOutlined />}
+          >
+            预览
+          </Button>
+        </div>
         {/* Left: Chat panel */}
         <div
           className="chat-left-panel"

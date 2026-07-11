@@ -38,7 +38,6 @@ export default function BasicLayout() {
       ...(loginUser
         ? [
             { key: '/dashboard', label: '我的应用' },
-            { key: '/app/create', label: '创建应用' },
           ]
         : []),
       ...(loginUser?.userRole === USER_ROLES.ADMIN

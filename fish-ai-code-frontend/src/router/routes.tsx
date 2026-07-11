@@ -9,7 +9,6 @@ import {
   Login,
   Register,
   Dashboard,
-  AppCreate,
   AppChat,
   Profile,
   UserManage,
@@ -35,16 +34,6 @@ export const routes = [
           <RequireAuth>
             <SuspenseWrap>
               <Dashboard />
-            </SuspenseWrap>
-          </RequireAuth>
-        ),
-      },
-      {
-        path: '/app/create',
-        element: (
-          <RequireAuth>
-            <SuspenseWrap>
-              <AppCreate />
             </SuspenseWrap>
           </RequireAuth>
         ),

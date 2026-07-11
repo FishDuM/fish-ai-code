@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Row, Col, Typography, Button, Pagination, Empty, App, Input } from 'antd';
 import { ArrowRightOutlined, SearchOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import AppCard from '@/components/AppCard';
-import { listFeaturedApps } from '@/api/app';
+import { createApp, listFeaturedApps } from '@/api/app';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useTitle } from '@/hooks/useTitle';
 import logoUrl from '@/assets/logo.png';
@@ -53,13 +53,15 @@ const quickPrompts = [
 export default function Home() {
   useTitle('首页');
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { loginUser } = useAuthStore();
   const { message } = App.useApp();
   const [apps, setApps] = useState<AppVO[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState<AppQueryRequest>({ pageNum: 1, pageSize: 12 });
-  const [prompt, setPrompt] = useState('');
+  const [prompt, setPrompt] = useState(() => searchParams.get('prompt') || '');
+  const [creating, setCreating] = useState(false);
   const [typingIndex, setTypingIndex] = useState(0);
 
   // 单调递增的 fetch id：每次新请求自增；回调里只有 id 仍是最新值才 setState。
@@ -104,16 +106,27 @@ export default function Home() {
     setQuery((prev) => ({ ...prev, appName: appName || undefined, pageNum: 1 }));
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     const initPrompt = prompt.trim();
+    if (!initPrompt) {
+      message.warning('请输入你想创建的应用描述');
+      return;
+    }
     if (!loginUser) {
-      const redirect = initPrompt
-        ? `/app/create?prompt=${encodeURIComponent(initPrompt)}`
-        : '/app/create';
+      const redirect = `/?prompt=${encodeURIComponent(initPrompt)}`;
       navigate(`/login?redirect=${encodeURIComponent(redirect)}`);
       return;
     }
-    navigate('/app/create', { state: { initPrompt } });
+    setCreating(true);
+    try {
+      const appId = await createApp({ initPrompt });
+      message.success('应用创建成功');
+      navigate(`/app/${appId}/chat`, { state: { autoSendInit: true } });
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '创建失败');
+    } finally {
+      setCreating(false);
+    }
   };
 
   return (
@@ -152,6 +165,8 @@ export default function Home() {
                 type="primary"
                 icon={<ArrowRightOutlined />}
                 onClick={handleCreate}
+                loading={creating}
+                disabled={creating}
                 className="home-send-button"
                 aria-label="开始创建"
               />

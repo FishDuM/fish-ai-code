@@ -107,7 +107,7 @@ export default function Dashboard() {
         </div>
         <Space wrap>
           <SearchInput onSearch={handleSearch} placeholder="搜索应用..." style={{ width: 200 }} />
-          <Button className="btn-gradient" icon={<PlusOutlined />} onClick={() => navigate('/app/create')}>
+          <Button className="btn-gradient" icon={<PlusOutlined />} onClick={() => navigate('/')}>
             创建应用
           </Button>
         </Space>
@@ -116,7 +116,7 @@ export default function Dashboard() {
       <div className="glass-panel">
         {!loading && apps.length === 0 ? (
         <Empty description="你还没有创建应用" className="page-empty">
-          <Button type="primary" onClick={() => navigate('/app/create')}>
+          <Button type="primary" onClick={() => navigate('/')}>
             创建第一个应用
           </Button>
         </Empty>
