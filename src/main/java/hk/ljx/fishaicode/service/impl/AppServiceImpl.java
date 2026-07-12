@@ -9,6 +9,8 @@ import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import hk.ljx.fishaicode.ai.AiCodeGenTypeRoutingService;
+import hk.ljx.fishaicode.ai.AiCodeGenTypeRoutingServiceFactory;
+import hk.ljx.fishaicode.ai.AiCodeGeneratorServiceFactory;
 import hk.ljx.fishaicode.constant.AppConstant;
 import hk.ljx.fishaicode.core.AiCodeGeneratorFacade;
 import hk.ljx.fishaicode.core.builder.VueProjectBuilder;
@@ -62,7 +64,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     private VueProjectBuilder vueProjectBuilder;
 
     @Resource
-    private AiCodeGenTypeRoutingService aiCodeGenTypeRoutingService;
+    private AiCodeGenTypeRoutingServiceFactory aiCodeGenTypeRoutingServiceFactory;
 
 
     @Override
@@ -83,8 +85,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
                         .appName(RandomUtil.randomString(19)).build();
         BeanUtil.copyProperties(appAddRequest, app);
         app.setUserId(loginUser.getId());
-        // 路由判断生成什么类型的代码
-        CodeGenTypeEnum codeGenTypeEnum = aiCodeGenTypeRoutingService.routeCodeGenType(appAddRequest.getInitPrompt());
+        // 使用 AI 智能选择代码生成类型（多例模式）
+        AiCodeGenTypeRoutingService routingService = aiCodeGenTypeRoutingServiceFactory.createAiCodeGenTypeRoutingService();
+        CodeGenTypeEnum codeGenTypeEnum = routingService.routeCodeGenType(initPrompt);
         app.setCodeGenType(codeGenTypeEnum.getValue());
         // 优先级默认 0
         if (app.getPriority() == null) {
