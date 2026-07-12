@@ -1,6 +1,7 @@
 package hk.ljx.fishaicode.langgraph4j.state;
 
 import hk.ljx.fishaicode.langgraph4j.model.ImageResource;
+import hk.ljx.fishaicode.langgraph4j.model.QualityResult;
 import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -56,6 +57,11 @@ public class WorkflowContext implements Serializable {
      * 代码生成类型
      */
     private CodeGenTypeEnum generationType;
+
+    /**
+     * 质量检查结果
+     */
+    private QualityResult qualityResult;
 
     /**
      * 生成的代码目录

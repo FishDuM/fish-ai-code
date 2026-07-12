@@ -1,4 +1,4 @@
-package hk.ljx.fishaicode.langgraph4j.enums;
+package hk.ljx.fishaicode.langgraph4j.model.enums;
 
 import cn.hutool.core.util.ObjUtil;
 import lombok.Getter;

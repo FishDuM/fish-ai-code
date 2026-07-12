@@ -1,6 +1,6 @@
 package hk.ljx.fishaicode;
 
-import hk.ljx.fishaicode.langgraph4j.enums.ImageCategoryEnum;
+import hk.ljx.fishaicode.langgraph4j.model.enums.ImageCategoryEnum;
 import hk.ljx.fishaicode.langgraph4j.model.ImageResource;
 import hk.ljx.fishaicode.langgraph4j.tools.UndrawIllustrationTool;
 import jakarta.annotation.Resource;

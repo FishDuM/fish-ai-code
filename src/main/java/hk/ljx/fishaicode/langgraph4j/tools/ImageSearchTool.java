@@ -7,7 +7,7 @@ import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
-import hk.ljx.fishaicode.langgraph4j.enums.ImageCategoryEnum;
+import hk.ljx.fishaicode.langgraph4j.model.enums.ImageCategoryEnum;
 import hk.ljx.fishaicode.langgraph4j.model.ImageResource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;

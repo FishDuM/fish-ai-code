@@ -15,7 +15,7 @@ import org.springframework.context.annotation.Configuration;
 public class ImageCollectionServiceFactory {
 
     @Resource
-    @Qualifier("routingChatModelPrototype")
+    @Qualifier("openAiChatModel")
     private ChatModel chatModel;
 
     @Resource
