@@ -73,3 +73,10 @@ knife4j:
 #      model-name: deepseek-v4-flash
 #      log-requests: true
 #      log-responses: true
+
+## https://www.pexels.com/
+#pexels:
+#  api-key: <图片搜索apikey>
+## https://undraw.co
+#undraw:
+#  token: <插画搜索token>
