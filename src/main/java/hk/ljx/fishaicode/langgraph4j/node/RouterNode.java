@@ -2,6 +2,8 @@ package hk.ljx.fishaicode.langgraph4j.node;
 
 import hk.ljx.fishaicode.ai.AiCodeGenTypeRoutingService;
 import hk.ljx.fishaicode.ai.AiCodeGenTypeRoutingServiceFactory;
+import hk.ljx.fishaicode.exception.BusinessException;
+import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.langgraph4j.state.WorkflowContext;
 import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;
 import hk.ljx.fishaicode.ai.SensitiveCheckFactory;
@@ -26,8 +28,7 @@ public class RouterNode {
                 SensitiveCheckFactory checkFactory = SpringContextUtil.getBean(SensitiveCheckFactory.class);
                 String checkResult = checkFactory.create().verify(context.getOriginalPrompt());
                 if (!"PASS".equals(checkResult.trim())) {
-                    log.warn("AI内容安全审查未通过: {}", checkResult);
-                    throw new RuntimeException("输入内容包含违规信息: " + checkResult);
+                    throw new BusinessException(ErrorCode.PARAMS_ERROR, "输入内容包含不符合本网站提供的范围或违规信息");
                 }
             } catch (Exception e) {
                 log.error("AI内容安全审查失败: {}", e.getMessage());

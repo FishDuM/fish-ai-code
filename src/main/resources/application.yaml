@@ -69,9 +69,9 @@ knife4j:
 #      log-responses: true
 #    # 智能路由 AI 模型配置（用于简单的分类任务）
 #    routing-chat-model:
-#      base-url: https://api.deepseek.com
+#      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1 # 阿里云百炼便宜模型
 #      api-key: <Your API Key>
-#      model-name: deepseek-v4-flash
+#      model-name:
 #      log-requests: true
 #      log-responses: true
 

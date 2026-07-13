@@ -63,6 +63,7 @@ public class AppController {
      * @return 新应用 id
      */
     @PostMapping("/add")
+    @RateLimit(key = "app", rate = 10, rateInterval = 60, limitType = RateLimitType.USER, message = "当前还在内测阶段，AI服务请求有限制哦~")
     public BaseResponse<Long> addApp(@Valid @RequestBody AppAddRequest appAddRequest, HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
         long appId = appService.addApp(appAddRequest, loginUser);
@@ -105,12 +106,12 @@ public class AppController {
      */
     @GetMapping("/get/vo")
     public BaseResponse<AppVO> getAppVOById(@Min(value = 1, message = "id 不合法") long id, HttpServletRequest request) {
-        User loginUser = userService.getLoginUser(request);
+//        User loginUser = userService.getLoginUser(request);
         App app = appService.getById(id);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR);
-        boolean isOwner = app.getUserId().equals(loginUser.getId());
-        boolean isAdmin = UserConstant.ADMIN_ROLE.equals(loginUser.getUserRole());
-        ThrowUtils.throwIf(!isOwner && !isAdmin, ErrorCode.NO_AUTH_ERROR, "没有权限访问该应用");
+//        boolean isOwner = app.getUserId().equals(loginUser.getId());
+//        boolean isAdmin = UserConstant.ADMIN_ROLE.equals(loginUser.getUserRole());
+//        ThrowUtils.throwIf(!isOwner && !isAdmin, ErrorCode.NO_AUTH_ERROR, "没有权限访问该应用");
         return ResultUtils.success(appService.getAppVO(app));
     }
 
@@ -154,7 +155,7 @@ public class AppController {
      * @return sse流
      */
     @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    @RateLimit(rate = 1, rateInterval = 60, limitType = RateLimitType.USER, message = "当前还在内测阶段，一分钟只能请求一次哦~")
+    @RateLimit(key = "app", rate = 10, rateInterval = 60, limitType = RateLimitType.USER, message = "当前还在内测阶段，AI服务一分钟只能请求一次哦~")
     public Flux<String> chatToGenCode(
             @NotNull(message = "应用 ID 不能为空") @Min(value = 1, message = "应用 ID 不合法") @RequestParam("appId") Long appId,
             @NotBlank(message = "消息内容不能为空") @RequestParam("message") String message,

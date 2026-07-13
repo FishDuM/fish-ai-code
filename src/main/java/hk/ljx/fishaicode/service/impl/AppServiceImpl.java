@@ -84,11 +84,14 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         // AI 内容安全审查：检查用户输入是否涉及法律违规或政治敏感
         String checkResult = sensitiveCheckFactory.create().verify(initPrompt);
         if (!"PASS".equals(checkResult.trim())) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "输入内容包含违规信息");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "输入内容包含不符合本网站提供的范围或违规信息");
         }
         // 2. 构建应用对象
+        if (initPrompt.length() > 6) {
+            initPrompt = initPrompt.substring(0, 6);
+        }
         App app = App.builder()
-                        .appName(RandomUtil.randomString(19)).build();
+                        .appName(initPrompt).build();
         BeanUtil.copyProperties(appAddRequest, app);
         app.setUserId(loginUser.getId());
         // 使用 AI 智能选择代码生成类型（多例模式）
@@ -323,7 +326,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         // AI 内容安全审查：检查用户输入是否涉及法律违规或政治敏感
         String checkResult = sensitiveCheckFactory.create().verify(message);
         if (!"PASS".equals(checkResult.trim())) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "输入内容包含违规信息");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "输入内容包含不符合本网站提供的范围或违规信息");
         }
         // 4、应用代码生成类型
         String codeGenType = app.getCodeGenType();
