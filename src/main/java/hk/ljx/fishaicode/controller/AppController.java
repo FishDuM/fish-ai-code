@@ -16,6 +16,8 @@ import hk.ljx.fishaicode.modal.dto.app.*;
 import hk.ljx.fishaicode.modal.entity.App;
 import hk.ljx.fishaicode.modal.entity.User;
 import hk.ljx.fishaicode.modal.vo.AppVO;
+import hk.ljx.fishaicode.ratelimit.annotation.RateLimit;
+import hk.ljx.fishaicode.ratelimit.enums.RateLimitType;
 import hk.ljx.fishaicode.service.AppService;
 import hk.ljx.fishaicode.service.ProjectDownloadService;
 import hk.ljx.fishaicode.service.UserService;
@@ -26,6 +28,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.MediaType;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -133,6 +136,11 @@ public class AppController {
      * @return 分页结果
      */
     @PostMapping("/list/featured/vo")
+    @Cacheable(
+            value = "good_app_page",
+            key = "T(hk.ljx.fishaicode.utils.CacheKeyUtils).generateKey(#appQueryRequest)",
+            condition = "#appQueryRequest.pageNum <= 10"
+    )
     public BaseResponse<Page<AppVO>> listFeaturedAppsByPage(@Valid @RequestBody AppQueryRequest appQueryRequest) {
         Page<AppVO> result = appService.listFeaturedAppsByPage(appQueryRequest);
         return ResultUtils.success(result);
@@ -146,6 +154,7 @@ public class AppController {
      * @return sse流
      */
     @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @RateLimit(rate = 1, rateInterval = 60, limitType = RateLimitType.USER, message = "请求次数过多,休息一下吧")
     public Flux<String> chatToGenCode(
             @NotNull(message = "应用 ID 不能为空") @Min(value = 1, message = "应用 ID 不合法") @RequestParam("appId") Long appId,
             @NotBlank(message = "消息内容不能为空") @RequestParam("message") String message,
