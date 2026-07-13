@@ -7,7 +7,7 @@ interface ToolExecutedInfo {
   content?: string;
 }
 
-export function useSSE(onComplete?: (finalCode: string) => void, onToolExecuted?: (info: ToolExecutedInfo) => void) {
+export function useSSE(onComplete?: (finalCode: string) => void, onToolExecuted?: (info: ToolExecutedInfo) => void, onBusinessError?: (code: number, message: string) => void) {
   const [isStreaming, setIsStreaming] = useState(false);
   const [currentCode, setCurrentCode] = useState('');
   const [error, setError] = useState<Error | null>(null);
@@ -21,10 +21,12 @@ export function useSSE(onComplete?: (finalCode: string) => void, onToolExecuted?
   // Use refs to avoid stale closure issues — always call the LATEST callback.
   const onCompleteRef = useRef(onComplete);
   const onToolExecutedRef = useRef(onToolExecuted);
+  const onBusinessErrorRef = useRef(onBusinessError);
   useLayoutEffect(() => {
     onCompleteRef.current = onComplete;
     onToolExecutedRef.current = onToolExecuted;
-  }, [onComplete, onToolExecuted]);
+    onBusinessErrorRef.current = onBusinessError;
+  }, [onComplete, onToolExecuted, onBusinessError]);
 
   const start = useCallback((appId: string, message: string) => {
     abortRef.current?.abort();
@@ -75,6 +77,12 @@ export function useSSE(onComplete?: (finalCode: string) => void, onToolExecuted?
       onToolExecuted: (toolName, filePath, content) => {
         if (epochRef.current !== myEpoch) return;
         onToolExecutedRef.current?.({ toolName, filePath, content });
+      },
+      onBusinessError: (code, message) => {
+        if (epochRef.current !== myEpoch) return;
+        isStreamingRef.current = false;
+        setIsStreaming(false);
+        onBusinessErrorRef.current?.(code, message);
       },
     });
   }, []); // No external deps — refs stay current

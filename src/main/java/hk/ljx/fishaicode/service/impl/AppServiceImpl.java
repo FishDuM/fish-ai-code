@@ -10,7 +10,6 @@ import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import hk.ljx.fishaicode.ai.AiCodeGenTypeRoutingService;
 import hk.ljx.fishaicode.ai.AiCodeGenTypeRoutingServiceFactory;
-import hk.ljx.fishaicode.ai.AiCodeGeneratorServiceFactory;
 import hk.ljx.fishaicode.constant.AppConstant;
 import hk.ljx.fishaicode.core.AiCodeGeneratorFacade;
 import hk.ljx.fishaicode.core.builder.VueProjectBuilder;
@@ -27,12 +26,11 @@ import hk.ljx.fishaicode.mapper.AppMapper;
 import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;
 import hk.ljx.fishaicode.modal.enums.MessageTypeEnum;
 import hk.ljx.fishaicode.modal.vo.AppVO;
+import hk.ljx.fishaicode.ai.SensitiveCheckFactory;
 import hk.ljx.fishaicode.service.AppService;
 import hk.ljx.fishaicode.service.ChatHistoryService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
@@ -66,6 +64,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     @Resource
     private AiCodeGenTypeRoutingServiceFactory aiCodeGenTypeRoutingServiceFactory;
 
+    @Resource
+    private SensitiveCheckFactory sensitiveCheckFactory;
+
 
     @Override
     public long addApp(AppAddRequest appAddRequest, User loginUser) {
@@ -79,6 +80,11 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         }
         if (initPrompt.length() > 10000) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "初始化 prompt 过长");
+        }
+        // AI 内容安全审查：检查用户输入是否涉及法律违规或政治敏感
+        String checkResult = sensitiveCheckFactory.create().verify(initPrompt);
+        if (!"PASS".equals(checkResult.trim())) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "输入内容包含违规信息");
         }
         // 2. 构建应用对象
         App app = App.builder()
@@ -314,6 +320,11 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
         // 3、权限校验，仅本人可以和自己的应用对话
         ThrowUtils.throwIf(!app.getUserId().equals(loginUser.getId()), ErrorCode.NO_AUTH_ERROR, "没有权限");
+        // AI 内容安全审查：检查用户输入是否涉及法律违规或政治敏感
+        String checkResult = sensitiveCheckFactory.create().verify(message);
+        if (!"PASS".equals(checkResult.trim())) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "输入内容包含违规信息");
+        }
         // 4、应用代码生成类型
         String codeGenType = app.getCodeGenType();
         CodeGenTypeEnum enumByValue = CodeGenTypeEnum.getEnumByValue(codeGenType);

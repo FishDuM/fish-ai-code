@@ -30,6 +30,33 @@ export interface SSECallbacks {
   onToolExecuted?: (toolName: string, filePath: string, content: string) => void;
   onDone: () => void;
   onError: (error: Error) => void;
+  onBusinessError?: (code: number, message: string) => void;
+}
+
+interface ParsedSSEEvent {
+  event: string;
+  data: string;
+}
+
+/**
+ * Parse a raw SSE event block into its event type and data payload.
+ * Handles multi-line data values (consecutive "data:" lines).
+ */
+function parseSSEEventBlock(block: string): ParsedSSEEvent {
+  const lines = block.trim().split('\n');
+  let eventType = '';
+  const dataLines: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('event:')) {
+      eventType = trimmed.slice(6).trim();
+    } else if (trimmed.startsWith('data:')) {
+      dataLines.push(trimmed.slice(5).trimStart());
+    }
+  }
+
+  return { event: eventType, data: dataLines.join('\n') };
 }
 
 /**
@@ -140,13 +167,29 @@ export function startCodeGenSSE(
           const eventEnd = buffer.indexOf('\n\n', searchStart);
           if (eventEnd === -1) break;
 
-          const event = buffer.slice(searchStart, eventEnd).trim();
+          const block = buffer.slice(searchStart, eventEnd).trim();
           searchStart = eventEnd + 2;
 
-          if (!event) continue;
+          if (!block) continue;
+
+          // Parse SSE event type + data payload. This is needed to
+          // distinguish custom events like "business-error" from the
+          // default unnamed "data:" events that Spring WebFlux emits.
+          const parsed = parseSSEEventBlock(block);
+
+          if (parsed.event === 'business-error') {
+            try {
+              const errData = JSON.parse(parsed.data);
+              callbacks.onBusinessError?.(errData.code ?? 0, errData.message || '生成过程中出现错误');
+            } catch {
+              // Malformed payload — fall through to the raw-data handler
+              handleRawData(parsed.data);
+            }
+            continue;
+          }
 
           // Strip SSE protocol prefixes (Spring WebFlux adds "data:" prefix)
-          const rawData = stripSSEPrefix(event);
+          const rawData = stripSSEPrefix(block);
           handleRawData(rawData);
         }
 
@@ -172,18 +215,38 @@ export function startCodeGenSSE(
       while (searchStart < buffer.length) {
         const eventEnd = buffer.indexOf('\n\n', searchStart);
         if (eventEnd === -1) break;
-        const event = buffer.slice(searchStart, eventEnd).trim();
+        const block = buffer.slice(searchStart, eventEnd).trim();
         searchStart = eventEnd + 2;
-        if (!event) continue;
-        const rawData = stripSSEPrefix(event);
+        if (!block) continue;
+        const parsed = parseSSEEventBlock(block);
+        if (parsed.event === 'business-error') {
+          try {
+            const errData = JSON.parse(parsed.data);
+            callbacks.onBusinessError?.(errData.code ?? 0, errData.message || '生成过程中出现错误');
+          } catch {
+            handleRawData(parsed.data);
+          }
+          continue;
+        }
+        const rawData = stripSSEPrefix(block);
         handleRawData(rawData);
       }
       // 收尾：残留 buffer 没有 `\n\n` 也当成一段事件解析 —— 这是修尾帧丢失的关键。
       if (searchStart < buffer.length) {
-        const tailEvent = buffer.slice(searchStart).trim();
-        if (tailEvent) {
-          const rawData = stripSSEPrefix(tailEvent);
-          handleRawData(rawData);
+        const tailBlock = buffer.slice(searchStart).trim();
+        if (tailBlock) {
+          const parsed = parseSSEEventBlock(tailBlock);
+          if (parsed.event === 'business-error') {
+            try {
+              const errData = JSON.parse(parsed.data);
+              callbacks.onBusinessError?.(errData.code ?? 0, errData.message || '生成过程中出现错误');
+            } catch {
+              handleRawData(parsed.data);
+            }
+          } else {
+            const rawData = stripSSEPrefix(tailBlock);
+            handleRawData(rawData);
+          }
         }
       }
 

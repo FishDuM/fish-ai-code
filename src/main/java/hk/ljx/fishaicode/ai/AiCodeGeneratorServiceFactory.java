@@ -9,6 +9,7 @@ import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.service.AiServices;
+import hk.ljx.fishaicode.ai.guardrail.PromptSafetyInputGuardrail;
 import hk.ljx.fishaicode.ai.tools.*;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
@@ -68,6 +69,7 @@ public class AiCodeGeneratorServiceFactory {
                         .tools(toolManager.getAllTools())
                         // 处理工具调用幻觉问题
                         .hallucinatedToolNameStrategy(toolExecutionRequest -> ToolExecutionResultMessage.from(toolExecutionRequest, "Error: there is no tool called " + toolExecutionRequest.name()))
+                        .inputGuardrails(new PromptSafetyInputGuardrail()) // 添加输入护轨
                         .build();
             }
             case HTML,MULTI_FILE ->{
@@ -76,6 +78,7 @@ public class AiCodeGeneratorServiceFactory {
                         .chatMemory(chatMemory)
                         .chatModel(chatModel)
                         .streamingChatModel(openAiStreamingChatModel)
+                        .inputGuardrails(new PromptSafetyInputGuardrail()) // 添加输入护轨
                         .build();
             }
             default -> throw new BusinessException(ErrorCode.SYSTEM_ERROR, "不支持的代码生成类型" + type.getValue());

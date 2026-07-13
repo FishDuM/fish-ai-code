@@ -425,6 +425,19 @@ export default function AppChat() {
         return [...prev, { path: info.filePath, content: info.content! }];
       });
     }, []),
+    // Handle business-error events from the backend (rate limiting, auth failures, etc.)
+    // Commits the error as a non-streaming AI message before onDone clears the bubble.
+    useCallback((code: number, message: string) => {
+      setStreamingMessage((current) => {
+        if (!current || !current.isStreaming) return current;
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === current.id)) return prev;
+          return [...prev, { ...current, content: `❌ ${message}`, isStreaming: false }];
+        });
+        return null;
+      });
+      message.error(message);
+    }, [message]),
   );
 
   // Clean up Vue project AI output for display in chat panel
