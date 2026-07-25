@@ -27,6 +27,7 @@ import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;
 import hk.ljx.fishaicode.modal.enums.MessageTypeEnum;
 import hk.ljx.fishaicode.modal.vo.AppVO;
 import hk.ljx.fishaicode.ai.SensitiveCheckFactory;
+import hk.ljx.fishaicode.langgraph4j.service.WorkflowService;
 import hk.ljx.fishaicode.service.AppService;
 import hk.ljx.fishaicode.service.ChatHistoryService;
 import jakarta.annotation.Resource;
@@ -66,6 +67,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     @Resource
     private SensitiveCheckFactory sensitiveCheckFactory;
+
+    @Resource
+    private WorkflowService workflowService;
 
 
     @Override
@@ -336,8 +340,25 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         }
         // 5、保存用户消息到对话历史
         chatHistoryService.addChatHistory(appId, loginUser.getId(), message, MessageTypeEnum.USER.getValue());
-        // 6、调用代码生成接口
-        Flux<String> stringFlux = aiCodeGeneratorFacade.generateAndSaveCodeStream(message, enumByValue, appId);
+        // 6、工作流前置处理：图片收集 + 提示词增强
+        String enhancedMessage = workflowService.enhancePrompt(message);
+        log.info("提示词增强完成（增强前长度:{} → 增强后长度:{}）", message.length(), enhancedMessage.length());
+        // 7、使用增强后的提示词调用代码生成接口
+        Flux<String> stringFlux = aiCodeGeneratorFacade.generateAndSaveCodeStream(enhancedMessage, enumByValue, appId)
+                .doOnComplete(() -> {
+                    // 8、流完成后异步执行代码质量检查
+                    String codeDir = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + codeGenType + "_" + appId;
+                    try {
+                        var qualityResult = workflowService.runQualityCheck(codeDir);
+                        if (qualityResult != null) {
+                            log.info("代码质量检查完成 - 通过: {}, 错误数: {}",
+                                    qualityResult.getIsValid(),
+                                    qualityResult.getErrors() != null ? qualityResult.getErrors().size() : 0);
+                        }
+                    } catch (Exception e) {
+                        log.warn("代码质量检查异常（不影响已生成的代码）: {}", e.getMessage(), e);
+                    }
+                });
         return streamHandlerExecutor.doExecute(stringFlux, chatHistoryService, appId, loginUser, enumByValue);
     }
 

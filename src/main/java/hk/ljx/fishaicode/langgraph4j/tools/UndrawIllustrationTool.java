@@ -27,7 +27,7 @@ public class UndrawIllustrationTool {
     @Tool("搜索插画图片，用于网站美化和装饰")
     public List<ImageResource> searchIllustrations(@P("搜索关键词") String query) {
         List<ImageResource> imageList = new ArrayList<>();
-        int searchCount = 12;
+        int searchCount = 2;
         String UNDRAW_API_URL = "https://undraw.co/_next/data/" + undrawToken + "/search/%s.json?term=%s";
 
         String apiUrl = String.format(UNDRAW_API_URL, query, query);
