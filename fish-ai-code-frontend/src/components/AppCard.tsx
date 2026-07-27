@@ -6,11 +6,13 @@ import type { AppVO } from '@/api/types';
 
 const { Text } = Typography;
 
-interface AppCardProps {
-  app: AppVO;
-  onEdit?: (app: AppVO) => void;
-  onDelete?: (app: AppVO) => void;
-  onOpen?: (app: AppVO) => void;
+type AppCardData = Pick<AppVO, 'id' | 'appName' | 'cover' | 'codeGenType' | 'priority' | 'createTime'>;
+
+interface AppCardProps<T extends AppCardData> {
+  app: T;
+  onEdit?: (app: T) => void;
+  onDelete?: (app: T) => void;
+  onOpen?: (app: T) => void;
   showActions?: boolean;
 }
 
@@ -28,7 +30,7 @@ function getGradient(id: string) {
   return gradients[index];
 }
 
-export default function AppCard({ app, onEdit, onDelete, onOpen, showActions = true }: AppCardProps) {
+export default function AppCard<T extends AppCardData>({ app, onEdit, onDelete, onOpen, showActions = true }: AppCardProps<T>) {
   const codeGenLabel = app.codeGenType === 'multi_file' ? '多文件' : app.codeGenType === 'vue_project' ? 'Vue 工程' : 'HTML';
   const [imageError, setImageError] = useState(false);
   const showGradient = !app.cover || imageError;

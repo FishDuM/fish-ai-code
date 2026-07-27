@@ -1,137 +1,360 @@
 package hk.ljx.fishaicode.core.builder;
 
-import cn.hutool.core.util.RuntimeUtil;
+import hk.ljx.fishaicode.constant.AppConstant;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.io.File;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.PosixFilePermission;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * 在受限 Docker 容器中构建 AI 生成的 Vue 项目。
+ *
+ * <p>AI 可控制 package.json 及 build 脚本，因此绝不能在宿主机直接执行 npm。</p>
+ */
 @Slf4j
 @Component
 public class VueProjectBuilder {
 
+    private static final String PROJECT_DIR_PREFIX = "vue_project_";
+    private static final int MAX_BUILD_LOG_CHARS = 20_000;
+    private static final int PROJECT_READY_MAX_ATTEMPTS = 5;
+
+    private final VueBuildProperties properties;
+
+    public VueProjectBuilder(VueBuildProperties properties) {
+        this.properties = properties;
+    }
+
     /**
-    * 异步构建项目（不阻塞主流程）
-    *
-    * @param projectPath 项目路径
-    */
+     * 异步构建项目（不阻塞主流程）。
+     */
     public void buildProjectAsync(String projectPath) {
-        // 在单独的线程中执行构建，避免阻塞主流程
         Thread.ofVirtual().name("vue-builder-" + System.currentTimeMillis()).start(() -> {
             try {
-                buildProject(projectPath);
+                for (int attempt = 1; attempt <= PROJECT_READY_MAX_ATTEMPTS; attempt++) {
+                    if (isProjectReady(projectPath)) {
+                        buildProject(projectPath);
+                        return;
+                    }
+                    if (attempt < PROJECT_READY_MAX_ATTEMPTS) {
+                        log.info("等待 Vue 项目文件落盘（第 {}/{} 次）", attempt, PROJECT_READY_MAX_ATTEMPTS);
+                        Thread.sleep(1000);
+                    }
+                }
+                log.error("Vue 项目文件未在 {} 秒内生成，跳过构建", PROJECT_READY_MAX_ATTEMPTS - 1);
             } catch (Exception e) {
-                log.error("异步构建 Vue 项目时发生异常: {}", e.getMessage(), e);
+                log.error("异步构建 Vue 项目时发生异常", e);
             }
         });
     }
 
+    private boolean isProjectReady(String projectPath) {
+        try {
+            Path projectDir = Path.of(projectPath).toAbsolutePath().normalize();
+            return Files.isDirectory(projectDir, LinkOption.NOFOLLOW_LINKS)
+                    && Files.isRegularFile(projectDir.resolve("package.json"), LinkOption.NOFOLLOW_LINKS);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     /**
-     * 构建 Vue 项目
-     *
-     * @param projectPath 项目根目录路径
-     * @return 是否构建成功
+     * 在临时的 Docker 容器中构建 Vue 项目，并仅将校验后的 dist 目录发布回项目目录。
      */
     public boolean buildProject(String projectPath) {
-        File projectDir = new File(projectPath);
-        if (!projectDir.exists() || !projectDir.isDirectory()) {
-            log.error("项目目录不存在: {}", projectPath);
+        Path sourceDir;
+        try {
+            sourceDir = validateProjectDirectory(projectPath);
+        } catch (IOException | IllegalArgumentException e) {
+            log.error("Vue 项目路径不合法: {}", e.getMessage());
             return false;
         }
-        // 检查 package.json 是否存在
-        File packageJson = new File(projectDir, "package.json");
-        if (!packageJson.exists()) {
-            log.error("package.json 文件不存在: {}", packageJson.getAbsolutePath());
+
+        Path buildDir = null;
+        try {
+            buildDir = Files.createTempDirectory(getOutputRoot(), "vue-build-");
+            Path workspaceDir = buildDir.resolve("workspace");
+            Path outputDir = buildDir.resolve("dist");
+            createContainerWritableDirectory(workspaceDir);
+            createContainerWritableDirectory(outputDir);
+
+            log.info("开始在受限 Docker 容器中构建 Vue 项目: {}", sourceDir.getFileName());
+            if (!executeDockerBuild(sourceDir, workspaceDir, outputDir)) {
+                return false;
+            }
+            validateBuildOutput(outputDir);
+            publishBuildOutput(sourceDir, outputDir);
+            log.info("Vue 项目构建成功: {}", sourceDir.getFileName());
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Vue 项目构建被中断", e);
+            return false;
+        } catch (IOException e) {
+            log.error("Vue 项目构建失败: {}", e.getMessage());
+            return false;
+        } finally {
+            if (buildDir != null) {
+                try {
+                    deleteRecursively(buildDir);
+                } catch (IOException e) {
+                    log.warn("清理 Vue 构建临时目录失败: {}", e.getMessage());
+                }
+            }
+        }
+    }
+
+    private Path validateProjectDirectory(String projectPath) throws IOException {
+        if (projectPath == null || projectPath.isBlank()) {
+            throw new IllegalArgumentException("项目路径不能为空");
+        }
+        Path outputRoot = getOutputRoot();
+        Path candidate = Path.of(projectPath).toAbsolutePath().normalize();
+        if (!candidate.startsWith(outputRoot)
+                || !candidate.getFileName().toString().matches(PROJECT_DIR_PREFIX + "[1-9]\\d*")) {
+            throw new IllegalArgumentException("项目目录不在允许的生成目录中");
+        }
+        if (!Files.isDirectory(candidate, LinkOption.NOFOLLOW_LINKS)
+                || !Files.isRegularFile(candidate.resolve("package.json"), LinkOption.NOFOLLOW_LINKS)) {
+            throw new IllegalArgumentException("项目目录或 package.json 不存在");
+        }
+        Path realRoot = outputRoot.toRealPath();
+        Path realProject = candidate.toRealPath();
+        if (!realProject.startsWith(realRoot)) {
+            throw new IllegalArgumentException("项目目录不能通过符号链接离开生成目录");
+        }
+        return realProject;
+    }
+
+    private boolean executeDockerBuild(Path sourceDir, Path workspaceDir, Path outputDir) throws IOException, InterruptedException {
+        ProcessBuilder processBuilder = new ProcessBuilder(createDockerCommand(sourceDir, workspaceDir, outputDir));
+        processBuilder.redirectErrorStream(true);
+        Process process;
+        try {
+            process = processBuilder.start();
+        } catch (IOException e) {
+            log.error("无法启动 Docker 构建容器，请确认 Docker Desktop 正在运行且当前账号有 Docker 权限: {}", e.getMessage());
             return false;
         }
-        log.info("开始构建 Vue 项目: {}", projectPath);
-        // 执行 npm install
-        if (!executeNpmInstall(projectDir)) {
-            log.error("npm install 执行失败");
+
+        StringBuilder buildLog = new StringBuilder();
+        Thread logReader = Thread.ofVirtual().start(() -> readBuildLog(process, buildLog));
+        AtomicBoolean workspaceLimitExceeded = new AtomicBoolean(false);
+        Thread workspaceMonitor = Thread.ofVirtual().start(
+                () -> monitorWorkspaceSize(process, workspaceDir, workspaceLimitExceeded));
+        boolean finished = process.waitFor(properties.getTimeoutSeconds(), TimeUnit.SECONDS);
+        workspaceMonitor.interrupt();
+        workspaceMonitor.join(Duration.ofSeconds(2));
+        if (!finished) {
+            process.destroyForcibly();
+            log.error("Vue Docker 构建超时（{} 秒）", properties.getTimeoutSeconds());
+            logBuildOutput(buildLog);
             return false;
         }
-        // 执行 npm run build
-        if (!executeNpmBuild(projectDir)) {
-            log.error("npm run build 执行失败");
+        logReader.join(Duration.ofSeconds(5));
+        if (workspaceLimitExceeded.get()) {
+            log.error("Vue Docker 构建工作目录超过 {} MB 限制", properties.getMaxWorkspaceMb());
+            logBuildOutput(buildLog);
             return false;
         }
-        // 验证 dist 目录是否生成
-        File distDir = new File(projectDir, "dist");
-        if (!distDir.exists()) {
-            log.error("构建完成但 dist 目录未生成: {}", distDir.getAbsolutePath());
+        if (process.exitValue() != 0) {
+            log.error("Vue Docker 构建失败，退出码: {}", process.exitValue());
+            logBuildOutput(buildLog);
             return false;
         }
-        log.info("Vue 项目构建成功，dist 目录: {}", distDir.getAbsolutePath());
         return true;
     }
 
+    private void readBuildLog(Process process, StringBuilder buildLog) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                synchronized (buildLog) {
+                    if (buildLog.length() < MAX_BUILD_LOG_CHARS) {
+                        buildLog.append(line).append(System.lineSeparator());
+                    }
+                }
+            }
+        } catch (IOException e) {
+            log.debug("读取 Vue 构建日志失败: {}", e.getMessage());
+        }
+    }
+
+    private void logBuildOutput(StringBuilder buildLog) {
+        synchronized (buildLog) {
+            if (!buildLog.isEmpty()) {
+                log.warn("Vue Docker 构建日志（已截断）:{}{}", System.lineSeparator(), buildLog);
+            }
+        }
+    }
 
     /**
-     * 执行命令
-     *
-     * @param workingDir     工作目录
-     * @param command        命令字符串
-     * @param timeoutSeconds 超时时间（秒）
-     * @return 是否执行成功
+     * 构建命令独立出来，以便测试安全限制不会被后续修改移除。
      */
-    private boolean executeCommand(File workingDir, String command, int timeoutSeconds) {
+    List<String> createDockerCommand(Path sourceDir, Path workspaceDir, Path outputDir) {
+        List<String> command = new ArrayList<>(List.of(
+                "docker", "run", "--rm",
+                "--network", "none",
+                "--read-only",
+                "--user", "node",
+                "--workdir", "/workspace",
+                "--cpus", String.valueOf(properties.getCpuLimit()),
+                "--memory", properties.getMemoryMb() + "m",
+                "--pids-limit", String.valueOf(properties.getPidsLimit()),
+                "--cap-drop", "ALL",
+                "--security-opt", "no-new-privileges",
+                "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=64m,uid=1000,gid=1000,mode=700",
+                "--mount", "type=bind,src=" + sourceDir + ",dst=/input,readonly,bind-propagation=rprivate",
+                "--mount", "type=bind,src=" + workspaceDir + ",dst=/workspace,bind-propagation=rprivate",
+                "--mount", "type=bind,src=" + outputDir + ",dst=/output,bind-propagation=rprivate",
+                "--env", "npm_config_update_notifier=false",
+                properties.getDockerImage(),
+                "sh", "-ec",
+                "cp -a /input/. /workspace/ && "
+                        + "cp -a /opt/offline-seed/node_modules /workspace/node_modules && "
+                        + "npm run build && test -d dist && cp -a dist/. /output/"
+        ));
+        return command;
+    }
+
+    private void monitorWorkspaceSize(Process process, Path workspaceDir, AtomicBoolean limitExceeded) {
+        while (process.isAlive() && !Thread.currentThread().isInterrupted()) {
+            try {
+                if (getDirectorySize(workspaceDir) > properties.getMaxWorkspaceMb() * 1024L * 1024L) {
+                    limitExceeded.set(true);
+                    process.destroyForcibly();
+                    return;
+                }
+                Thread.sleep(500);
+            } catch (IOException e) {
+                log.warn("统计 Vue 构建工作目录大小失败: {}", e.getMessage());
+                return;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
+
+    private long getDirectorySize(Path root) throws IOException {
+        BuildOutputStats stats = new BuildOutputStats();
+        Files.walkFileTree(root, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                if (attrs.isRegularFile()) {
+                    stats.size += attrs.size();
+                }
+                return FileVisitResult.CONTINUE;
+            }
+        });
+        return stats.size;
+    }
+
+    private void validateBuildOutput(Path outputDir) throws IOException {
+        BuildOutputStats stats = new BuildOutputStats();
+        Files.walkFileTree(outputDir, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                if (Files.isSymbolicLink(file) || !attrs.isRegularFile()) {
+                    throw new IOException("构建产物包含不允许的特殊文件");
+                }
+                stats.fileCount++;
+                stats.size += attrs.size();
+                if (stats.fileCount > properties.getMaxOutputFiles()
+                        || stats.size > properties.getMaxOutputMb() * 1024L * 1024L) {
+                    throw new IOException("构建产物超过大小或文件数量限制");
+                }
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                if (Files.isSymbolicLink(dir) || !attrs.isDirectory()) {
+                    throw new IOException("构建产物包含不允许的目录");
+                }
+                return FileVisitResult.CONTINUE;
+            }
+        });
+        if (stats.fileCount == 0) {
+            throw new IOException("构建产物为空");
+        }
+    }
+
+    private void publishBuildOutput(Path sourceDir, Path outputDir) throws IOException {
+        Path distDir = sourceDir.resolve("dist");
+        Path backupDir = sourceDir.resolve(".dist-backup-" + System.nanoTime());
+        if (Files.exists(distDir, LinkOption.NOFOLLOW_LINKS)) {
+            Files.move(distDir, backupDir);
+        }
         try {
-            log.info("在目录 {} 中执行命令: {}", workingDir.getAbsolutePath(), command);
-            Process process = RuntimeUtil.exec(
-                    null,
-                    workingDir,
-                    command.split("\\s+") // 命令分割为数组
-            );
-            // 等待进程完成，设置超时
-            boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-            if (!finished) {
-                log.error("命令执行超时（{}秒），强制终止进程", timeoutSeconds);
-                process.destroyForcibly();
-                return false;
+            Files.move(outputDir, distDir);
+            if (Files.exists(backupDir, LinkOption.NOFOLLOW_LINKS)) {
+                deleteRecursively(backupDir);
             }
-            int exitCode = process.exitValue();
-            if (exitCode == 0) {
-                log.info("命令执行成功: {}", command);
-                return true;
-            } else {
-                log.error("命令执行失败，退出码: {}", exitCode);
-                return false;
+        } catch (IOException e) {
+            if (!Files.exists(distDir, LinkOption.NOFOLLOW_LINKS)
+                    && Files.exists(backupDir, LinkOption.NOFOLLOW_LINKS)) {
+                Files.move(backupDir, distDir);
             }
-        } catch (Exception e) {
-            log.error("执行命令失败: {}, 错误信息: {}", command, e.getMessage());
-            return false;
+            throw e;
         }
     }
 
-    /**
-     * 执行 npm install 命令
-     */
-    private boolean executeNpmInstall(File projectDir) {
-        log.info("执行 npm install...");
-        String command = String.format("%s install", buildCommand("npm"));
-        return executeCommand(projectDir, command, 300); // 5分钟超时
+    private Path getOutputRoot() throws IOException {
+        return Path.of(AppConstant.CODE_OUTPUT_ROOT_DIR).toAbsolutePath().normalize();
     }
 
-    /**
-     * 执行 npm run build 命令
-     */
-    private boolean executeNpmBuild(File projectDir) {
-        log.info("执行 npm run build...");
-        String command = String.format("%s run build", buildCommand("npm"));
-        return executeCommand(projectDir, command, 180); // 3分钟超时
-    }
-
-
-    private boolean isWindows() {
-        return System.getProperty("os.name").toLowerCase().contains("windows");
-    }
-
-    private String buildCommand(String baseCommand) {
-        if (isWindows()) {
-            return baseCommand + ".cmd";
+    private void createContainerWritableDirectory(Path directory) throws IOException {
+        Files.createDirectory(directory);
+        try {
+            Set<PosixFilePermission> permissions = EnumSet.allOf(PosixFilePermission.class);
+            Files.setPosixFilePermissions(directory, permissions);
+        } catch (UnsupportedOperationException e) {
+            log.debug("当前文件系统不支持 POSIX 权限设置: {}", directory);
         }
-        return baseCommand;
     }
 
+    private void deleteRecursively(Path root) throws IOException {
+        if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) {
+            return;
+        }
+        Files.walkFileTree(root, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                Files.delete(file);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                if (exc != null) {
+                    throw exc;
+                }
+                Files.delete(dir);
+                return FileVisitResult.CONTINUE;
+            }
+        });
+    }
+
+    private static class BuildOutputStats {
+        private long size;
+        private int fileCount;
+    }
 }

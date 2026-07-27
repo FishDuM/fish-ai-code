@@ -26,6 +26,7 @@ import hk.ljx.fishaicode.mapper.AppMapper;
 import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;
 import hk.ljx.fishaicode.modal.enums.MessageTypeEnum;
 import hk.ljx.fishaicode.modal.vo.AppVO;
+import hk.ljx.fishaicode.modal.vo.PublicAppVO;
 import hk.ljx.fishaicode.ai.SensitiveCheckFactory;
 import hk.ljx.fishaicode.langgraph4j.service.WorkflowService;
 import hk.ljx.fishaicode.service.AppService;
@@ -90,12 +91,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (!"PASS".equals(checkResult.trim())) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "输入内容包含不符合本网站提供的范围或违规信息");
         }
-        // 2. 构建应用对象
-        if (initPrompt.length() > 6) {
-            initPrompt = initPrompt.substring(0, 6);
-        }
+        // 2. 构建应用对象：应用名使用提示词前 6 个字符，路由仍使用完整提示词
+        String appName = initPrompt.length() > 6 ? initPrompt.substring(0, 6) : initPrompt;
         App app = App.builder()
-                        .appName(initPrompt).build();
+                        .appName(appName).build();
         BeanUtil.copyProperties(appAddRequest, app);
         app.setUserId(loginUser.getId());
         // 使用 AI 智能选择代码生成类型（多例模式）
@@ -211,15 +210,15 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     }
 
     @Override
-    public Page<AppVO> listFeaturedAppsByPage(AppQueryRequest appQueryRequest) {
+    public Page<PublicAppVO> listFeaturedAppsByPage(AppQueryRequest appQueryRequest) {
         long pageNum = appQueryRequest.getPageNum();
         long pageSize = appQueryRequest.getPageSize();
         Page<App> appPage = this.page(Page.of(pageNum, Math.min(pageSize, 20)),
                 getFeaturedAppQueryWrapper(appQueryRequest));
-        Page<AppVO> appVOPage = new Page<>(pageNum, pageSize, appPage.getTotalRow());
-        List<AppVO> appVOList = getAppVOList(appPage.getRecords());
-        appVOPage.setRecords(appVOList);
-        return appVOPage;
+        Page<PublicAppVO> publicAppVOPage = new Page<>(pageNum, pageSize, appPage.getTotalRow());
+        List<PublicAppVO> publicAppVOList = getPublicAppVOList(appPage.getRecords());
+        publicAppVOPage.setRecords(publicAppVOList);
+        return publicAppVOPage;
     }
 
     @Override
@@ -315,6 +314,24 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             return new ArrayList<>();
         }
         return appList.stream().map(this::getAppVO).collect(Collectors.toList());
+    }
+
+    @Override
+    public PublicAppVO getPublicAppVO(App app) {
+        if (app == null) {
+            return null;
+        }
+        PublicAppVO publicAppVO = new PublicAppVO();
+        BeanUtil.copyProperties(app, publicAppVO);
+        return publicAppVO;
+    }
+
+    @Override
+    public List<PublicAppVO> getPublicAppVOList(List<App> appList) {
+        if (CollUtil.isEmpty(appList)) {
+            return new ArrayList<>();
+        }
+        return appList.stream().map(this::getPublicAppVO).collect(Collectors.toList());
     }
 
     @Override

@@ -4,14 +4,13 @@ import cn.hutool.json.JSONObject;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.agent.tool.ToolMemoryId;
-import hk.ljx.fishaicode.constant.AppConstant;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 
 /**
  * 文件删除工具
@@ -21,6 +20,9 @@ import java.nio.file.Paths;
 @Component
 public class FileDeleteTool extends BaseTool {
 
+    @Resource
+    private ProjectPathResolver projectPathResolver;
+
     @Tool("删除指定路径的文件")
     public String deleteFile(
             @P("文件的相对路径")
@@ -28,30 +30,21 @@ public class FileDeleteTool extends BaseTool {
             @ToolMemoryId Long appId
     ) {
         try {
-            Path path = Paths.get(relativeFilePath);
-            if (!path.isAbsolute()) {
-                String projectDirName = "vue_project_" + appId;
-                Path projectRoot = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, projectDirName);
-                path = projectRoot.resolve(relativeFilePath);
-            }
-            if (!Files.exists(path)) {
-                return "警告：文件不存在，无需删除 - " + relativeFilePath;
-            }
-            if (!Files.isRegularFile(path)) {
-                return "错误：指定路径不是文件，无法删除 - " + relativeFilePath;
-            }
+            Path path = projectPathResolver.resolveExistingFile(appId, relativeFilePath);
             // 安全检查：避免删除重要文件
             String fileName = path.getFileName().toString();
             if (isImportantFile(fileName)) {
                 return "错误：不允许删除重要文件 - " + fileName;
             }
             Files.delete(path);
-            log.info("成功删除文件: {}", path.toAbsolutePath());
+            log.info("成功删除项目文件: {}", relativeFilePath);
             return "文件删除成功: " + relativeFilePath;
+        } catch (IllegalArgumentException e) {
+            log.warn("拒绝删除项目外文件: {}", relativeFilePath);
+            return "错误：文件路径不合法 - " + relativeFilePath;
         } catch (IOException e) {
-            String errorMessage = "删除文件失败: " + relativeFilePath + ", 错误: " + e.getMessage();
-            log.error(errorMessage, e);
-            return errorMessage;
+            log.error("删除项目文件失败: {}", relativeFilePath, e);
+            return "错误：文件不存在或无法删除 - " + relativeFilePath;
         }
     }
 

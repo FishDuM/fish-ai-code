@@ -93,6 +93,15 @@ export interface AppVO {
   createTime: string;
 }
 
+export interface PublicAppVO {
+  id: string;
+  appName: string | null;
+  cover: string | null;
+  codeGenType: string | null;
+  priority: number | null;
+  createTime: string;
+}
+
 export interface App {
   id: string;
   appName: string | null;

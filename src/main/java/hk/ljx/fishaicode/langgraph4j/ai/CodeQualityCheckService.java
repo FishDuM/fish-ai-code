@@ -2,6 +2,7 @@ package hk.ljx.fishaicode.langgraph4j.ai;
 
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.UserMessage;
+import dev.langchain4j.service.V;
 import hk.ljx.fishaicode.langgraph4j.model.QualityResult;
 
 /**
@@ -14,5 +15,6 @@ public interface CodeQualityCheckService {
      * AI 会分析代码并返回质量检查结果
      */
     @SystemMessage(fromResource = "prompt/code-quality-check-system-prompt.txt")
-    QualityResult checkCodeQuality(@UserMessage String codeContent);
+    @UserMessage("待检查代码如下：\n{{codeContent}}")
+    QualityResult checkCodeQuality(@V("codeContent") String codeContent);
 }

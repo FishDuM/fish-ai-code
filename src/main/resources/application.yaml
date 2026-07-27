@@ -29,6 +29,18 @@ server:
       cookie:
         max-age: 2592000
 
+# AI 生成的 Vue 项目只能在一次性 Docker 容器中离线构建，绝不在宿主机执行 npm。
+# 使用 docker/vue-builder/Dockerfile 预热依赖缓存；运行时网络永久关闭。
+vue-build:
+  docker-image: fish-ai-code-vue-builder:20
+  timeout-seconds: 180
+  memory-mb: 1024
+  cpu-limit: 1
+  max-workspace-mb: 768
+  pids-limit: 128
+  max-output-mb: 100
+  max-output-files: 10000
+
 # springdoc-openapi
 springdoc:
   group-configs:

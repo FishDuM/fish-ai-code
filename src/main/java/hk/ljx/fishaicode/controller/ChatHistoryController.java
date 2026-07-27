@@ -17,6 +17,7 @@ import hk.ljx.fishaicode.service.UserService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.validation.annotation.Validated;
@@ -55,7 +56,7 @@ public class ChatHistoryController {
     @GetMapping("/latest")
     public BaseResponse<List<ChatHistory>> listLatestChatHistory(
             @NotNull(message = "应用 ID 不能为空") @Min(value = 1, message = "应用 ID 不合法") @RequestParam("appId") Long appId,
-            @RequestParam(value = "limit", defaultValue = "10") int limit,
+            @RequestParam(value = "limit", defaultValue = "10") @Min(value = 1, message = "limit 至少为 1") @Max(value = 20, message = "limit 最多为 20") int limit,
             HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
         App app = appService.getById(appId);
@@ -80,7 +81,7 @@ public class ChatHistoryController {
     public BaseResponse<List<ChatHistory>> listChatHistoryBefore(
             @NotNull(message = "应用 ID 不能为空") @Min(value = 1, message = "应用 ID 不合法") @RequestParam("appId") Long appId,
             @NotNull(message = "游标时间不能为空") @RequestParam("before") LocalDateTime before,
-            @RequestParam(value = "limit", defaultValue = "10") int limit,
+            @RequestParam(value = "limit", defaultValue = "10") @Min(value = 1, message = "limit 至少为 1") @Max(value = 20, message = "limit 最多为 20") int limit,
             HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
         App app = appService.getById(appId);

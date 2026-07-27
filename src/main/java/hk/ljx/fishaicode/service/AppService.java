@@ -9,6 +9,7 @@ import hk.ljx.fishaicode.modal.dto.app.AppQueryRequest;
 import hk.ljx.fishaicode.modal.entity.App;
 import hk.ljx.fishaicode.modal.entity.User;
 import hk.ljx.fishaicode.modal.vo.AppVO;
+import hk.ljx.fishaicode.modal.vo.PublicAppVO;
 import org.springframework.http.codec.ServerSentEvent;
 import reactor.core.publisher.Flux;
 
@@ -75,7 +76,7 @@ public interface AppService extends IService<App> {
      * @param appQueryRequest 查询请求
      * @return 分页结果
      */
-    Page<AppVO> listFeaturedAppsByPage(AppQueryRequest appQueryRequest);
+    Page<PublicAppVO> listFeaturedAppsByPage(AppQueryRequest appQueryRequest);
 
     /**
      * 管理员分页查询应用列表
@@ -125,6 +126,22 @@ public interface AppService extends IService<App> {
      * @return 应用视图对象列表
      */
     List<AppVO> getAppVOList(List<App> appList);
+
+    /**
+     * 获取公开展示的应用视图对象。
+     *
+     * @param app 应用
+     * @return 不包含内部字段的公开视图对象
+     */
+    PublicAppVO getPublicAppVO(App app);
+
+    /**
+     * 获取公开展示的应用视图对象列表。
+     *
+     * @param appList 应用列表
+     * @return 公开视图对象列表
+     */
+    List<PublicAppVO> getPublicAppVOList(List<App> appList);
 
     /**
      * 对话生成应用

@@ -7,7 +7,7 @@ import { createApp, listFeaturedApps } from '@/api/app';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useTitle } from '@/hooks/useTitle';
 import logoUrl from '@/assets/logo.png';
-import type { AppVO, AppQueryRequest } from '@/api/types';
+import type { PublicAppVO, AppQueryRequest } from '@/api/types';
 
 const { Title, Paragraph, Text } = Typography;
 const { TextArea } = Input;
@@ -56,7 +56,7 @@ export default function Home() {
   const [searchParams] = useSearchParams();
   const { loginUser } = useAuthStore();
   const { message } = App.useApp();
-  const [apps, setApps] = useState<AppVO[]>([]);
+  const [apps, setApps] = useState<PublicAppVO[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState<AppQueryRequest>({ pageNum: 1, pageSize: 12 });
@@ -212,18 +212,7 @@ export default function Home() {
                   <AppCard
                     app={app}
                     showActions={false}
-                    onOpen={(a) => {
-                      const chatPath = `/app/${a.id}/chat`;
-                      if (!loginUser) {
-                        navigate(`/login?redirect=${encodeURIComponent(chatPath)}`);
-                        return;
-                      }
-                      if (loginUser.id === a.userId || loginUser.userRole === 'admin') {
-                        navigate(chatPath);
-                        return;
-                      }
-                      message.warning('只能打开自己创建的应用');
-                    }}
+                    onOpen={() => message.info('精选应用仅供公开展示，请创建自己的应用后继续编辑')}
                   />
                 </Col>
               ))}

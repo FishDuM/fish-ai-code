@@ -5,15 +5,15 @@ import cn.hutool.json.JSONObject;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.agent.tool.ToolMemoryId;
-import hk.ljx.fishaicode.constant.AppConstant;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.nio.charset.StandardCharsets;
 
 /**
  * 文件写入工具
@@ -22,6 +22,11 @@ import java.nio.file.StandardOpenOption;
 @Slf4j
 @Component
 public class FileWriteTool extends BaseTool{
+
+    private static final int MAX_CONTENT_SIZE_BYTES = 1024 * 1024;
+
+    @Resource
+    private ProjectPathResolver projectPathResolver;
 
     @Tool("写入文件到指定路径")
     public String writeFile(
@@ -32,29 +37,23 @@ public class FileWriteTool extends BaseTool{
             @ToolMemoryId Long appId
     ) {
         try {
-            Path path = Paths.get(relativeFilePath);
-            if (!path.isAbsolute()) {
-                // 相对路径处理，创建基于 appId 的项目目录
-                String projectDirName = "vue_project_" + appId;
-                Path projectRoot = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, projectDirName);
-                path = projectRoot.resolve(relativeFilePath);
+            if (content == null || content.getBytes(StandardCharsets.UTF_8).length > MAX_CONTENT_SIZE_BYTES) {
+                return "错误：文件内容超过 1 MB";
             }
-            // 创建父目录（如果不存在）
-            Path parentDir = path.getParent();
-            if (parentDir != null) {
-                Files.createDirectories(parentDir);
-            }
+            Path path = projectPathResolver.resolveWritableFile(appId, relativeFilePath);
             // 写入文件内容
-            Files.write(path, content.getBytes(),
+            Files.write(path, content.getBytes(StandardCharsets.UTF_8),
                     StandardOpenOption.CREATE,
                     StandardOpenOption.TRUNCATE_EXISTING);
-            log.info("成功写入文件: {}", path.toAbsolutePath());
+            log.info("成功写入项目文件: {}", relativeFilePath);
             // 注意要返回相对路径，不能让 AI 把文件绝对路径返回给用户
             return "文件写入成功: " + relativeFilePath;
+        } catch (IllegalArgumentException e) {
+            log.warn("拒绝写入项目外文件: {}", relativeFilePath);
+            return "错误：文件路径不合法 - " + relativeFilePath;
         } catch (IOException e) {
-            String errorMessage = "文件写入失败: " + relativeFilePath + ", 错误: " + e.getMessage();
-            log.error(errorMessage, e);
-            return errorMessage;
+            log.error("写入项目文件失败: {}", relativeFilePath, e);
+            return "错误：文件写入失败 - " + relativeFilePath;
         }
     }
 
@@ -81,4 +80,3 @@ public class FileWriteTool extends BaseTool{
                         """, getDisplayName(), relativeFilePath, suffix, content);
     }
 }
-

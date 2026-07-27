@@ -16,6 +16,7 @@ import hk.ljx.fishaicode.modal.dto.app.*;
 import hk.ljx.fishaicode.modal.entity.App;
 import hk.ljx.fishaicode.modal.entity.User;
 import hk.ljx.fishaicode.modal.vo.AppVO;
+import hk.ljx.fishaicode.modal.vo.PublicAppVO;
 import hk.ljx.fishaicode.ratelimit.annotation.RateLimit;
 import hk.ljx.fishaicode.ratelimit.enums.RateLimitType;
 import hk.ljx.fishaicode.service.AppService;
@@ -106,12 +107,12 @@ public class AppController {
      */
     @GetMapping("/get/vo")
     public BaseResponse<AppVO> getAppVOById(@Min(value = 1, message = "id 不合法") long id, HttpServletRequest request) {
-//        User loginUser = userService.getLoginUser(request);
+        User loginUser = userService.getLoginUser(request);
         App app = appService.getById(id);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR);
-//        boolean isOwner = app.getUserId().equals(loginUser.getId());
-//        boolean isAdmin = UserConstant.ADMIN_ROLE.equals(loginUser.getUserRole());
-//        ThrowUtils.throwIf(!isOwner && !isAdmin, ErrorCode.NO_AUTH_ERROR, "没有权限访问该应用");
+        boolean isOwner = app.getUserId().equals(loginUser.getId());
+        boolean isAdmin = UserConstant.ADMIN_ROLE.equals(loginUser.getUserRole());
+        ThrowUtils.throwIf(!isOwner && !isAdmin, ErrorCode.NO_AUTH_ERROR, "没有权限访问该应用");
         return ResultUtils.success(appService.getAppVO(app));
     }
 
@@ -138,12 +139,12 @@ public class AppController {
      */
     @PostMapping("/list/featured/vo")
     @Cacheable(
-            value = "good_app_page",
+            value = "public_good_app_page",
             key = "T(hk.ljx.fishaicode.utils.CacheKeyUtils).generateKey(#appQueryRequest)",
             condition = "#appQueryRequest.pageNum <= 10"
     )
-    public BaseResponse<Page<AppVO>> listFeaturedAppsByPage(@Valid @RequestBody AppQueryRequest appQueryRequest) {
-        Page<AppVO> result = appService.listFeaturedAppsByPage(appQueryRequest);
+    public BaseResponse<Page<PublicAppVO>> listFeaturedAppsByPage(@Valid @RequestBody AppQueryRequest appQueryRequest) {
+        Page<PublicAppVO> result = appService.listFeaturedAppsByPage(appQueryRequest);
         return ResultUtils.success(result);
     }
 

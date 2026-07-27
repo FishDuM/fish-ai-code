@@ -4,15 +4,15 @@ import cn.hutool.json.JSONObject;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.agent.tool.ToolMemoryId;
-import hk.ljx.fishaicode.constant.AppConstant;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.nio.charset.StandardCharsets;
 
 /**
  * 文件修改工具
@@ -21,6 +21,11 @@ import java.nio.file.StandardOpenOption;
 @Slf4j
 @Component
 public class FileModifyTool extends BaseTool {
+
+    private static final long MAX_FILE_SIZE_BYTES = 1024 * 1024;
+
+    @Resource
+    private ProjectPathResolver projectPathResolver;
 
     @Tool("修改文件内容，用新内容替换指定的旧内容")
     public String modifyFile(
@@ -33,30 +38,33 @@ public class FileModifyTool extends BaseTool {
             @ToolMemoryId Long appId
     ) {
         try {
-            Path path = Paths.get(relativeFilePath);
-            if (!path.isAbsolute()) {
-                String projectDirName = "vue_project_" + appId;
-                Path projectRoot = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, projectDirName);
-                path = projectRoot.resolve(relativeFilePath);
+            if (oldContent == null || newContent == null || newContent.getBytes(StandardCharsets.UTF_8).length > MAX_FILE_SIZE_BYTES) {
+                return "错误：替换内容不合法或超过 1 MB";
             }
-            if (!Files.exists(path) || !Files.isRegularFile(path)) {
-                return "错误：文件不存在或不是文件 - " + relativeFilePath;
+            Path path = projectPathResolver.resolveExistingFile(appId, relativeFilePath);
+            if (Files.size(path) > MAX_FILE_SIZE_BYTES) {
+                return "错误：文件过大，无法修改 - " + relativeFilePath;
             }
             String originalContent = Files.readString(path);
             if (!originalContent.contains(oldContent)) {
                 return "警告：文件中未找到要替换的内容，文件未修改 - " + relativeFilePath;
             }
             String modifiedContent = originalContent.replace(oldContent, newContent);
+            if (modifiedContent.getBytes(StandardCharsets.UTF_8).length > MAX_FILE_SIZE_BYTES) {
+                return "错误：修改后的文件超过 1 MB - " + relativeFilePath;
+            }
             if (originalContent.equals(modifiedContent)) {
                 return "信息：替换后文件内容未发生变化 - " + relativeFilePath;
             }
             Files.writeString(path, modifiedContent, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-            log.info("成功修改文件: {}", path.toAbsolutePath());
+            log.info("成功修改项目文件: {}", relativeFilePath);
             return "文件修改成功: " + relativeFilePath;
+        } catch (IllegalArgumentException e) {
+            log.warn("拒绝修改项目外文件: {}", relativeFilePath);
+            return "错误：文件路径不合法 - " + relativeFilePath;
         } catch (IOException e) {
-            String errorMessage = "修改文件失败: " + relativeFilePath + ", 错误: " + e.getMessage();
-            log.error(errorMessage, e);
-            return errorMessage;
+            log.error("修改项目文件失败: {}", relativeFilePath, e);
+            return "错误：文件不存在、不可修改或过大 - " + relativeFilePath;
         }
     }
 

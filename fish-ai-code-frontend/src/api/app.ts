@@ -5,6 +5,7 @@ import api from './index';
 import type {
   BaseResponse,
   AppVO,
+  PublicAppVO,
   App,
   AppAddRequest,
   AppUpdateRequest,
@@ -57,8 +58,8 @@ export async function listMyApps(params: AppQueryRequest): Promise<PageResult<Ap
   return res.data.data;
 }
 
-export async function listFeaturedApps(params: AppQueryRequest): Promise<PageResult<AppVO>> {
-  const res = await api.post<BaseResponse<PageResult<AppVO>>>('/app/list/featured/vo', params);
+export async function listFeaturedApps(params: AppQueryRequest): Promise<PageResult<PublicAppVO>> {
+  const res = await api.post<BaseResponse<PageResult<PublicAppVO>>>('/app/list/featured/vo', params);
   return res.data.data;
 }
 

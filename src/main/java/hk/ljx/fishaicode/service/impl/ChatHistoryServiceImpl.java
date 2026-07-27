@@ -90,7 +90,7 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
     public List<ChatHistory> listChatHistoryBefore(Long appId, LocalDateTime before, int limit) {
         ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
         ThrowUtils.throwIf(before == null, ErrorCode.PARAMS_ERROR, "游标时间不能为空");
-        limit = Math.min(Math.max(limit, 1), 50);
+        limit = Math.min(Math.max(limit, 1), 20);
         // 降序取 limit 条，再反转为正序返回（比子查询更高效）
         QueryWrapper queryWrapper = QueryWrapper.create()
                 .eq("appId", appId)
@@ -105,6 +105,7 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
     @Override
     public List<ChatHistory> listLatestChatHistory(Long appId, int limit) {
         ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
+        limit = Math.min(Math.max(limit, 1), 20);
         // 查询最新的 limit 条（降序），然后在内存中反转为正序
         QueryWrapper queryWrapper = QueryWrapper.create()
                 .eq("appId", appId)
