@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router';
+import { Button, Result } from 'antd';
 import { useAuthStore } from '@/stores/useAuthStore';
 
 export function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { loginUser, isFetched, fetchLoginUser } = useAuthStore();
+  const { loginUser, isFetched, authUnavailable, fetchLoginUser } = useAuthStore();
   const location = useLocation();
 
   useEffect(() => {
@@ -15,6 +16,17 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
   // 鉴权 fetch 完成前先渲染 null，避免未登录用户先看到受保护页一帧再被重定向
   if (!isFetched) {
     return null;
+  }
+
+  if (authUnavailable) {
+    return (
+      <Result
+        status="warning"
+        title="暂时无法验证登录状态"
+        subTitle="请检查网络或后端服务后重试。"
+        extra={<Button type="primary" onClick={() => fetchLoginUser()}>重试</Button>}
+      />
+    );
   }
 
   // 鉴权完成后再判定：未登录去登录页，否则直接渲染 children

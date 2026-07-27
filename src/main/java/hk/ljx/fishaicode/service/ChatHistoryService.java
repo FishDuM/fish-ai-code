@@ -34,11 +34,12 @@ public interface ChatHistoryService extends IService<ChatHistory> {
      * 游标分页：获取某个应用在指定时间之前的消息（按时间正序返回）
      *
      * @param appId  应用 id
-     * @param before 游标时间（获取此时间之前的消息）
+     * @param before 游标时间
+     * @param beforeId 同一时间下的游标消息 ID，可为空以兼容旧客户端
      * @param limit  条数
      * @return 消息列表（时间正序）
      */
-    List<ChatHistory> listChatHistoryBefore(Long appId, LocalDateTime before, int limit);
+    List<ChatHistory> listChatHistoryBefore(Long appId, LocalDateTime before, Long beforeId, int limit);
 
     /**
      * 查询某个应用最新的 N 条消息（按时间正序返回）

@@ -1,6 +1,7 @@
 package hk.ljx.fishaicode.controller;
 
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.mybatisflex.core.paginate.Page;
 import hk.ljx.fishaicode.ai.AiCodeGenTypeRoutingService;
 import hk.ljx.fishaicode.annotation.AuthCheck;
@@ -9,6 +10,7 @@ import hk.ljx.fishaicode.common.DeleteRequest;
 import hk.ljx.fishaicode.common.ResultUtils;
 import hk.ljx.fishaicode.constant.AppConstant;
 import hk.ljx.fishaicode.constant.UserConstant;
+import hk.ljx.fishaicode.core.GenerationCoordinator;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.exception.ThrowUtils;
@@ -31,11 +33,13 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.MediaType;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 
 import java.io.File;
+import java.util.Map;
 
 /**
  * 应用 控制层。
@@ -55,6 +59,9 @@ public class AppController {
 
     @Resource
     private ProjectDownloadService projectDownloadService;
+
+    @Resource
+    private GenerationCoordinator generationCoordinator;
 
     /**
      * 创建应用
@@ -157,12 +164,47 @@ public class AppController {
      */
     @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @RateLimit(key = "app", rate = 10, rateInterval = 60, limitType = RateLimitType.USER, message = "当前还在内测阶段，AI服务一分钟只能请求一次哦~")
-    public Flux<String> chatToGenCode(
+    public Flux<ServerSentEvent<String>> chatToGenCode(
             @NotNull(message = "应用 ID 不能为空") @Min(value = 1, message = "应用 ID 不合法") @RequestParam("appId") Long appId,
             @NotBlank(message = "消息内容不能为空") @RequestParam("message") String message,
             HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
-        return appService.chatToGenCode(appId, message, loginUser);
+        return appService.chatToGenCode(appId, message, loginUser)
+                .map(content -> ServerSentEvent.builder(content).build())
+                // 流已开始后，异常处理器不能可靠地再写入 HTTP 响应；统一为前端可识别的 SSE 事件。
+                .onErrorResume(error -> {
+                    int code = ErrorCode.SYSTEM_ERROR.getCode();
+                    String errorMessage = "生成失败，请稍后重试";
+                    if (error instanceof BusinessException businessException) {
+                        code = businessException.getCode();
+                        errorMessage = businessException.getMessage();
+                    }
+                    String data = JSONUtil.toJsonStr(Map.of(
+                            "error", true,
+                            "code", code,
+                            "message", errorMessage
+                    ));
+                    return Flux.just(ServerSentEvent.<String>builder(data)
+                            .event("business-error")
+                            .build());
+                });
+    }
+
+    /**
+     * 查询当前用户应用的生成状态。客户端主动停止接收 SSE 后，模型仍会在后台完成，
+     * 因此需要该接口来防止用户过早发起下一次生成、下载或部署。
+     */
+    @GetMapping("/generation/status")
+    public BaseResponse<Boolean> getGenerationStatus(
+            @NotNull(message = "应用 ID 不能为空") @Min(value = 1, message = "应用 ID 不合法") @RequestParam("appId") Long appId,
+            HttpServletRequest request) {
+        User loginUser = userService.getLoginUser(request);
+        App app = appService.getById(appId);
+        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        boolean isOwner = app.getUserId().equals(loginUser.getId());
+        boolean isAdmin = UserConstant.ADMIN_ROLE.equals(loginUser.getUserRole());
+        ThrowUtils.throwIf(!isOwner && !isAdmin, ErrorCode.NO_AUTH_ERROR, "没有权限访问该应用");
+        return ResultUtils.success(generationCoordinator.isBusy(appId));
     }
 
     /**
@@ -260,14 +302,16 @@ public class AppController {
         if (!app.getUserId().equals(loginUser.getId())) {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "无权限下载该应用代码");
         }
-        String codeGenType = app.getCodeGenType();
-        String sourceDirName = codeGenType + "_" + appId;
-        String sourceDirPath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + sourceDirName;
-        File sourceDir = new File(sourceDirPath);
-        ThrowUtils.throwIf(!sourceDir.exists() || !sourceDir.isDirectory(),
-                ErrorCode.NOT_FOUND_ERROR, "应用代码不存在，请先生成代码");
-        String downloadFileName = String.valueOf(appId);
-        projectDownloadService.downloadProjectAsZip(sourceDirPath, downloadFileName, response);
+        generationCoordinator.executeExclusively(appId, () -> {
+            String codeGenType = app.getCodeGenType();
+            String sourceDirName = codeGenType + "_" + appId;
+            String sourceDirPath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + sourceDirName;
+            File sourceDir = new File(sourceDirPath);
+            ThrowUtils.throwIf(!sourceDir.exists() || !sourceDir.isDirectory(),
+                    ErrorCode.NOT_FOUND_ERROR, "应用代码不存在，请先生成代码");
+            projectDownloadService.downloadProjectAsZip(sourceDirPath, String.valueOf(appId), response);
+            return null;
+        });
     }
 
 }

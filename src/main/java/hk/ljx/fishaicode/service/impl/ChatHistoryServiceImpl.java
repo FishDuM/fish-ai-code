@@ -56,6 +56,7 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
             QueryWrapper queryWrapper = QueryWrapper.create()
                     .eq(ChatHistory::getAppId, appId)
                     .orderBy(ChatHistory::getCreateTime, false)
+                    .orderBy(ChatHistory::getId, false)
                     .limit(1, maxCount);
             List<ChatHistory> historyList = this.list(queryWrapper);
             if (CollUtil.isEmpty(historyList)) {
@@ -87,19 +88,31 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
 
 
     @Override
-    public List<ChatHistory> listChatHistoryBefore(Long appId, LocalDateTime before, int limit) {
+    public List<ChatHistory> listChatHistoryBefore(Long appId, LocalDateTime before, Long beforeId, int limit) {
         ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
         ThrowUtils.throwIf(before == null, ErrorCode.PARAMS_ERROR, "游标时间不能为空");
         limit = Math.min(Math.max(limit, 1), 20);
-        // 降序取 limit 条，再反转为正序返回（比子查询更高效）
-        QueryWrapper queryWrapper = QueryWrapper.create()
-                .eq("appId", appId)
-                .lt("createTime", before)
-                .orderBy("createTime", false)
-                .limit(limit);
-        List<ChatHistory> list = this.list(queryWrapper);
-        java.util.Collections.reverse(list);
-        return list;
+        List<ChatHistory> descending = new java.util.ArrayList<>(limit);
+        if (beforeId != null) {
+            // 先取同一秒内、ID 更小的记录，再取更早时间的记录，避免分页边界漏消息。
+            descending.addAll(this.list(QueryWrapper.create()
+                    .eq("appId", appId)
+                    .eq("createTime", before)
+                    .lt("id", beforeId)
+                    .orderBy("id", false)
+                    .limit(limit)));
+        }
+        int remaining = limit - descending.size();
+        if (remaining > 0) {
+            descending.addAll(this.list(QueryWrapper.create()
+                    .eq("appId", appId)
+                    .lt("createTime", before)
+                    .orderBy("createTime", false)
+                    .orderBy("id", false)
+                    .limit(remaining)));
+        }
+        java.util.Collections.reverse(descending);
+        return descending;
     }
 
     @Override
@@ -110,6 +123,7 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
         QueryWrapper queryWrapper = QueryWrapper.create()
                 .eq("appId", appId)
                 .orderBy("createTime", false)
+                .orderBy("id", false)
                 .limit(limit);
         List<ChatHistory> list = this.list(queryWrapper);
         // 反转为时间正序（旧消息在前，新消息在后）

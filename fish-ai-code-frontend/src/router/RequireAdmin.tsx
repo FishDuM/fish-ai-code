@@ -5,7 +5,7 @@ import { useAuthStore } from '@/stores/useAuthStore';
 import { USER_ROLES } from '@/constants';
 
 export function RequireAdmin({ children }: { children: React.ReactNode }) {
-  const { loginUser, isFetched, fetchLoginUser } = useAuthStore();
+  const { loginUser, isFetched, authUnavailable, fetchLoginUser } = useAuthStore();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -18,6 +18,17 @@ export function RequireAdmin({ children }: { children: React.ReactNode }) {
   // 鉴权 fetch 完成前先渲染 null，避免非 admin 先看到 AdminLayout 一帧再被换为 403
   if (!isFetched) {
     return null;
+  }
+
+  if (authUnavailable) {
+    return (
+      <Result
+        status="warning"
+        title="暂时无法验证登录状态"
+        subTitle="请检查网络或后端服务后重试。"
+        extra={<Button type="primary" onClick={() => fetchLoginUser()}>重试</Button>}
+      />
+    );
   }
 
   if (!loginUser) {

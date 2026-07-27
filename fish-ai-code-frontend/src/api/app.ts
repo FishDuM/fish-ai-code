@@ -53,6 +53,12 @@ export async function getAppVO(id: string): Promise<AppVO> {
   return res.data.data;
 }
 
+/** Whether this app still has a background generation/deployment task holding its project lock. */
+export async function getGenerationStatus(appId: string): Promise<boolean> {
+  const res = await api.get<BaseResponse<boolean>>('/app/generation/status', { params: { appId } });
+  return res.data.data;
+}
+
 export async function listMyApps(params: AppQueryRequest): Promise<PageResult<AppVO>> {
   const res = await api.post<BaseResponse<PageResult<AppVO>>>('/app/list/page/vo', params);
   return res.data.data;

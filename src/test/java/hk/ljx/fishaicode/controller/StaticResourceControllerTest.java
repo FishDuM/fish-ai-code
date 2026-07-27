@@ -61,6 +61,11 @@ class StaticResourceControllerTest {
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals("console.log('preview');", response.getBody().getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
+        assertEquals("default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+                        + "img-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; "
+                        + "media-src 'none'; object-src 'none'; worker-src 'none'; base-uri 'none'; "
+                        + "form-action 'none'; frame-ancestors 'self'",
+                response.getHeaders().getFirst("Content-Security-Policy"));
     }
 
     @Test

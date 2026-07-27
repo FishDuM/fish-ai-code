@@ -12,6 +12,7 @@ import hk.ljx.fishaicode.ai.AiCodeGenTypeRoutingService;
 import hk.ljx.fishaicode.ai.AiCodeGenTypeRoutingServiceFactory;
 import hk.ljx.fishaicode.constant.AppConstant;
 import hk.ljx.fishaicode.core.AiCodeGeneratorFacade;
+import hk.ljx.fishaicode.core.GenerationCoordinator;
 import hk.ljx.fishaicode.core.builder.VueProjectBuilder;
 import hk.ljx.fishaicode.core.handler.StreamHandlerExecutor;
 import hk.ljx.fishaicode.exception.BusinessException;
@@ -71,6 +72,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     @Resource
     private WorkflowService workflowService;
+
+    @Resource
+    private GenerationCoordinator generationCoordinator;
 
 
     @Override
@@ -355,28 +359,27 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (enumByValue == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR ,"应用代码生成类型错误");
         }
-        // 5、保存用户消息到对话历史
-        chatHistoryService.addChatHistory(appId, loginUser.getId(), message, MessageTypeEnum.USER.getValue());
-        // 6、工作流前置处理：图片收集 + 提示词增强
-        String enhancedMessage = workflowService.enhancePrompt(message);
-        log.info("提示词增强完成（增强前长度:{} → 增强后长度:{}）", message.length(), enhancedMessage.length());
-        // 7、使用增强后的提示词调用代码生成接口
-        Flux<String> stringFlux = aiCodeGeneratorFacade.generateAndSaveCodeStream(enhancedMessage, enumByValue, appId)
-                .doOnComplete(() -> {
-                    // 8、流完成后异步执行代码质量检查
-                    String codeDir = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + codeGenType + "_" + appId;
-                    try {
-                        var qualityResult = workflowService.runQualityCheck(codeDir);
-                        if (qualityResult != null) {
-                            log.info("代码质量检查完成 - 通过: {}, 错误数: {}",
-                                    qualityResult.getIsValid(),
-                                    qualityResult.getErrors() != null ? qualityResult.getErrors().size() : 0);
+        return generationCoordinator.execute(appId, () -> {
+            // 锁获取成功后才持久化用户消息和调用模型，避免重复请求写入两份历史记录。
+            chatHistoryService.addChatHistory(appId, loginUser.getId(), message, MessageTypeEnum.USER.getValue());
+            String enhancedMessage = workflowService.enhancePrompt(message);
+            log.info("提示词增强完成（增强前长度:{} → 增强后长度:{}）", message.length(), enhancedMessage.length());
+            Flux<String> stringFlux = aiCodeGeneratorFacade.generateAndSaveCodeStream(enhancedMessage, enumByValue, appId);
+            return streamHandlerExecutor.doExecute(stringFlux, chatHistoryService, appId, loginUser, enumByValue)
+                    .doOnComplete(() -> {
+                        String codeDir = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + codeGenType + "_" + appId;
+                        try {
+                            var qualityResult = workflowService.runQualityCheck(codeDir);
+                            if (qualityResult != null) {
+                                log.info("代码质量检查完成 - 通过: {}, 错误数: {}",
+                                        qualityResult.getIsValid(),
+                                        qualityResult.getErrors() != null ? qualityResult.getErrors().size() : 0);
+                            }
+                        } catch (Exception e) {
+                            log.warn("代码质量检查异常（不影响已生成的代码）: {}", e.getMessage(), e);
                         }
-                    } catch (Exception e) {
-                        log.warn("代码质量检查异常（不影响已生成的代码）: {}", e.getMessage(), e);
-                    }
-                });
-        return streamHandlerExecutor.doExecute(stringFlux, chatHistoryService, appId, loginUser, enumByValue);
+                    });
+        });
     }
 
     @Override
@@ -384,6 +387,13 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         // 1、参数校验
         ThrowUtils.throwIf(appId == null || appId < 0, ErrorCode.PARAMS_ERROR, "应用ID不能为空");
         ThrowUtils.throwIf(loginUser == null, ErrorCode.NOT_LOGIN_ERROR, "用户未登录");
+        return generationCoordinator.executeExclusively(appId, () -> deployAppWithProjectLock(appId, loginUser));
+    }
+
+    /**
+     * 在应用生成锁已持有时执行部署，避免复制到正在被 AI 修改的半成品目录。
+     */
+    private String deployAppWithProjectLock(Long appId, User loginUser) {
         // 2、查询应用信息
         App app = this.getById(appId);
         ThrowUtils.throwIf(app == null, ErrorCode.PARAMS_ERROR, "应用不存在");

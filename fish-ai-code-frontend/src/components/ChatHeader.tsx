@@ -15,6 +15,7 @@ interface ChatHeaderProps {
   appName: string;
   isOwner: boolean;
   showPreview: boolean;
+  isStreaming: boolean;
   deploying: boolean;
   onDeploy: () => void;
   onDownload: () => void;
@@ -22,7 +23,7 @@ interface ChatHeaderProps {
   onDelete: () => void;
 }
 
-function ChatHeader({ appName, isOwner, showPreview, deploying, onDeploy, onDownload, onRename, onDelete }: ChatHeaderProps) {
+function ChatHeader({ appName, isOwner, showPreview, isStreaming, deploying, onDeploy, onDownload, onRename, onDelete }: ChatHeaderProps) {
   const navigate = useNavigate();
   const displayAppName = appName || '未命名应用';
 
@@ -52,14 +53,14 @@ function ChatHeader({ appName, isOwner, showPreview, deploying, onDeploy, onDown
               icon={<CloudUploadOutlined />}
               onClick={onDeploy}
               loading={deploying}
-              disabled={!showPreview}
+              disabled={!showPreview || isStreaming}
             >
               部署
             </Button>
             <Button
               icon={<DownloadOutlined />}
               onClick={onDownload}
-              disabled={!showPreview}
+              disabled={!showPreview || isStreaming}
             >
               下载代码
             </Button>

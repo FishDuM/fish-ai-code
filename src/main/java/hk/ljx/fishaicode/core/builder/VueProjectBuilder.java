@@ -47,22 +47,32 @@ public class VueProjectBuilder {
      */
     public void buildProjectAsync(String projectPath) {
         Thread.ofVirtual().name("vue-builder-" + System.currentTimeMillis()).start(() -> {
-            try {
-                for (int attempt = 1; attempt <= PROJECT_READY_MAX_ATTEMPTS; attempt++) {
-                    if (isProjectReady(projectPath)) {
-                        buildProject(projectPath);
-                        return;
-                    }
-                    if (attempt < PROJECT_READY_MAX_ATTEMPTS) {
-                        log.info("等待 Vue 项目文件落盘（第 {}/{} 次）", attempt, PROJECT_READY_MAX_ATTEMPTS);
-                        Thread.sleep(1000);
-                    }
-                }
-                log.error("Vue 项目文件未在 {} 秒内生成，跳过构建", PROJECT_READY_MAX_ATTEMPTS - 1);
-            } catch (Exception e) {
-                log.error("异步构建 Vue 项目时发生异常", e);
-            }
+            buildProjectWhenReady(projectPath);
         });
+    }
+
+    /**
+     * 等待 AI 工具将项目文件落盘后构建，返回结果供调用方决定是否结束生成 SSE。
+     */
+    public boolean buildProjectWhenReady(String projectPath) {
+        try {
+            for (int attempt = 1; attempt <= PROJECT_READY_MAX_ATTEMPTS; attempt++) {
+                if (isProjectReady(projectPath)) {
+                    return buildProject(projectPath);
+                }
+                if (attempt < PROJECT_READY_MAX_ATTEMPTS) {
+                    log.info("等待 Vue 项目文件落盘（第 {}/{} 次）", attempt, PROJECT_READY_MAX_ATTEMPTS);
+                    Thread.sleep(1000);
+                }
+            }
+            log.error("Vue 项目文件未在 {} 秒内生成，跳过构建", PROJECT_READY_MAX_ATTEMPTS - 1);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("等待 Vue 项目文件时被中断", e);
+        } catch (Exception e) {
+            log.error("构建 Vue 项目时发生异常", e);
+        }
+        return false;
     }
 
     private boolean isProjectReady(String projectPath) {

@@ -13,6 +13,7 @@ interface ProjectFile {
 interface VueProjectViewerProps {
   files: ProjectFile[];
   deploying: boolean;
+  isStreaming: boolean;
   onDeploy: () => void;
 }
 
@@ -20,7 +21,7 @@ interface VueProjectViewerProps {
  * Vue 工程文件查看器
  * 左侧文件树，右侧文件内容预览
  */
-export default function VueProjectViewer({ files, deploying, onDeploy }: VueProjectViewerProps) {
+export default function VueProjectViewer({ files, deploying, isStreaming, onDeploy }: VueProjectViewerProps) {
   // 记录用户最近一次点击的文件路径。实际显示哪一个由下面的 `displayFile`
   // 派生决定 —— 这样"选中文件被删除时回退到第一个"完全靠 render-time 计算，
   // 不再需要 useEffect 里 setState 触发（消除 react-hooks/set-state-in-effect
@@ -124,6 +125,7 @@ export default function VueProjectViewer({ files, deploying, onDeploy }: VueProj
           icon={<CloudUploadOutlined />}
           onClick={onDeploy}
           loading={deploying}
+          disabled={isStreaming}
         >
           部署预览
         </Button>

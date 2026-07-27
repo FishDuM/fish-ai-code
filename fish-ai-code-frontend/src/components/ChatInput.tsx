@@ -4,11 +4,12 @@ import { SendOutlined } from '@ant-design/icons';
 
 interface ChatInputProps {
   isStreaming: boolean;
+  isBackgroundGenerating: boolean;
   onSend: (text: string) => void;
   onCancel: () => void;
 }
 
-function ChatInputInner({ isStreaming, onSend, onCancel }: ChatInputProps) {
+function ChatInputInner({ isStreaming, isBackgroundGenerating, onSend, onCancel }: ChatInputProps) {
   const [value, setValue] = useState('');
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -37,14 +38,20 @@ function ChatInputInner({ isStreaming, onSend, onCancel }: ChatInputProps) {
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={isStreaming ? 'AI 正在生成中...' : '描述你想要的网站... (Enter 发送, Shift+Enter 换行)'}
+          placeholder={isStreaming
+            ? 'AI 正在生成中...'
+            : isBackgroundGenerating
+              ? '后台正在完成上一轮生成，请稍候...'
+              : '描述你想要的网站... (Enter 发送, Shift+Enter 换行)'}
           autoSize={{ minRows: 1, maxRows: 4 }}
-          disabled={isStreaming}
+          disabled={isStreaming || isBackgroundGenerating}
         />
         {isStreaming ? (
           <Button danger onClick={onCancel}>
             停止
           </Button>
+        ) : isBackgroundGenerating ? (
+          <Button disabled>后台处理中</Button>
         ) : (
           <Button
             className="btn-gradient"

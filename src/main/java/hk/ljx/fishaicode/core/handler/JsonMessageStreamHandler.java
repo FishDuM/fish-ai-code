@@ -8,6 +8,8 @@ import hk.ljx.fishaicode.ai.tools.BaseTool;
 import hk.ljx.fishaicode.ai.tools.ToolManager;
 import hk.ljx.fishaicode.constant.AppConstant;
 import hk.ljx.fishaicode.core.builder.VueProjectBuilder;
+import hk.ljx.fishaicode.exception.BusinessException;
+import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.modal.entity.User;
 import hk.ljx.fishaicode.modal.enums.MessageTypeEnum;
 import hk.ljx.fishaicode.service.ChatHistoryService;
@@ -46,29 +48,37 @@ public class JsonMessageStreamHandler {
     public Flux<String> handle(Flux<String> originFlux,
                                ChatHistoryService chatHistoryService,
                                long appId, User loginUser) {
-        // 收集数据用于生成后端记忆格式
-        StringBuilder chatHistoryStringBuilder = new StringBuilder();
-        // 用于跟踪已经见过的工具ID，判断是否是第一次调用
-        Set<String> seenToolIds = new HashSet<>();
-        return originFlux
-                .map(chunk -> {
-                    // 解析每个 JSON 消息块
-                    return handleJsonMessageChunk(chunk, chatHistoryStringBuilder, seenToolIds);
-                })
-                .filter(StrUtil::isNotEmpty) // 过滤空字串
-                .doOnComplete(() -> {
-                    // 流式响应完成后，添加 AI 消息到对话历史
-                    String aiResponse = chatHistoryStringBuilder.toString();
-                    chatHistoryService.addChatHistory(appId, loginUser.getId(), aiResponse, MessageTypeEnum.AI.getValue());
-                    // 异步构造 Vue 项目
-                    String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/vue_project_" + appId;
-                    vueProjectBuilder.buildProjectAsync(projectPath);
-                })
-                .doOnError(error -> {
-                    // 如果AI回复失败，也要记录错误消息
-                    String errorMessage = "AI回复失败: " + error.getMessage();
-                    chatHistoryService.addChatHistory(appId, loginUser.getId(), errorMessage, MessageTypeEnum.AI.getValue());
-                });
+        return Flux.create(sink -> {
+            StringBuilder chatHistoryStringBuilder = new StringBuilder();
+            Set<String> seenToolIds = new HashSet<>();
+            originFlux.subscribe(
+                    chunk -> {
+                        String output = handleJsonMessageChunk(chunk, chatHistoryStringBuilder, seenToolIds);
+                        if (StrUtil.isNotEmpty(output)) {
+                            sink.next(output);
+                        }
+                    },
+                    error -> {
+                        String errorMessage = "AI回复失败: " + error.getMessage();
+                        chatHistoryService.addChatHistory(appId, loginUser.getId(), errorMessage, MessageTypeEnum.AI.getValue());
+                        sink.error(error);
+                    },
+                    () -> {
+                        String aiResponse = chatHistoryStringBuilder.toString();
+                        chatHistoryService.addChatHistory(appId, loginUser.getId(), aiResponse, MessageTypeEnum.AI.getValue());
+                        // 必须等构建成功，才允许向客户端结束生成流。
+                        Thread.ofVirtual().name("vue-build-result-" + appId).start(() -> {
+                            String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/vue_project_" + appId;
+                            if (vueProjectBuilder.buildProjectWhenReady(projectPath)) {
+                                sink.complete();
+                            } else {
+                                sink.error(new BusinessException(ErrorCode.OPERATION_ERROR,
+                                        "Vue 项目构建失败，请检查生成代码后重试"));
+                            }
+                        });
+                    }
+            );
+        });
     }
 
     /**

@@ -54,5 +54,6 @@ create table chat_history
     isDelete    tinyint  default 0                 not null comment '是否删除',
     INDEX idx_appId (appId),                       -- 提升基于应用的查询性能
     INDEX idx_createTime (createTime),             -- 提升基于时间的查询性能
-    INDEX idx_appId_createTime (appId, createTime) -- 游标查询核心索引
+    INDEX idx_appId_createTime (appId, createTime), -- 兼容旧查询
+    INDEX idx_appId_createTime_id (appId, createTime, id) -- 稳定游标查询核心索引
 ) comment '对话历史' collate = utf8mb4_unicode_ci;

@@ -11,10 +11,11 @@ export async function getLatestChatHistory(appId: string, limit: number = 10): P
 export async function listChatHistoryBefore(
   appId: string,
   before: string,
+  beforeId?: string,
   limit: number = 10,
 ): Promise<ChatHistory[]> {
   const res = await api.get<BaseResponse<ChatHistory[]>>('/chatHistory/list/before', {
-    params: { appId, before, limit },
+    params: { appId, before, beforeId, limit },
   });
   return res.data.data;
 }

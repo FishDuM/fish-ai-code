@@ -1,5 +1,5 @@
 import api from './index';
-import { API_BASE_URL } from '@/constants';
+import { API_BASE_URL, ERROR_CODES } from '@/constants';
 import type {
   BaseResponse,
   LoginUserVO,
@@ -25,9 +25,16 @@ export async function register(data: UserRegisterRequest): Promise<string> {
 /**
  * Probe the current session. Uses raw fetch to avoid the axios interceptor
  * treating a normal "not logged in" (40100) as a session-expired redirect.
- * Returns null when the user is not logged in or the request fails/times out.
+ * A failed request is deliberately distinct from a confirmed logged-out
+ * response. Treating a timeout or a 5xx page as "not logged in" used to
+ * redirect active users to /login during a transient backend outage.
  */
-export async function getLoginUser(): Promise<LoginUserVO | null> {
+export type LoginUserProbeResult =
+  | { status: 'authenticated'; user: LoginUserVO }
+  | { status: 'unauthenticated' }
+  | { status: 'unavailable' };
+
+export async function getLoginUser(): Promise<LoginUserProbeResult> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 5000);
   try {
@@ -36,10 +43,13 @@ export async function getLoginUser(): Promise<LoginUserVO | null> {
       signal: controller.signal,
     });
     const json: BaseResponse<LoginUserVO> = await res.json();
-    if (json.code === 0) return json.data;
-    return null;
+    if (json.code === 0 && json.data) return { status: 'authenticated', user: json.data };
+    if (res.status === 401 || json.code === ERROR_CODES.NOT_LOGIN_ERROR) {
+      return { status: 'unauthenticated' };
+    }
+    return { status: 'unavailable' };
   } catch {
-    return null;
+    return { status: 'unavailable' };
   } finally {
     clearTimeout(timeoutId);
   }

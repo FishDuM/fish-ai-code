@@ -129,6 +129,7 @@ export function startCodeGenSSE(
 
   (async () => {
     try {
+      let receivedBusinessError = false;
       const url = `${API_BASE_URL}/app/chat/gen/code?appId=${encodeURIComponent(appId)}&message=${encodeURIComponent(message)}`;
       const response = await fetch(url, {
         method: 'GET',
@@ -178,6 +179,7 @@ export function startCodeGenSSE(
           const parsed = parseSSEEventBlock(block);
 
           if (parsed.event === 'business-error') {
+            receivedBusinessError = true;
             try {
               const errData = JSON.parse(parsed.data);
               callbacks.onBusinessError?.(errData.code ?? 0, errData.message || '生成过程中出现错误');
@@ -220,6 +222,7 @@ export function startCodeGenSSE(
         if (!block) continue;
         const parsed = parseSSEEventBlock(block);
         if (parsed.event === 'business-error') {
+          receivedBusinessError = true;
           try {
             const errData = JSON.parse(parsed.data);
             callbacks.onBusinessError?.(errData.code ?? 0, errData.message || '生成过程中出现错误');
@@ -237,6 +240,7 @@ export function startCodeGenSSE(
         if (tailBlock) {
           const parsed = parseSSEEventBlock(tailBlock);
           if (parsed.event === 'business-error') {
+            receivedBusinessError = true;
             try {
               const errData = JSON.parse(parsed.data);
               callbacks.onBusinessError?.(errData.code ?? 0, errData.message || '生成过程中出现错误');
@@ -250,7 +254,10 @@ export function startCodeGenSSE(
         }
       }
 
-      callbacks.onDone();
+      // 业务失败已经由 onBusinessError 处理，不能再把它作为成功完成处理。
+      if (!receivedBusinessError) {
+        callbacks.onDone();
+      }
     } catch (err: unknown) {
       const name = err instanceof Error ? err.name : '';
       if (name !== 'AbortError') {

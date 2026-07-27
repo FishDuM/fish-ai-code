@@ -73,6 +73,7 @@ public class ChatHistoryController {
      *
      * @param appId   应用 id
      * @param before  游标时间（当前已加载最早消息的 createTime）
+     * @param beforeId 游标消息 id，用于区分同一时间的多条消息
      * @param limit   获取条数（默认 10）
      * @param request HTTP 请求
      * @return 消息列表（时间正序）
@@ -81,6 +82,7 @@ public class ChatHistoryController {
     public BaseResponse<List<ChatHistory>> listChatHistoryBefore(
             @NotNull(message = "应用 ID 不能为空") @Min(value = 1, message = "应用 ID 不合法") @RequestParam("appId") Long appId,
             @NotNull(message = "游标时间不能为空") @RequestParam("before") LocalDateTime before,
+            @RequestParam(value = "beforeId", required = false) @Min(value = 1, message = "游标消息 ID 不合法") Long beforeId,
             @RequestParam(value = "limit", defaultValue = "10") @Min(value = 1, message = "limit 至少为 1") @Max(value = 20, message = "limit 最多为 20") int limit,
             HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
@@ -89,7 +91,7 @@ public class ChatHistoryController {
         boolean isOwner = app.getUserId().equals(loginUser.getId());
         boolean isAdmin = UserConstant.ADMIN_ROLE.equals(loginUser.getUserRole());
         ThrowUtils.throwIf(!isOwner && !isAdmin, ErrorCode.NO_AUTH_ERROR);
-        List<ChatHistory> list = chatHistoryService.listChatHistoryBefore(appId, before, limit);
+        List<ChatHistory> list = chatHistoryService.listChatHistoryBefore(appId, before, beforeId, limit);
         return ResultUtils.success(list);
     }
 

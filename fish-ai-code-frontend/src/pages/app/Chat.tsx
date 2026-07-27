@@ -35,7 +35,14 @@ import { ApiError } from '@/api/error';
 // plain `<pre>` fallback while waiting for the dynamic import to
 // resolve — the fetch has already started by then.
 preloadHighlighter();
-import { getAppVO, deleteMyApp, updateMyApp, deployApp, downloadAppCode } from '@/api/app';
+import {
+  getAppVO,
+  deleteMyApp,
+  updateMyApp,
+  deployApp,
+  downloadAppCode,
+  getGenerationStatus,
+} from '@/api/app';
 import { getLatestChatHistory, listChatHistoryBefore } from '@/api/chatHistory';
 import { parseMultiFileCode, extractVueProjectFiles, cleanVueOutput } from '@/utils/codeParser';
 import type { AppVO } from '@/api/types';
@@ -123,6 +130,10 @@ export default function AppChat() {
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  // `停止` aborts only this browser's SSE connection. The backend deliberately
+  // continues the model flow until it reaches a safe terminal point, so keep
+  // the UI blocked while that application-level lock is still held.
+  const [backgroundGeneration, setBackgroundGeneration] = useState(false);
 
   // ── Edit mode (visual element selector) ───────────────────────────
   const [editMode, setEditMode] = useState(false);
@@ -135,6 +146,7 @@ export default function AppChat() {
   const htmlPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
   const htmlPreviewPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const htmlPreviewFetchAbortRef = useRef<AbortController | null>(null);
+  const generationStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const vueEditModeSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editModeRef = useRef(editMode);
   const pendingHighlightSelectorRef = useRef<string | null>(pendingHighlightSelector);
@@ -159,6 +171,7 @@ export default function AppChat() {
   // and a stray user message in the conversation.
   const historyLoadFailedRef = useRef(false);
   const oldestCreateTimeRef = useRef<string>('');
+  const oldestChatHistoryIdRef = useRef<string>('');
   // Mirror of `appId` for async callbacks to detect stale responses after navigation.
   const appIdRef = useRef<string>('');
 
@@ -205,6 +218,37 @@ export default function AppChat() {
       vueEditModeSyncTimerRef.current = null;
     }
   }, []);
+
+  useEffect(() => {
+    if (!appId) return;
+    let disposed = false;
+
+    const pollStatus = async () => {
+      try {
+        const busy = await getGenerationStatus(appId);
+        if (disposed) return;
+        setBackgroundGeneration(busy);
+        if (busy) {
+          generationStatusTimerRef.current = setTimeout(pollStatus, 1500);
+        }
+      } catch {
+        // A status-check failure must not unlock the UI optimistically after
+        // the user stopped SSE. Retry while we already know a task is active.
+        if (!disposed && backgroundGeneration) {
+          generationStatusTimerRef.current = setTimeout(pollStatus, 3000);
+        }
+      }
+    };
+
+    pollStatus();
+    return () => {
+      disposed = true;
+      if (generationStatusTimerRef.current) {
+        clearTimeout(generationStatusTimerRef.current);
+        generationStatusTimerRef.current = null;
+      }
+    };
+  }, [appId, backgroundGeneration]);
 
   const refreshHtmlPreviewFromFile = useCallback((
     targetAppId: string | undefined = appId,
@@ -286,6 +330,9 @@ export default function AppChat() {
   // runs) don't get dropped.
   useEffect(() => {
     function onMessage(e: MessageEvent) {
+      // `srcDoc` iframes deliberately have an opaque origin, so origin is not
+      // a usable discriminator here. The iframe window identity is.
+      if (e.source !== htmlPreviewIframeRef.current?.contentWindow) return;
       const data = e.data as
         | { source?: string; type?: string; element?: SelectedElement | null }
         | undefined;
@@ -427,16 +474,16 @@ export default function AppChat() {
     }, []),
     // Handle business-error events from the backend (rate limiting, auth failures, etc.)
     // Commits the error as a non-streaming AI message before onDone clears the bubble.
-    useCallback((code: number, message: string) => {
+    useCallback((code: number, errorMessage: string) => {
       setStreamingMessage((current) => {
         if (!current || !current.isStreaming) return current;
         setMessages((prev) => {
           if (prev.some((m) => m.id === current.id)) return prev;
-          return [...prev, { ...current, content: `❌ ${message}`, isStreaming: false }];
+          return [...prev, { ...current, content: `❌ ${errorMessage}`, isStreaming: false }];
         });
         return null;
       });
-      message.error(message);
+      message.error(errorMessage);
     }, [message]),
   );
 
@@ -629,6 +676,8 @@ export default function AppChat() {
     setProjectFiles([]);
     autoSentRef.current = false;
     historyLoadFailedRef.current = false;
+    oldestCreateTimeRef.current = '';
+    oldestChatHistoryIdRef.current = '';
     historyInitedRef.current = false;
     setHistoryLoading(true);
     // 切换应用时清掉"流成功 + 预览已设"的 ref，让新应用能从头判定
@@ -707,6 +756,7 @@ export default function AppChat() {
         setHasMoreHistory(history.length >= PAGE_SIZE);
         if (history.length > 0) {
           oldestCreateTimeRef.current = history[0].createTime;
+          oldestChatHistoryIdRef.current = history[0].id;
         }
         setHistoryLoading(false);
       })
@@ -772,6 +822,7 @@ export default function AppChat() {
       !historyInitedRef.current ||
       historyLoadFailedRef.current ||
       autoSentRef.current ||
+      backgroundGeneration ||
       !appId ||
 	      !app ||
 	      !shouldAutoSendInit ||
@@ -811,6 +862,7 @@ export default function AppChat() {
 	  }, [
 	    messages,
 	    app,
+	    backgroundGeneration,
 	    isOwner,
 	    appId,
 	    start,
@@ -841,10 +893,10 @@ export default function AppChat() {
 
   // Load more history (cursor pagination)
   const handleLoadMore = useCallback(async () => {
-    if (!appId || loadingMore || !hasMoreHistory || !oldestCreateTimeRef.current) return;
+    if (!appId || loadingMore || !hasMoreHistory || !oldestCreateTimeRef.current || !oldestChatHistoryIdRef.current) return;
     setLoadingMore(true);
     try {
-      const older = await listChatHistoryBefore(appId, oldestCreateTimeRef.current, PAGE_SIZE);
+      const older = await listChatHistoryBefore(appId, oldestCreateTimeRef.current, oldestChatHistoryIdRef.current, PAGE_SIZE);
       if (older.length > 0) {
         const olderMessages: Message[] = older.map((h) => ({
           id: h.id,
@@ -854,6 +906,7 @@ export default function AppChat() {
         }));
         setMessages((prev) => [...olderMessages, ...prev]);
         oldestCreateTimeRef.current = older[0].createTime;
+        oldestChatHistoryIdRef.current = older[0].id;
       }
       setHasMoreHistory(older.length >= PAGE_SIZE);
     } catch {
@@ -904,6 +957,11 @@ export default function AppChat() {
   // a non-streaming message (otherwise clicking 停止 mid-stream would orphan
   // the bubble and leave the user staring at a typing-dots AI forever).
   const handleCancel = useCallback(() => {
+    // The browser can stop receiving SSE immediately, but the backend cannot
+    // safely cancel the in-flight model/tool calls. Poll its app lock before
+    // allowing another write or a read of the project directory.
+    setBackgroundGeneration(true);
+    message.info('已停止接收输出，后台正在完成当前生成，请稍候');
     vueStreamSucceededRef.current = false;
     previewHandledRef.current = false;
     setStreamingMessage((current) => {
@@ -923,11 +981,13 @@ export default function AppChat() {
       return null;
     });
     cancel();
-  }, [cancel]);
+  }, [cancel, message]);
+
+  const isGenerationBusy = isStreaming || backgroundGeneration;
 
   // ── Send ─────────────────────────────────────────────────────────
   const handleSend = useCallback((text: string) => {
-    if (!text || isStreamingRef.current || !appId) return;
+    if (!text || isStreamingRef.current || backgroundGeneration || !appId) return;
     if (!isOwner) {
       message.warning('只有应用创建者可以继续编辑这个应用');
       return;
@@ -948,12 +1008,12 @@ export default function AppChat() {
     previewHandledRef.current = false;
     setHtmlPreviewCode('');
     start(appId, text);
-  }, [appId, isOwner, message, start, isStreamingRef]);
+  }, [appId, backgroundGeneration, isOwner, message, start, isStreamingRef]);
 
   // ── Edit-mode send (element + prompt) ─────────────────────────────
   const handleEditSend = useCallback(
     (instruction: string) => {
-      if (!instruction || isStreamingRef.current || !appId || !selectedElement) return;
+      if (!instruction || isStreamingRef.current || backgroundGeneration || !appId || !selectedElement) return;
       if (!isOwner) {
         message.warning('只有应用创建者可以使用编辑模式');
         return;
@@ -984,7 +1044,7 @@ export default function AppChat() {
       setPopoverPosition(null);
       start(appId, composed);
     },
-    [appId, isOwner, message, selectedElement, start, isStreamingRef, postEditModeMessage],
+    [appId, backgroundGeneration, isOwner, message, selectedElement, start, isStreamingRef, postEditModeMessage],
   );
 
   const handleEditCancel = useCallback(() => {
@@ -1150,19 +1210,27 @@ export default function AppChat() {
       message.warning('只有应用创建者可以下载代码');
       return;
     }
+    if (isGenerationBusy) {
+      message.info('正在生成代码，请完成后再下载');
+      return;
+    }
     try {
       await downloadAppCode(appId);
       message.success('正在下载代码');
     } catch (err) {
       message.error(err instanceof Error ? err.message : '下载失败');
     }
-  }, [appId, isOwner, message]);
+  }, [appId, isOwner, isGenerationBusy, message]);
 
   // ── Deploy (production deployment, explicit user action) ──────────
   const handleDeploy = useCallback(async () => {
     if (!appId) return;
     if (!isOwner) {
       message.warning('只有应用创建者可以部署这个应用');
+      return;
+    }
+    if (isGenerationBusy) {
+      message.info('正在生成代码，请完成后再部署');
       return;
     }
     setDeployError('');
@@ -1176,7 +1244,7 @@ export default function AppChat() {
     } finally {
       setDeploying(false);
     }
-  }, [appId, isOwner, message]);
+  }, [appId, isOwner, isGenerationBusy, message]);
 
   // ── Render ───────────────────────────────────────────────────────
   // No skeleton / spinner for the initial load — it flashes and looks
@@ -1190,6 +1258,7 @@ export default function AppChat() {
           appName={app.appName || '未命名应用'}
           isOwner={false}
           showPreview={false}
+          isStreaming={false}
           deploying={false}
           onDeploy={handleDeploy}
           onDownload={handleDownload}
@@ -1212,6 +1281,7 @@ export default function AppChat() {
         appName={app?.appName || '未命名应用'}
         isOwner={isOwner}
         showPreview={showPreview}
+        isStreaming={isGenerationBusy}
         deploying={deploying}
         onDeploy={handleDeploy}
         onDownload={handleDownload}
@@ -1303,6 +1373,7 @@ export default function AppChat() {
 
           <ChatInput
             isStreaming={isStreaming}
+            isBackgroundGenerating={backgroundGeneration}
             onSend={handleSend}
             onCancel={handleCancel}
           />
@@ -1324,7 +1395,7 @@ export default function AppChat() {
                       size="small"
                       checked={editMode}
                       onChange={handleEditModeChange}
-                      disabled={isStreaming}
+                      disabled={isGenerationBusy}
                     />
                   </Tooltip>
                   <span className="chat-edit-hint">
@@ -1378,6 +1449,7 @@ export default function AppChat() {
                                 ref={htmlPreviewIframeRef}
                                 src={htmlPreviewSrcUrl}
                                 key={`url:${htmlPreviewSrcUrl}`}
+                                sandbox="allow-scripts"
                                 onLoad={() => setHtmlPreviewFrameLoading(false)}
                                 style={{
                                   width: '100%',
@@ -1420,7 +1492,7 @@ export default function AppChat() {
                               key={selectedElement.selector}
                               element={selectedElement}
                               position={popoverPosition}
-                              sending={isStreaming}
+                              sending={isGenerationBusy}
                               onSend={handleEditSend}
                               onCancel={handleEditCancel}
                             />
@@ -1513,7 +1585,7 @@ export default function AppChat() {
                 children: (
                   <div className="chat-tab-fill">
                     {app?.codeGenType === 'vue_project' ? (
-                      <VueProjectViewer files={projectFiles} deploying={deploying} onDeploy={handleDeploy} />
+                      <VueProjectViewer files={projectFiles} deploying={deploying} isStreaming={isGenerationBusy} onDeploy={handleDeploy} />
                     ) : parsedCode && app?.codeGenType === 'multi_file' ? (
                       <Tabs
                         defaultActiveKey="html"

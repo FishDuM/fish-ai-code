@@ -37,21 +37,29 @@ public class AiCodeGeneratorFacade {
      * @param codeGenType 代码生成类型
      * @return 流式响应
      */
-    private Flux<String> processCodeStream(Flux<String> codeStream, CodeGenTypeEnum codeGenType, Long appId) {
-        StringBuilder codeBuilder = new StringBuilder();
-        // 实时收集代码片段
-        return codeStream.doOnNext(codeBuilder::append).doOnComplete(() -> {
-            // 流式返回完成后保存代码
-            try {
-                String completeCode = codeBuilder.toString();
-                // 使用执行器解析代码
-                Object parsedResult = CodeParserExecutor.executeParser(completeCode, codeGenType);
-                // 使用执行器保存代码
-                File savedDir = CodeFileSaverExecutor.executeSaver(parsedResult, codeGenType, appId);
-                log.info("保存成功，路径为：" + savedDir.getAbsolutePath());
-            } catch (Exception e) {
-                log.error("保存失败: {}", e.getMessage());
-            }
+    Flux<String> processCodeStream(Flux<String> codeStream, CodeGenTypeEnum codeGenType, Long appId) {
+        return Flux.create(sink -> {
+            StringBuilder codeBuilder = new StringBuilder();
+            codeStream.subscribe(
+                    chunk -> {
+                        codeBuilder.append(chunk);
+                        sink.next(chunk);
+                    },
+                    sink::error,
+                    () -> {
+                        try {
+                            String completeCode = codeBuilder.toString();
+                            Object parsedResult = CodeParserExecutor.executeParser(completeCode, codeGenType);
+                            File savedDir = CodeFileSaverExecutor.executeSaver(parsedResult, codeGenType, appId);
+                            log.info("保存成功，路径为：{}", savedDir.getAbsolutePath());
+                            // 只有持久化成功才向下游发送完成信号。
+                            sink.complete();
+                        } catch (Exception e) {
+                            log.error("代码保存失败，appId: {}, 类型: {}", appId, codeGenType, e);
+                            sink.error(new BusinessException(ErrorCode.OPERATION_ERROR, "代码保存失败，请重试"));
+                        }
+                    }
+            );
         });
     }
 
