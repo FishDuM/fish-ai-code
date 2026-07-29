@@ -68,30 +68,35 @@ export default function Home() {
   // 快速切换搜索/分页或组件卸载时旧的响应不会用旧数据覆盖新结果，
   // 也不会在已卸载组件上 setState 触发警告。
   const fetchIdRef = useRef(0);
+  const requestAbortRef = useRef<AbortController | null>(null);
 
   const fetchApps = useCallback(() => {
     const myId = ++fetchIdRef.current;
+    requestAbortRef.current?.abort();
+    const controller = new AbortController();
+    requestAbortRef.current = controller;
     setLoading(true);
-    listFeaturedApps(query)
+    listFeaturedApps(query, controller.signal)
       .then((res) => {
         if (myId !== fetchIdRef.current) return;
         setApps(res.records);
         setTotal(res.totalRow);
       })
       .catch(() => {
-        if (myId !== fetchIdRef.current) return;
+        if (controller.signal.aborted || myId !== fetchIdRef.current) return;
         message.error('加载精选应用失败');
       })
       .finally(() => {
         // 注意：loading 也受 fetchId 保护，避免最后一次旧请求把 loading 关掉
         // 而新请求还在路上导致 UI 提前进入 "已加载" 状态。
-        if (myId !== fetchIdRef.current) return;
+        if (controller.signal.aborted || myId !== fetchIdRef.current) return;
         setLoading(false);
       });
   }, [query, message]);
 
   useEffect(() => {
     fetchApps();
+    return () => requestAbortRef.current?.abort();
   }, [fetchApps]);
 
   useEffect(() => {

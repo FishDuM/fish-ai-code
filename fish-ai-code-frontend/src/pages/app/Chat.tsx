@@ -17,7 +17,6 @@ import VueProjectViewer from '@/components/VueProjectViewer';
 import EditPromptPopover from '@/components/EditPromptPopover';
 import { useSSE } from '@/hooks/useSSE';
 import { useTitle } from '@/hooks/useTitle';
-import { preloadHighlighter } from '@/hooks/useHighlighter';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { applyEditModeToSrcDoc } from '@/utils/editModeInjector';
 import { buildEditPrompt } from '@/utils/editPromptBuilder';
@@ -30,11 +29,6 @@ import {
 import { API_BASE_URL, ERROR_CODES } from '@/constants';
 import { ApiError } from '@/api/error';
 
-// Warm the highlighter as soon as this module is parsed. The first
-// historical AI message that mounts doesn't have to flash through the
-// plain `<pre>` fallback while waiting for the dynamic import to
-// resolve — the fetch has already started by then.
-preloadHighlighter();
 import {
   getAppVO,
   deleteMyApp,
@@ -67,6 +61,13 @@ interface Message {
 interface ProjectFile {
   path: string;
   content: string;
+}
+
+function haveSameProjectFiles(current: ProjectFile[], next: ProjectFile[]): boolean {
+  if (current.length !== next.length) return false;
+  return current.every((file, index) =>
+    file.path === next[index]?.path && file.content === next[index]?.content,
+  );
 }
 
 interface ChatLocationState {
@@ -586,7 +587,11 @@ export default function AppChat() {
       if (!res.ok) return;
       const files: ProjectFile[] = await res.json();
       if (files.length > 0) {
-        setProjectFiles(files);
+        // 轮询接口会返回完整项目内容。文件没有变化时保留原数组引用，让
+        // VueProjectViewer 的树、排序和代码高亮都能跳过一次重渲。
+        setProjectFiles((current) =>
+          haveSameProjectFiles(current, files) ? current : files,
+        );
       }
     } catch {
       // AbortError or network error — silently skip; will retry next tick
@@ -630,15 +635,6 @@ export default function AppChat() {
     if (app?.codeGenType !== 'vue_project' || !appId) return;
     fetchVueProjectFiles();
   }, [app?.codeGenType, appId, fetchVueProjectFiles]);
-
-  // Keep the file tree fresh while streaming (the AI is writing files in
-  // real time via tool calls, and each write hits the disk immediately).
-  useEffect(() => {
-    if (isStreaming && app?.codeGenType === 'vue_project') {
-      const id = setInterval(fetchVueProjectFiles, 1500);
-      return () => clearInterval(id);
-    }
-  }, [isStreaming, app?.codeGenType, fetchVueProjectFiles]);
 
   // When the stream finishes, the backend's async builder kicks in and
   // may add a few more files. Run a longer-lived poll to catch them.

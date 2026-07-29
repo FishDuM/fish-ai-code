@@ -26,7 +26,7 @@ const CodeBlock = React.memo(function CodeBlock({
   isStreaming?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
-  const highlighter = useHighlighter();
+  const highlighter = useHighlighter(language || undefined);
   const { message } = App.useApp();
 
   const handleCopy = useCallback(async () => {
@@ -357,6 +357,10 @@ function ChatMessageInner({ role, content, isStreaming }: ChatMessageProps) {
         gap: isUser ? 8 : 6,
         width: '100%',
         minWidth: 0,
+        // 长对话中，离开视口的历史消息无需参与布局和绘制。React 仍保留
+        // 节点与滚动高度，所以不会破坏“加载更多”或流式消息的锚定逻辑。
+        contentVisibility: isStreaming ? 'visible' : 'auto',
+        containIntrinsicSize: isStreaming ? undefined : '0 280px',
       }}
     >
       {!isUser && (

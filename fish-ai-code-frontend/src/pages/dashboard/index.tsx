@@ -26,28 +26,33 @@ export default function Dashboard() {
   // 因为 fetchApps 既被 effect 调用、也被编辑/删除的事件回调调用，叠加在一起
   // 时没有这层保护就很容易出现"编辑完成后旧分页数据覆盖新分页数据"。
   const fetchIdRef = useRef(0);
+  const requestAbortRef = useRef<AbortController | null>(null);
 
   const fetchApps = useCallback(() => {
     const myId = ++fetchIdRef.current;
+    requestAbortRef.current?.abort();
+    const controller = new AbortController();
+    requestAbortRef.current = controller;
     setLoading(true);
-    listMyApps(query)
+    listMyApps(query, controller.signal)
       .then((res) => {
         if (myId !== fetchIdRef.current) return;
         setApps(res.records);
         setTotal(res.totalRow);
       })
       .catch(() => {
-        if (myId !== fetchIdRef.current) return;
+        if (controller.signal.aborted || myId !== fetchIdRef.current) return;
         message.error('加载应用列表失败');
       })
       .finally(() => {
-        if (myId !== fetchIdRef.current) return;
+        if (controller.signal.aborted || myId !== fetchIdRef.current) return;
         setLoading(false);
       });
   }, [query, message]);
 
   useEffect(() => {
     fetchApps();
+    return () => requestAbortRef.current?.abort();
   }, [fetchApps]);
 
   const handleSearch = (appName: string) => {
@@ -96,7 +101,7 @@ export default function Dashboard() {
         }
       },
     });
-  }, [fetchApps]);
+  }, [fetchApps, message]);
 
   return (
     <div className="page-surface">

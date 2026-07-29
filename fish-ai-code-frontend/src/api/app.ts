@@ -59,13 +59,19 @@ export async function getGenerationStatus(appId: string): Promise<boolean> {
   return res.data.data;
 }
 
-export async function listMyApps(params: AppQueryRequest): Promise<PageResult<AppVO>> {
-  const res = await api.post<BaseResponse<PageResult<AppVO>>>('/app/list/page/vo', params);
+export async function listMyApps(
+  params: AppQueryRequest,
+  signal?: AbortSignal,
+): Promise<PageResult<AppVO>> {
+  const res = await api.post<BaseResponse<PageResult<AppVO>>>('/app/list/page/vo', params, { signal });
   return res.data.data;
 }
 
-export async function listFeaturedApps(params: AppQueryRequest): Promise<PageResult<PublicAppVO>> {
-  const res = await api.post<BaseResponse<PageResult<PublicAppVO>>>('/app/list/featured/vo', params);
+export async function listFeaturedApps(
+  params: AppQueryRequest,
+  signal?: AbortSignal,
+): Promise<PageResult<PublicAppVO>> {
+  const res = await api.post<BaseResponse<PageResult<PublicAppVO>>>('/app/list/featured/vo', params, { signal });
   return res.data.data;
 }
 

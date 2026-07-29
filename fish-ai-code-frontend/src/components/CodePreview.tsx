@@ -33,7 +33,10 @@ const CODE_TAG_PROPS: { style: CSSProperties } = {
 function CodePreview({ code, language, isStreaming = false }: CodePreviewProps) {
   const { message } = App.useApp();
   const [copied, setCopied] = useState(false);
-  const highlighter = useHighlighter();
+  // Resolve language before subscribing so the loader fetches only the
+  // grammar needed for this visible file instead of every Prism grammar.
+  const prismLanguage = resolveLanguage(language);
+  const highlighter = useHighlighter(prismLanguage);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 用 ref 持有最新 code，让 handleCopy 不依赖 code，避免每次流式
@@ -68,9 +71,6 @@ function CodePreview({ code, language, isStreaming = false }: CodePreviewProps) 
       message.error('复制失败');
     }
   }, [message]);
-
-  // Resolve language once per render so changing the prop re-runs cheaply.
-  const prismLanguage = resolveLanguage(language);
 
   // Highlighted path: highlighter bundle is loaded AND caller isn't
   // streaming. Otherwise fall back to a plain <pre> so the user still sees
