@@ -205,7 +205,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     public Page<AppVO> listMyAppsByPage(AppQueryRequest appQueryRequest, long userId) {
         long pageNum = appQueryRequest.getPageNum();
         long pageSize = appQueryRequest.getPageSize();
-        Page<App> appPage = this.page(Page.of(pageNum, Math.min(pageSize, 20)),
+        Page<App> appPage = this.page(Page.of(pageNum, pageSize),
                 getMyAppQueryWrapper(appQueryRequest, userId));
         Page<AppVO> appVOPage = new Page<>(pageNum, pageSize, appPage.getTotalRow());
         List<AppVO> appVOList = getAppVOList(appPage.getRecords());
@@ -217,7 +217,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     public Page<PublicAppVO> listFeaturedAppsByPage(AppQueryRequest appQueryRequest) {
         long pageNum = appQueryRequest.getPageNum();
         long pageSize = appQueryRequest.getPageSize();
-        Page<App> appPage = this.page(Page.of(pageNum, Math.min(pageSize, 20)),
+        Page<App> appPage = this.page(Page.of(pageNum, pageSize),
                 getFeaturedAppQueryWrapper(appQueryRequest));
         Page<PublicAppVO> publicAppVOPage = new Page<>(pageNum, pageSize, appPage.getTotalRow());
         List<PublicAppVO> publicAppVOList = getPublicAppVOList(appPage.getRecords());
@@ -288,14 +288,14 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         String sortField = adminAppQueryRequest.getSortField();
         String sortOrder = adminAppQueryRequest.getSortOrder();
         QueryWrapper queryWrapper = QueryWrapper.create()
-                .eq("id", id)
-                .eq("priority", priority)
-                .eq("userId", userId)
-                .eq("codeGenType", codeGenType)
-                .like("appName", appName)
-                .like("cover", cover)
-                .like("initPrompt", initPrompt)
-                .like("deployKey", deployKey);
+                .eq("id", id, id != null)
+                .eq("priority", priority, priority != null)
+                .eq("userId", userId, userId != null)
+                .eq("codeGenType", codeGenType, StrUtil.isNotBlank(codeGenType))
+                .like("appName", appName, StrUtil.isNotBlank(appName))
+                .like("cover", cover, StrUtil.isNotBlank(cover))
+                .like("initPrompt", initPrompt, StrUtil.isNotBlank(initPrompt))
+                .like("deployKey", deployKey, StrUtil.isNotBlank(deployKey));
         if (StrUtil.isNotBlank(sortField)) {
             queryWrapper.orderBy(sortField, "ascend".equals(sortOrder));
         }

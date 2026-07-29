@@ -49,7 +49,7 @@ AI 自动生成完整代码，支持三种模式：
 注册登录、Redis 会话管理、角色权限控制（用户/管理员）、敏感词过滤。
 
 ### 性能优化
-- Redis 旁路缓存 + Caffeine 本地双层缓存
+- Redis 旁路缓存
 - Redisson 分布式限流
 - AOP 接口限流与权限校验
 
@@ -120,7 +120,7 @@ npm run dev
 - **LangChain4j** — AI 模型统一接入（流式、多模型路由）
 - **LangGraph4j** — AI 工作流编排
 - **Redis** — 会话管理、旁路缓存
-- **Redisson + Caffeine** — 分布式限流 + 本地缓存
+- **Redisson** — 分布式限流
 - **Knife4j** — 接口文档
 </details>
 

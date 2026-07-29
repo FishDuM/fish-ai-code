@@ -52,7 +52,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
         queryWrapper.eq("userAccount", userAccount);
         long count = this.mapper.selectCountByQuery(queryWrapper);
         if (count > 0) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "账号重复");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "注册失败，请检查输入");
         }
         // 3. 加密
         String encryptPassword = getEncryptPassword(userPassword);
@@ -158,11 +158,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
         String sortField = userQueryRequest.getSortField();
         String sortOrder = userQueryRequest.getSortOrder();
         return QueryWrapper.create()
-                .eq("id", id)
-                .eq("userRole", userRole)
-                .like("userAccount", userAccount)
-                .like("userName", userName)
-                .like("userProfile", userProfile)
+                .eq("id", id, id != null)
+                .eq("userRole", userRole, StrUtil.isNotBlank(userRole))
+                .like("userAccount", userAccount, StrUtil.isNotBlank(userAccount))
+                .like("userName", userName, StrUtil.isNotBlank(userName))
+                .like("userProfile", userProfile, StrUtil.isNotBlank(userProfile))
                 .orderBy(sortField, "ascend".equals(sortOrder));
     }
 

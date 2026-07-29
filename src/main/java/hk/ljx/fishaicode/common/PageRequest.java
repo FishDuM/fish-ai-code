@@ -1,5 +1,7 @@
 package hk.ljx.fishaicode.common;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.Data;
 
 @Data
@@ -13,6 +15,8 @@ public class PageRequest {
     /**
      * 页面大小
      */
+    @Min(value = 1, message = "每页大小至少为 1")
+    @Max(value = 20, message = "每页大小最多为 20")
     private int pageSize = 10;
 
     /**

@@ -127,8 +127,8 @@ public class UserController {
      */
     @GetMapping("/get/vo")
     public BaseResponse<UserVO> getUserVOById(@Min(value = 1, message = "id 不合法") long id) {
-        BaseResponse<User> response = getUserById(id);
-        User user = response.getData();
+        User user = userService.getById(id);
+        ThrowUtils.throwIf(user == null, ErrorCode.NOT_FOUND_ERROR);
         return ResultUtils.success(userService.getUserVO(user));
     }
 

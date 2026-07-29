@@ -1,7 +1,5 @@
 package hk.ljx.fishaicode.ai;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import dev.langchain4j.community.store.memory.chat.redis.RedisChatMemoryStore;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.memory.ChatMemory;
@@ -21,8 +19,6 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-
-import java.time.Duration;
 
 @Configuration
 @Slf4j
@@ -90,33 +86,10 @@ public class AiCodeGeneratorServiceFactory {
         };
     }
 
-    private final Cache<String, AiCodeGeneratorService> serviceCache = Caffeine.newBuilder()
-            .maximumSize(1000)
-            .expireAfterWrite(Duration.ofMinutes(30))
-            .expireAfterAccess(Duration.ofMinutes(30))
-            .removalListener((key, value, cause) -> {
-                log.info("AI 服务实例移除,缓存键:{},原因:{}", key, cause);
-            }).build();
-
     /**
-     * 根据 appId 获取服务（带缓存）
+     * 根据 appId 获取服务（默认 HTML 类型）
      */
     public AiCodeGeneratorService createAiCodeGeneratorService(long appId) {
-        return getAiCodeGeneratorService(appId, CodeGenTypeEnum.HTML);
-    }
-
-    /**
-     * 根据 appId 获取服务（带缓存） 支持代码类型参数
-     */
-    public AiCodeGeneratorService getAiCodeGeneratorService(long appId, CodeGenTypeEnum codeGenTypeEnum) {
-        String cacheKey = buildCacheKey(appId, codeGenTypeEnum);
-        return serviceCache.get(cacheKey, key -> createAiCodeGeneratorService(appId, codeGenTypeEnum));
-    }
-
-    /**
-     * 构建缓存键
-     */
-    private String buildCacheKey(long appId, CodeGenTypeEnum codeGenType) {
-        return appId + "_" + codeGenType.getValue();
+        return createAiCodeGeneratorService(appId, CodeGenTypeEnum.HTML);
     }
 }

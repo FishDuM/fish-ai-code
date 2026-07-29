@@ -163,7 +163,7 @@ public class AppController {
      * @return sse流
      */
     @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    @RateLimit(key = "app", rate = 10, rateInterval = 60, limitType = RateLimitType.USER, message = "当前还在内测阶段，AI服务一分钟只能请求一次哦~")
+    @RateLimit(key = "chat", rate = 10, rateInterval = 60, limitType = RateLimitType.USER, message = "当前还在内测阶段，AI服务一分钟只能请求一次哦~")
     public Flux<ServerSentEvent<String>> chatToGenCode(
             @NotNull(message = "应用 ID 不能为空") @Min(value = 1, message = "应用 ID 不合法") @RequestParam("appId") Long appId,
             @NotBlank(message = "消息内容不能为空") @RequestParam("message") String message,
