@@ -81,12 +81,9 @@ public class StaticResourceController {
             Resource resource = new FileSystemResource(realTargetPath);
             return ResponseEntity.ok()
                     .header("Content-Type", getContentTypeWithCharset(realTargetPath.toString()))
-                    // Generated code is untrusted. The iframe sandbox in the frontend
-                    // gives it an opaque origin; this policy also blocks network access
-                    // and top-level escape attempts when the preview URL is opened directly.
                     .header("Content-Security-Policy",
                             "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
-                                    + "img-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; "
+                                    + "img-src 'self' https: data: blob:; font-src 'self' data:; connect-src 'none'; "
                                     + "media-src 'none'; object-src 'none'; worker-src 'none'; base-uri 'none'; "
                                     + "form-action 'none'; frame-ancestors 'self'")
                     .body(resource);
