@@ -168,26 +168,35 @@ public class AppController {
             @NotNull(message = "应用 ID 不能为空") @Min(value = 1, message = "应用 ID 不合法") @RequestParam("appId") Long appId,
             @NotBlank(message = "消息内容不能为空") @RequestParam("message") String message,
             HttpServletRequest request) {
-        User loginUser = userService.getLoginUser(request);
-        return appService.chatToGenCode(appId, message, loginUser)
-                .map(content -> ServerSentEvent.builder(content).build())
-                // 流已开始后，异常处理器不能可靠地再写入 HTTP 响应；统一为前端可识别的 SSE 事件。
-                .onErrorResume(error -> {
-                    int code = ErrorCode.SYSTEM_ERROR.getCode();
-                    String errorMessage = "生成失败，请稍后重试";
-                    if (error instanceof BusinessException businessException) {
-                        code = businessException.getCode();
-                        errorMessage = businessException.getMessage();
-                    }
-                    String data = JSONUtil.toJsonStr(Map.of(
-                            "error", true,
-                            "code", code,
-                            "message", errorMessage
-                    ));
-                    return Flux.just(ServerSentEvent.<String>builder(data)
-                            .event("business-error")
-                            .build());
-                });
+        try {
+            User loginUser = userService.getLoginUser(request);
+            return appService.chatToGenCode(appId, message, loginUser)
+                    .map(content -> ServerSentEvent.builder(content).build())
+                    .onErrorResume(error -> Flux.just(toSseError(error)));
+        } catch (Exception e) {
+            return Flux.just(toSseError(e));
+        }
+    }
+
+    /**
+     * 将异常转为前端可识别的 SSE business-error 事件。
+     * 适用于流内（onErrorResume）和流前（try-catch）两种异常场景。
+     */
+    private static ServerSentEvent<String> toSseError(Throwable error) {
+        int code = ErrorCode.SYSTEM_ERROR.getCode();
+        String errorMessage = "生成失败，请稍后重试";
+        if (error instanceof BusinessException businessException) {
+            code = businessException.getCode();
+            errorMessage = businessException.getMessage();
+        }
+        String data = JSONUtil.toJsonStr(Map.of(
+                "error", true,
+                "code", code,
+                "message", errorMessage
+        ));
+        return ServerSentEvent.<String>builder(data)
+                .event("business-error")
+                .build();
     }
 
     /**
