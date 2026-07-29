@@ -43,15 +43,6 @@ public class VueProjectBuilder {
     }
 
     /**
-     * 异步构建项目（不阻塞主流程）。
-     */
-    public void buildProjectAsync(String projectPath) {
-        Thread.ofVirtual().name("vue-builder-" + System.currentTimeMillis()).start(() -> {
-            buildProjectWhenReady(projectPath);
-        });
-    }
-
-    /**
      * 等待 AI 工具将项目文件落盘后构建，返回结果供调用方决定是否结束生成 SSE。
      */
     public boolean buildProjectWhenReady(String projectPath) {

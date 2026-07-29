@@ -11,7 +11,6 @@ import hk.ljx.fishaicode.ai.guardrail.PromptSafetyInputGuardrail;
 import hk.ljx.fishaicode.ai.tools.*;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
-import hk.ljx.fishaicode.generator.RetryOutputGuardrail;
 import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;
 import hk.ljx.fishaicode.service.ChatHistoryService;
 import hk.ljx.fishaicode.utils.SpringContextUtil;
@@ -68,7 +67,6 @@ public class AiCodeGeneratorServiceFactory {
                         .hallucinatedToolNameStrategy(toolExecutionRequest -> ToolExecutionResultMessage.from(toolExecutionRequest, "Error: there is no tool called " + toolExecutionRequest.name()))
                         .maxSequentialToolsInvocations(30) // 最多调用 30 次工具
                         .inputGuardrails(new PromptSafetyInputGuardrail()) // 添加输入护轨
-//                        .outputGuardrails(new RetryOutputGuardrail()) // 添加輸出互軌
                         .build();
             }
             case HTML,MULTI_FILE ->{
@@ -79,7 +77,6 @@ public class AiCodeGeneratorServiceFactory {
                         .streamingChatModel(openAiStreamingChatModel)
                         .maxSequentialToolsInvocations(30) // 最多调用 30 次工具
                         .inputGuardrails(new PromptSafetyInputGuardrail()) // 添加输入护轨
-//                        .outputGuardrails(new RetryOutputGuardrail()) // 添加輸出互軌
                         .build();
             }
             default -> throw new BusinessException(ErrorCode.SYSTEM_ERROR, "不支持的代码生成类型" + type.getValue());
