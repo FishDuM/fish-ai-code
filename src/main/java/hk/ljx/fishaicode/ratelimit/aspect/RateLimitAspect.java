@@ -40,9 +40,11 @@ public class RateLimitAspect {
         String key = generateRateLimitKey(point, rateLimit);
         // 使用Redisson的分布式限流器
         RRateLimiter rateLimiter = redissonClient.getRateLimiter(key);
-        rateLimiter.expire(Duration.ofHours(1)); // 1 小时后过期
-        // 设置限流器参数：每个时间窗口允许的请求数和时间窗口
-        rateLimiter.trySetRate(RateType.OVERALL, rateLimit.rate(), rateLimit.rateInterval(), RateIntervalUnit.SECONDS);
+        // trySetRate 仅在 Redis 中尚未创建该限流器时生效（原子操作返回 true），
+        // 后续请求直接跳过，避免每次请求都做多余的 Redis 写入。
+        if (rateLimiter.trySetRate(RateType.OVERALL, rateLimit.rate(), rateLimit.rateInterval(), RateIntervalUnit.SECONDS)) {
+            rateLimiter.expire(Duration.ofHours(1));
+        }
         // 尝试获取令牌，如果获取失败则限流
         if (!rateLimiter.tryAcquire(1)) {
             throw new BusinessException(ErrorCode.TOO_MANY_REQUEST, rateLimit.message());

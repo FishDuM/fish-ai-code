@@ -22,6 +22,7 @@ import hk.ljx.fishaicode.modal.vo.PublicAppVO;
 import hk.ljx.fishaicode.ratelimit.annotation.RateLimit;
 import hk.ljx.fishaicode.ratelimit.enums.RateLimitType;
 import hk.ljx.fishaicode.service.AppService;
+import hk.ljx.fishaicode.service.ChatHistoryService;
 import hk.ljx.fishaicode.service.ProjectDownloadService;
 import hk.ljx.fishaicode.service.UserService;
 import jakarta.annotation.Resource;
@@ -62,6 +63,9 @@ public class AppController {
 
     @Resource
     private GenerationCoordinator generationCoordinator;
+
+    @Resource
+    private ChatHistoryService chatHistoryService;
 
     /**
      * 创建应用
@@ -163,7 +167,7 @@ public class AppController {
      * @return sse流
      */
     @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    @RateLimit(key = "chat", rate = 10, rateInterval = 60, limitType = RateLimitType.USER, message = "当前还在内测阶段，AI服务一分钟只能请求一次哦~")
+    @RateLimit(key = "chat", rate = 10, rateInterval = 60, limitType = RateLimitType.USER, message = "当前还在内测阶段，AI服务一分钟内请求次数过多，请稍后重试")
     public Flux<ServerSentEvent<String>> chatToGenCode(
             @NotNull(message = "应用 ID 不能为空") @Min(value = 1, message = "应用 ID 不合法") @RequestParam("appId") Long appId,
             @NotBlank(message = "消息内容不能为空") @RequestParam("message") String message,
@@ -243,7 +247,10 @@ public class AppController {
     @PostMapping("/admin/delete")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<Boolean> adminDeleteApp(@Valid @RequestBody DeleteRequest deleteRequest) {
-        boolean result = appService.removeById(deleteRequest.getId());
+        Long appId = deleteRequest.getId();
+        // 先清理对话历史，避免数据孤儿
+        chatHistoryService.removeByAppId(appId);
+        boolean result = appService.removeById(appId);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
         return ResultUtils.success(true);
     }

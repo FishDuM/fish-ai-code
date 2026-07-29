@@ -52,6 +52,10 @@ import java.util.stream.Collectors;
 @Service
 public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppService {
 
+    private static final java.util.Set<String> ALLOWED_SORT_FIELDS = java.util.Set.of(
+            "id", "appName", "priority", "userId", "createTime", "updateTime", "editTime"
+    );
+
     @Resource
     private AiCodeGeneratorFacade aiCodeGeneratorFacade;
 
@@ -246,7 +250,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (StrUtil.isNotBlank(appName)) {
             queryWrapper.like("appName", appName);
         }
-        if (StrUtil.isNotBlank(sortField)) {
+        if (StrUtil.isNotBlank(sortField) && ALLOWED_SORT_FIELDS.contains(sortField)) {
             queryWrapper.orderBy(sortField, "ascend".equals(sortOrder));
         }
         return queryWrapper;
@@ -266,7 +270,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (StrUtil.isNotBlank(appName)) {
             queryWrapper.like("appName", appName);
         }
-        if (StrUtil.isNotBlank(sortField)) {
+        if (StrUtil.isNotBlank(sortField) && ALLOWED_SORT_FIELDS.contains(sortField)) {
             queryWrapper.orderBy(sortField, "ascend".equals(sortOrder));
         }
         return queryWrapper;
@@ -296,7 +300,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
                 .like("cover", cover, StrUtil.isNotBlank(cover))
                 .like("initPrompt", initPrompt, StrUtil.isNotBlank(initPrompt))
                 .like("deployKey", deployKey, StrUtil.isNotBlank(deployKey));
-        if (StrUtil.isNotBlank(sortField)) {
+        if (StrUtil.isNotBlank(sortField) && ALLOWED_SORT_FIELDS.contains(sortField)) {
             queryWrapper.orderBy(sortField, "ascend".equals(sortOrder));
         }
         return queryWrapper;
@@ -360,11 +364,11 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             throw new BusinessException(ErrorCode.PARAMS_ERROR ,"应用代码生成类型错误");
         }
         return generationCoordinator.execute(appId, () -> {
-            // 锁获取成功后才持久化用户消息和调用模型，避免重复请求写入两份历史记录。
-            chatHistoryService.addChatHistory(appId, loginUser.getId(), message, MessageTypeEnum.USER.getValue());
             String enhancedMessage = workflowService.enhancePrompt(message);
             log.info("提示词增强完成（增强前长度:{} → 增强后长度:{}）", message.length(), enhancedMessage.length());
             Flux<String> stringFlux = aiCodeGeneratorFacade.generateAndSaveCodeStream(enhancedMessage, enumByValue, appId);
+            // 锁获取成功且流创建就绪后才持久化用户消息，避免流初始化异常导致写入了用户消息但没有 AI 回复。
+            chatHistoryService.addChatHistory(appId, loginUser.getId(), message, MessageTypeEnum.USER.getValue());
             return streamHandlerExecutor.doExecute(stringFlux, chatHistoryService, appId, loginUser, enumByValue)
                     .doOnComplete(() -> {
                         String codeDir = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + codeGenType + "_" + appId;
@@ -385,7 +389,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     @Override
     public String deployApp(Long appId, User loginUser) {
         // 1、参数校验
-        ThrowUtils.throwIf(appId == null || appId < 0, ErrorCode.PARAMS_ERROR, "应用ID不能为空");
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用ID不能为空");
         ThrowUtils.throwIf(loginUser == null, ErrorCode.NOT_LOGIN_ERROR, "用户未登录");
         return generationCoordinator.executeExclusively(appId, () -> deployAppWithProjectLock(appId, loginUser));
     }
@@ -432,7 +436,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             FileUtil.copyContent(sourceDir, new File(deployDirPath), true);
         } catch (Exception e) {
             log.error("部署失败，{}", e.getMessage());
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "部署失败，请稍后重试" + e.getMessage());
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "部署失败，请稍后重试");
         }
         // 9、更新数据库
         App updateApp = new App();

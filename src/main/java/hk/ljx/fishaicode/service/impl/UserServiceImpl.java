@@ -35,6 +35,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
 
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
+    private static final java.util.Set<String> ALLOWED_SORT_FIELDS = java.util.Set.of(
+            "id", "userAccount", "userName", "userRole", "createTime", "updateTime", "editTime"
+    );
+
     @Override
     public long userRegister(String userAccount, String userPassword, String checkPassword) {
         // 1. 校验
@@ -155,13 +159,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
         String userRole = userQueryRequest.getUserRole();
         String sortField = userQueryRequest.getSortField();
         String sortOrder = userQueryRequest.getSortOrder();
-        return QueryWrapper.create()
+        QueryWrapper queryWrapper = QueryWrapper.create()
                 .eq("id", id, id != null)
                 .eq("userRole", userRole, StrUtil.isNotBlank(userRole))
                 .like("userAccount", userAccount, StrUtil.isNotBlank(userAccount))
                 .like("userName", userName, StrUtil.isNotBlank(userName))
-                .like("userProfile", userProfile, StrUtil.isNotBlank(userProfile))
-                .orderBy(sortField, "ascend".equals(sortOrder));
+                .like("userProfile", userProfile, StrUtil.isNotBlank(userProfile));
+        if (StrUtil.isNotBlank(sortField) && ALLOWED_SORT_FIELDS.contains(sortField)) {
+            queryWrapper.orderBy(sortField, "ascend".equals(sortOrder));
+        }
+        return queryWrapper;
     }
 
 

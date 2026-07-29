@@ -31,6 +31,10 @@ import java.util.List;
 @Service
 public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatHistory> implements ChatHistoryService {
 
+    private static final java.util.Set<String> ALLOWED_SORT_FIELDS = java.util.Set.of(
+            "id", "appId", "userId", "messageType", "createTime", "updateTime"
+    );
+
     @Override
     public boolean addChatHistory(Long appId, Long userId, String message, String messageType) {
         // 1. 校验
@@ -159,10 +163,10 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
         String sortField = adminChatHistoryQueryRequest.getSortField();
         String sortOrder = adminChatHistoryQueryRequest.getSortOrder();
         QueryWrapper queryWrapper = QueryWrapper.create()
-                .eq("appId", appId)
-                .eq("userId", userId)
-                .eq("messageType", messageType);
-        if (StrUtil.isNotBlank(sortField)) {
+                .eq("appId", appId, appId != null)
+                .eq("userId", userId, userId != null)
+                .eq("messageType", messageType, StrUtil.isNotBlank(messageType));
+        if (StrUtil.isNotBlank(sortField) && ALLOWED_SORT_FIELDS.contains(sortField)) {
             queryWrapper.orderBy(sortField, "ascend".equals(sortOrder));
         } else {
             // 默认按时间降序

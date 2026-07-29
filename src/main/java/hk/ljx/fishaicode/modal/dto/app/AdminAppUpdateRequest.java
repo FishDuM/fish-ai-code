@@ -35,6 +35,7 @@ public class AdminAppUpdateRequest implements Serializable {
     /**
      * 优先级
      */
+    @Min(value = 0, message = "优先级不能为负数")
     private Integer priority;
 
     private static final long serialVersionUID = 1L;
