@@ -44,7 +44,12 @@ import {
   getGenerationStatus,
 } from '@/api/app';
 import { getLatestChatHistory, listChatHistoryBefore } from '@/api/chatHistory';
-import { parseMultiFileCode, extractVueProjectFiles, cleanVueOutput } from '@/utils/codeParser';
+import {
+  parseMultiFileCode,
+  extractVueProjectFiles,
+  cleanVueOutput,
+  type ParsedCode,
+} from '@/utils/codeParser';
 import type { AppVO } from '@/api/types';
 
 const PAGE_SIZE = 10;
@@ -115,6 +120,9 @@ export default function AppChat() {
   const [previewCode, setPreviewCode] = useState('');
   const [htmlPreviewUrl, setHtmlPreviewUrl] = useState('');
   const [htmlPreviewCode, setHtmlPreviewCode] = useState('');
+  // 历史会话不会重放 SSE，因此 currentCode 为空。多文件代码栏要直接读取
+  // 后端已保存的 index.html / style.css / script.js，不能只依赖流式文本。
+  const [savedMultiFileCode, setSavedMultiFileCode] = useState<ParsedCode | null>(null);
   const [htmlPreviewLoading, setHtmlPreviewLoading] = useState(false);
   const [htmlPreviewFrameLoading, setHtmlPreviewFrameLoading] = useState(false);
   const [previewTab, setPreviewTab] = useState('preview');
@@ -277,6 +285,26 @@ export default function AppChat() {
           if (!response.ok) throw new Error('preview file not ready');
           const text = await response.text();
           if (!text || text.length < 20) throw new Error('preview file empty');
+          if (codeGenType === 'multi_file') {
+            const readCodeFile = async (fileName: string): Promise<string> => {
+              try {
+                const fileResponse = await fetch(`${baseUrl}${fileName}?t=${t}`, {
+                  cache: 'no-store',
+                  credentials: 'include',
+                  signal: controller.signal,
+                });
+                return fileResponse.ok ? fileResponse.text() : '';
+              } catch {
+                return '';
+              }
+            };
+            const [cssCode, jsCode] = await Promise.all([
+              readCodeFile('style.css'),
+              readCodeFile('script.js'),
+            ]);
+            if (targetAppId !== appIdRef.current) return;
+            setSavedMultiFileCode({ htmlCode: text, cssCode, jsCode });
+          }
           setHtmlPreviewCode(text);
           setHtmlPreviewFrameLoading(true);
           setHtmlPreviewUrl(`${baseUrl}?t=${Date.now()}`);
@@ -648,9 +676,23 @@ export default function AppChat() {
 
   // Memoize parsed multi-file code
   const parsedCode = useMemo(() => {
-    if (!currentCode || app?.codeGenType !== 'multi_file') return null;
-    return parseMultiFileCode(currentCode);
-  }, [currentCode, app?.codeGenType]);
+    if (app?.codeGenType !== 'multi_file') return null;
+
+    const isParsedCode = (code: ParsedCode): boolean =>
+      Boolean(code.htmlCode || code.cssCode || code.jsCode);
+    if (currentCode) {
+      const streamedCode = parseMultiFileCode(currentCode);
+      if (isParsedCode(streamedCode)) return streamedCode;
+    }
+    // 已完成会话中的 currentCode 为空时，优先从聊天记录恢复；若历史只保存了
+    // 说明文字，则使用刚才从已落盘文件读取的完整三文件内容。
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role !== 'ai') continue;
+      const historyCode = parseMultiFileCode(messages[i].content);
+      if (isParsedCode(historyCode)) return historyCode;
+    }
+    return savedMultiFileCode;
+  }, [currentCode, messages, savedMultiFileCode, app?.codeGenType]);
 
   const htmlCodeForCodeTab = useMemo(() => {
     if (app?.codeGenType === 'vue_project') return '';
@@ -670,6 +712,7 @@ export default function AppChat() {
     setPreviewCode('');
     setHtmlPreviewUrl('');
     setHtmlPreviewCode('');
+    setSavedMultiFileCode(null);
     setHtmlPreviewLoading(false);
     setHtmlPreviewFrameLoading(false);
     setDeployUrl('');
@@ -1586,15 +1629,20 @@ export default function AppChat() {
                   <div className="chat-tab-fill">
                     {app?.codeGenType === 'vue_project' ? (
                       <VueProjectViewer files={projectFiles} deploying={deploying} isStreaming={isGenerationBusy} onDeploy={handleDeploy} />
-                    ) : parsedCode && app?.codeGenType === 'multi_file' ? (
+                    ) : app?.codeGenType === 'multi_file' ? (
                       <Tabs
                         defaultActiveKey="html"
                         size="small"
-                        style={{ height: '100%' }}
+                        className="multi-file-code-tabs"
                         items={[
                           {
                             key: 'html',
-                            label: 'HTML',
+                            label: (
+                              <span className="multi-file-code-tab-label">
+                                <span className="multi-file-code-tab-badge multi-file-code-tab-badge--html">&lt;/&gt;</span>
+                                <span>index.html</span>
+                              </span>
+                            ),
                             children: (
                               <div style={{ height: 'calc(100vh - 190px)' }}>
                                 <CodePreview
@@ -1607,7 +1655,12 @@ export default function AppChat() {
                           },
                           {
                             key: 'css',
-                            label: 'CSS',
+                            label: (
+                              <span className="multi-file-code-tab-label">
+                                <span className="multi-file-code-tab-badge multi-file-code-tab-badge--css">#</span>
+                                <span>style.css</span>
+                              </span>
+                            ),
                             children: (
                               <div style={{ height: 'calc(100vh - 190px)' }}>
                                 <CodePreview
@@ -1620,7 +1673,12 @@ export default function AppChat() {
                           },
                           {
                             key: 'js',
-                            label: 'JS',
+                            label: (
+                              <span className="multi-file-code-tab-label">
+                                <span className="multi-file-code-tab-badge multi-file-code-tab-badge--js">JS</span>
+                                <span>script.js</span>
+                              </span>
+                            ),
                             children: (
                               <div style={{ height: 'calc(100vh - 190px)' }}>
                                 <CodePreview

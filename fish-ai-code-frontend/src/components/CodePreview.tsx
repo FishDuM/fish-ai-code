@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useHighlighter } from '@/hooks/useHighlighter';
 import { resolveLanguage } from '@/utils/codeLanguage';
+import { formatCodeForDisplay } from '@/utils/codeFormatter';
 
 interface CodePreviewProps {
   code: string;
@@ -75,7 +76,14 @@ function CodePreview({ code, language, isStreaming = false }: CodePreviewProps) 
   // streaming. Otherwise fall back to a plain <pre> so the user still sees
   // their code while it's arriving or while we wait for the import.
   const canHighlight = !isStreaming && highlighter !== null && prismLanguage !== undefined;
-  const display = code || '// 等待 AI 生成代码...';
+  const rawDisplay = code || '// 等待 AI 生成代码...';
+  // 多文件模式的模型输出偶尔会把整个文件压缩到一行。聊天消息已使用
+  // formatCodeForDisplay 让这类输出便于阅读；右侧“代码”预览也应保持
+  // 一致。流式阶段保留原文，避免每个分片都重复格式化；复制仍使用原始
+  // `code`，因此展示层的整理不会改变用户拿到的源码。
+  const display = isStreaming
+    ? rawDisplay
+    : formatCodeForDisplay(rawDisplay, language ?? '');
 
   return (
     <div style={{ position: 'relative', height: '100%' }}>
