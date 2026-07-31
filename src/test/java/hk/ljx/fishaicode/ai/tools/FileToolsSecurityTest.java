@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -54,7 +55,8 @@ class FileToolsSecurityTest {
         assertEquals("<template>old</template>", fileReadTool.readFile("src/Component.vue", appId));
         assertEquals("文件修改成功: src/Component.vue",
                 fileModifyTool.modifyFile("src/Component.vue", "old", "new", appId));
-        assertTrue(fileDirReadTool.readDir("", appId).contains("src/Component.vue"));
+        // Path.toString() 使用平台分隔符（Windows 为反斜杠），断言需按平台拼接
+        assertTrue(fileDirReadTool.readDir("", appId).contains("src" + File.separator + "Component.vue"));
         assertEquals("文件删除成功: src/Component.vue", fileDeleteTool.deleteFile("src/Component.vue", appId));
         assertFalse(Files.exists(projectRoot.resolve("src/Component.vue")));
     }

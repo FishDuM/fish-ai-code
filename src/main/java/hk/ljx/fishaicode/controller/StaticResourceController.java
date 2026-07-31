@@ -1,7 +1,7 @@
 package hk.ljx.fishaicode.controller;
 
 import hk.ljx.fishaicode.constant.AppConstant;
-import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;
+import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;

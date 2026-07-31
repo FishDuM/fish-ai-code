@@ -1,5 +1,6 @@
 package hk.ljx.fishaicode.common;
 
+import hk.ljx.fishaicode.constant.SortConstant;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.Data;
@@ -27,5 +28,5 @@ public class PageRequest {
     /**
      * 排序顺序（默认降序）
      */
-    private String sortOrder = "descend";
+    private String sortOrder = SortConstant.DESC;
 }

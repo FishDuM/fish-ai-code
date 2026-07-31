@@ -2,7 +2,7 @@ package hk.ljx.fishaicode.ratelimit.aspect;
 
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
-import hk.ljx.fishaicode.modal.entity.User;
+import hk.ljx.fishaicode.model.entity.User;
 import hk.ljx.fishaicode.ratelimit.annotation.RateLimit;
 import hk.ljx.fishaicode.service.UserService;
 import jakarta.annotation.Resource;

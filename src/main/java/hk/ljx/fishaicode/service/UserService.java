@@ -1,11 +1,13 @@
 package hk.ljx.fishaicode.service;
 
-import com.mybatisflex.core.query.QueryWrapper;
+import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.service.IService;
-import hk.ljx.fishaicode.modal.dto.user.UserQueryRequest;
-import hk.ljx.fishaicode.modal.entity.User;
-import hk.ljx.fishaicode.modal.vo.LoginUserVO;
-import hk.ljx.fishaicode.modal.vo.UserVO;
+import hk.ljx.fishaicode.model.dto.user.UserAddRequest;
+import hk.ljx.fishaicode.model.dto.user.UserQueryRequest;
+import hk.ljx.fishaicode.model.dto.user.UserUpdateRequest;
+import hk.ljx.fishaicode.model.entity.User;
+import hk.ljx.fishaicode.model.vo.LoginUserVO;
+import hk.ljx.fishaicode.model.vo.UserVO;
 import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.List;
@@ -26,6 +28,14 @@ public interface UserService extends IService<User> {
      * @return 新用户 id
      */
     long userRegister(String userAccount, String userPassword, String checkPassword);
+
+    /**
+     * 管理员创建用户（含账号查重、角色校验、默认密码设置）
+     *
+     * @param userAddRequest 创建用户请求
+     * @return 新用户 id
+     */
+    long addUser(UserAddRequest userAddRequest);
 
     /**
      * 用户登录
@@ -68,11 +78,44 @@ public interface UserService extends IService<User> {
     LoginUserVO getLoginUserVO(User user);
 
     /**
-     * 获取查询条件
+     * 管理员分页查询用户列表（脱敏视图）
+     *
      * @param userQueryRequest 用户查询请求
-     * @return 查询条件
+     * @return 脱敏用户分页结果
      */
-    QueryWrapper getQueryWrapper(UserQueryRequest userQueryRequest);
+    Page<UserVO> listUserVOByPage(UserQueryRequest userQueryRequest);
+
+    /**
+     * 根据 id 获取用户（含不存在校验）
+     *
+     * @param id 用户 id
+     * @return 用户实体
+     */
+    User getUserById(long id);
+
+    /**
+     * 根据 id 获取脱敏用户信息（含不存在校验）
+     *
+     * @param id 用户 id
+     * @return 脱敏用户信息
+     */
+    UserVO getUserVOById(long id);
+
+    /**
+     * 删除用户
+     *
+     * @param id 用户 id
+     * @return true 表示删除成功
+     */
+    boolean deleteUser(long id);
+
+    /**
+     * 更新用户
+     *
+     * @param userUpdateRequest 更新用户请求
+     * @return true 表示更新成功
+     */
+    boolean updateUser(UserUpdateRequest userUpdateRequest);
 
     /**
      * 获取脱敏的用户信息

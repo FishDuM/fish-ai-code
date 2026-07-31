@@ -6,7 +6,7 @@ import cn.hutool.core.util.StrUtil;
 import hk.ljx.fishaicode.constant.AppConstant;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
-import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;
+import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;

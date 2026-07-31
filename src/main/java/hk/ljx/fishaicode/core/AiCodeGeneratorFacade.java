@@ -15,7 +15,7 @@ import hk.ljx.fishaicode.core.parser.CodeParserExecutor;
 import hk.ljx.fishaicode.core.saver.CodeFileSaverExecutor;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
-import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;
+import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

@@ -10,7 +10,10 @@ import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import hk.ljx.fishaicode.ai.AiCodeGenTypeRoutingService;
 import hk.ljx.fishaicode.ai.AiCodeGenTypeRoutingServiceFactory;
+import hk.ljx.fishaicode.common.PageSortUtils;
 import hk.ljx.fishaicode.constant.AppConstant;
+import hk.ljx.fishaicode.constant.AppDeployProperties;
+import hk.ljx.fishaicode.constant.UserConstant;
 import hk.ljx.fishaicode.core.AiCodeGeneratorFacade;
 import hk.ljx.fishaicode.core.GenerationCoordinator;
 import hk.ljx.fishaicode.core.builder.VueProjectBuilder;
@@ -18,23 +21,24 @@ import hk.ljx.fishaicode.core.handler.StreamHandlerExecutor;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.exception.ThrowUtils;
-import hk.ljx.fishaicode.modal.dto.app.AdminAppQueryRequest;
-import hk.ljx.fishaicode.modal.dto.app.AppAddRequest;
-import hk.ljx.fishaicode.modal.dto.app.AppQueryRequest;
-import hk.ljx.fishaicode.modal.entity.App;
-import hk.ljx.fishaicode.modal.entity.User;
+import hk.ljx.fishaicode.model.dto.app.AdminAppQueryRequest;
+import hk.ljx.fishaicode.model.dto.app.AppAddRequest;
+import hk.ljx.fishaicode.model.dto.app.AppQueryRequest;
+import hk.ljx.fishaicode.model.entity.App;
+import hk.ljx.fishaicode.model.entity.User;
 import hk.ljx.fishaicode.mapper.AppMapper;
-import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;
-import hk.ljx.fishaicode.modal.enums.MessageTypeEnum;
-import hk.ljx.fishaicode.modal.vo.AppVO;
-import hk.ljx.fishaicode.modal.vo.PublicAppVO;
+import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
+import hk.ljx.fishaicode.model.enums.MessageTypeEnum;
+import hk.ljx.fishaicode.model.vo.AppVO;
+import hk.ljx.fishaicode.model.vo.PublicAppVO;
 import hk.ljx.fishaicode.ai.SensitiveCheckFactory;
-import hk.ljx.fishaicode.langgraph4j.service.WorkflowService;
+import hk.ljx.fishaicode.workflow.service.WorkflowService;
 import hk.ljx.fishaicode.service.AppService;
 import hk.ljx.fishaicode.service.ChatHistoryService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 
 import java.io.File;
@@ -51,6 +55,9 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppService {
+
+    @Resource
+    private AppDeployProperties appDeployProperties;
 
     private static final java.util.Set<String> ALLOWED_SORT_FIELDS = java.util.Set.of(
             "id", "appName", "priority", "userId", "createTime", "updateTime", "editTime"
@@ -113,7 +120,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (app.getPriority() == null) {
             app.setPriority(0);
         }
-        app.setCover("https://api.elaina.cat/random/");
+        app.setCover(UserConstant.DEFAULT_USER_AVATAR);
         // 3. 保存
         boolean result = this.save(app);
         if (!result) {
@@ -184,7 +191,39 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         return true;
     }
 
+    /**
+     * 获取应用并校验访问权限（仅本人或管理员可访问）
+     */
     @Override
+    public App getAppWithPermission(Long appId, User loginUser) {
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不合法");
+        ThrowUtils.throwIf(loginUser == null, ErrorCode.NOT_LOGIN_ERROR, "用户未登录");
+        App app = this.getById(appId);
+        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        boolean isOwner = app.getUserId().equals(loginUser.getId());
+        boolean isAdmin = UserConstant.ADMIN_ROLE.equals(loginUser.getUserRole());
+        ThrowUtils.throwIf(!isOwner && !isAdmin, ErrorCode.NO_AUTH_ERROR, "没有权限访问该应用");
+        return app;
+    }
+
+    /**
+     * 获取应用并校验所有权（仅本人可访问，管理员不可代替）
+     */
+    @Override
+    public App getOwnedApp(Long appId, User loginUser) {
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不合法");
+        ThrowUtils.throwIf(loginUser == null, ErrorCode.NOT_LOGIN_ERROR, "用户未登录");
+        App app = this.getById(appId);
+        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        ThrowUtils.throwIf(!app.getUserId().equals(loginUser.getId()), ErrorCode.NO_AUTH_ERROR, "无权限访问该应用");
+        return app;
+    }
+
+    /**
+     * 用户删除自己的应用（连同对话历史，整体在一个事务中，避免脏数据）
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public boolean deleteMyApp(long id, User loginUser) {
         // 1. 校验
         if (id <= 0) {
@@ -203,6 +242,33 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         chatHistoryService.removeByAppId(id);
         // 5. 删除应用
         return this.removeById(id);
+    }
+
+    /**
+     * 管理员删除任意应用（连同对话历史，整体在一个事务中，避免脏数据）
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean adminDeleteApp(long id) {
+        // 1. 校验
+        if (id <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        App app = this.getById(id);
+        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        // 2. 先清理对话历史，避免数据孤儿
+        chatHistoryService.removeByAppId(id);
+        // 3. 删除应用
+        boolean result = this.removeById(id);
+        ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
+        return true;
+    }
+
+    @Override
+    public App adminGetAppById(long id) {
+        App app = this.getById(id);
+        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        return app;
     }
 
     @Override
@@ -237,8 +303,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
                 getAdminQueryWrapper(adminAppQueryRequest));
     }
 
-    @Override
-    public QueryWrapper getMyAppQueryWrapper(AppQueryRequest appQueryRequest, long userId) {
+    private QueryWrapper getMyAppQueryWrapper(AppQueryRequest appQueryRequest, long userId) {
         if (appQueryRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "请求参数为空");
         }
@@ -250,14 +315,11 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (StrUtil.isNotBlank(appName)) {
             queryWrapper.like("appName", appName);
         }
-        if (StrUtil.isNotBlank(sortField) && ALLOWED_SORT_FIELDS.contains(sortField)) {
-            queryWrapper.orderBy(sortField, "ascend".equals(sortOrder));
-        }
+        PageSortUtils.applySort(queryWrapper, sortField, sortOrder, ALLOWED_SORT_FIELDS);
         return queryWrapper;
     }
 
-    @Override
-    public QueryWrapper getFeaturedAppQueryWrapper(AppQueryRequest appQueryRequest) {
+    private QueryWrapper getFeaturedAppQueryWrapper(AppQueryRequest appQueryRequest) {
         if (appQueryRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "请求参数为空");
         }
@@ -270,14 +332,11 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (StrUtil.isNotBlank(appName)) {
             queryWrapper.like("appName", appName);
         }
-        if (StrUtil.isNotBlank(sortField) && ALLOWED_SORT_FIELDS.contains(sortField)) {
-            queryWrapper.orderBy(sortField, "ascend".equals(sortOrder));
-        }
+        PageSortUtils.applySort(queryWrapper, sortField, sortOrder, ALLOWED_SORT_FIELDS);
         return queryWrapper;
     }
 
-    @Override
-    public QueryWrapper getAdminQueryWrapper(AdminAppQueryRequest adminAppQueryRequest) {
+    private QueryWrapper getAdminQueryWrapper(AdminAppQueryRequest adminAppQueryRequest) {
         if (adminAppQueryRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "请求参数为空");
         }
@@ -300,9 +359,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
                 .like("cover", cover, StrUtil.isNotBlank(cover))
                 .like("initPrompt", initPrompt, StrUtil.isNotBlank(initPrompt))
                 .like("deployKey", deployKey, StrUtil.isNotBlank(deployKey));
-        if (StrUtil.isNotBlank(sortField) && ALLOWED_SORT_FIELDS.contains(sortField)) {
-            queryWrapper.orderBy(sortField, "ascend".equals(sortOrder));
-        }
+        PageSortUtils.applySort(queryWrapper, sortField, sortOrder, ALLOWED_SORT_FIELDS);
         return queryWrapper;
     }
 
@@ -386,6 +443,13 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         });
     }
 
+    /**
+     * 部署一致性设计说明（有意不加 @Transactional）：
+     * 1. deployKey 在复制文件前落库，依靠 DB 唯一索引 uk_deployKey 抢占标识，防止并发生成重复 key；
+     * 2. 文件复制/构建为文件系统操作，无法参与数据库事务，回滚无意义；
+     * 3. DB 以 deployedTime 为部署成功标志：文件操作失败时不更新 deployedTime，下次部署复用同一 deployKey 重试，幂等安全；
+     * 4. 部署在分布式锁内执行，若在此开长事务，Docker 构建（最长 180s）期间会一直占用数据库连接。
+     */
     @Override
     public String deployApp(Long appId, User loginUser) {
         // 1、参数校验
@@ -403,10 +467,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         ThrowUtils.throwIf(app == null, ErrorCode.PARAMS_ERROR, "应用不存在");
         // 3、检查是否为本人应用
         ThrowUtils.throwIf(!app.getUserId().equals(loginUser.getId()), ErrorCode.NO_AUTH_ERROR, "非本人应用");
-        // 4、检查是否 deployKey 没有则生成 6位（字母+数字）
+        // 4、检查是否 deployKey 没有则生成（字母+数字，长度由 app.deploy.key-length 配置，默认 16 位）
         String deployKey = app.getDeployKey();
         if (StrUtil.isBlank(deployKey)) {
-            deployKey = RandomUtil.randomString(6);
+            deployKey = RandomUtil.randomString(appDeployProperties.getKeyLength());
             app.setDeployKey(deployKey);
             this.updateById(app);
         }
@@ -445,7 +509,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         updateApp.setDeployedTime(LocalDateTime.now());
         boolean updateResult = this.updateById(updateApp);
         ThrowUtils.throwIf(!updateResult, ErrorCode.PARAMS_ERROR, "更新应用部署信息失败");
-        // 10、返回访问的 URL
-        return String.format("%s/%s", AppConstant.CODE_DEPLOY_HOST, deployKey);
+        // 10、返回访问的 URL（部署域名由 app.deploy.host 配置，默认 http://localhost）
+        return String.format("%s/%s", appDeployProperties.getHost(), deployKey);
     }
 }

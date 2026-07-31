@@ -1,7 +1,7 @@
 package hk.ljx.fishaicode.core;
 
 import hk.ljx.fishaicode.exception.BusinessException;
-import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;
+import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 

@@ -14,7 +14,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     public BaseResponse<?> businessExceptionHandler(BusinessException e) {
-        log.error("BusinessException", e);
+        // 业务异常是预期流程控制，打 warn 且不打印堆栈，避免预期错误刷爆日志
+        log.warn("BusinessException: {}", e.getMessage());
         return ResultUtils.error(e.getCode(), e.getMessage());
     }
 

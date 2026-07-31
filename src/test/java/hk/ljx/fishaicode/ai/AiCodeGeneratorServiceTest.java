@@ -3,16 +3,21 @@ package hk.ljx.fishaicode.ai;
 import hk.ljx.fishaicode.ai.model.HtmlCodeResult;
 import hk.ljx.fishaicode.ai.model.MultiFileCodeResult;
 import hk.ljx.fishaicode.core.AiCodeGeneratorFacade;
-import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;
+import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
 import jakarta.annotation.Resource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
 
+// 依赖真实 DeepSeek API 与 key 的集成测试：未设置 DEEPSEEK_API_KEY 时跳过
+@EnabledIfEnvironmentVariable(named = "DEEPSEEK_API_KEY", matches = ".+")
 @SpringBootTest
+@ActiveProfiles("test")
 class AiCodeGeneratorServiceTest {
 
     @Resource

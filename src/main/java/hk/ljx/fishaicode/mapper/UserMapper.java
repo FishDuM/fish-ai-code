@@ -1,7 +1,7 @@
 package hk.ljx.fishaicode.mapper;
 
 import com.mybatisflex.core.BaseMapper;
-import hk.ljx.fishaicode.modal.entity.User;
+import hk.ljx.fishaicode.model.entity.User;
 
 /**
  * 用户 映射层。

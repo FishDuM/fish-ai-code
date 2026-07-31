@@ -29,6 +29,12 @@ server:
       cookie:
         max-age: 2592000
 
+# 应用部署配置（默认值见 AppDeployProperties，可不配置）
+# app:
+#   deploy:
+#     host: http://localhost
+#     key-length: 16
+
 # AI 生成的 Vue 项目只能在一次性 Docker 容器中离线构建，绝不在宿主机执行 npm。
 # 使用 docker/vue-builder/Dockerfile 预热依赖缓存；运行时网络永久关闭。
 vue-build:

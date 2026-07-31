@@ -11,7 +11,7 @@ import hk.ljx.fishaicode.ai.guardrail.PromptSafetyInputGuardrail;
 import hk.ljx.fishaicode.ai.tools.*;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
-import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;
+import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
 import hk.ljx.fishaicode.service.ChatHistoryService;
 import hk.ljx.fishaicode.utils.SpringContextUtil;
 import jakarta.annotation.Resource;

@@ -14,15 +14,14 @@ import hk.ljx.fishaicode.core.GenerationCoordinator;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.exception.ThrowUtils;
-import hk.ljx.fishaicode.modal.dto.app.*;
-import hk.ljx.fishaicode.modal.entity.App;
-import hk.ljx.fishaicode.modal.entity.User;
-import hk.ljx.fishaicode.modal.vo.AppVO;
-import hk.ljx.fishaicode.modal.vo.PublicAppVO;
+import hk.ljx.fishaicode.model.dto.app.*;
+import hk.ljx.fishaicode.model.entity.App;
+import hk.ljx.fishaicode.model.entity.User;
+import hk.ljx.fishaicode.model.vo.AppVO;
+import hk.ljx.fishaicode.model.vo.PublicAppVO;
 import hk.ljx.fishaicode.ratelimit.annotation.RateLimit;
 import hk.ljx.fishaicode.ratelimit.enums.RateLimitType;
 import hk.ljx.fishaicode.service.AppService;
-import hk.ljx.fishaicode.service.ChatHistoryService;
 import hk.ljx.fishaicode.service.ProjectDownloadService;
 import hk.ljx.fishaicode.service.UserService;
 import jakarta.annotation.Resource;
@@ -63,9 +62,6 @@ public class AppController {
 
     @Resource
     private GenerationCoordinator generationCoordinator;
-
-    @Resource
-    private ChatHistoryService chatHistoryService;
 
     /**
      * 创建应用
@@ -119,11 +115,7 @@ public class AppController {
     @GetMapping("/get/vo")
     public BaseResponse<AppVO> getAppVOById(@Min(value = 1, message = "id 不合法") long id, HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
-        App app = appService.getById(id);
-        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR);
-        boolean isOwner = app.getUserId().equals(loginUser.getId());
-        boolean isAdmin = UserConstant.ADMIN_ROLE.equals(loginUser.getUserRole());
-        ThrowUtils.throwIf(!isOwner && !isAdmin, ErrorCode.NO_AUTH_ERROR, "没有权限访问该应用");
+        App app = appService.getAppWithPermission(id, loginUser);
         return ResultUtils.success(appService.getAppVO(app));
     }
 
@@ -212,11 +204,7 @@ public class AppController {
             @NotNull(message = "应用 ID 不能为空") @Min(value = 1, message = "应用 ID 不合法") @RequestParam("appId") Long appId,
             HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
-        App app = appService.getById(appId);
-        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
-        boolean isOwner = app.getUserId().equals(loginUser.getId());
-        boolean isAdmin = UserConstant.ADMIN_ROLE.equals(loginUser.getUserRole());
-        ThrowUtils.throwIf(!isOwner && !isAdmin, ErrorCode.NO_AUTH_ERROR, "没有权限访问该应用");
+        appService.getAppWithPermission(appId, loginUser);
         return ResultUtils.success(generationCoordinator.isBusy(appId));
     }
 
@@ -247,12 +235,8 @@ public class AppController {
     @PostMapping("/admin/delete")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<Boolean> adminDeleteApp(@Valid @RequestBody DeleteRequest deleteRequest) {
-        Long appId = deleteRequest.getId();
-        // 先清理对话历史，避免数据孤儿
-        chatHistoryService.removeByAppId(appId);
-        boolean result = appService.removeById(appId);
-        ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
-        return ResultUtils.success(true);
+        boolean result = appService.adminDeleteApp(deleteRequest.getId());
+        return ResultUtils.success(result);
     }
 
     /**
@@ -294,9 +278,7 @@ public class AppController {
     @GetMapping("/admin/get")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<App> adminGetAppById(@Min(value = 1, message = "id 不合法") long id) {
-        App app = appService.getById(id);
-        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR);
-        return ResultUtils.success(app);
+        return ResultUtils.success(appService.adminGetAppById(id));
     }
 
 
@@ -312,12 +294,8 @@ public class AppController {
             @Min(value = 1, message = "应用 ID 不合法") @PathVariable Long appId,
             HttpServletRequest request,
             HttpServletResponse response) {
-        App app = appService.getById(appId);
-        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
         User loginUser = userService.getLoginUser(request);
-        if (!app.getUserId().equals(loginUser.getId())) {
-            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "无权限下载该应用代码");
-        }
+        App app = appService.getOwnedApp(appId, loginUser);
         generationCoordinator.executeExclusively(appId, () -> {
             String codeGenType = app.getCodeGenType();
             String sourceDirName = codeGenType + "_" + appId;

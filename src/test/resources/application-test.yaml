@@ -1,0 +1,45 @@
+# 测试环境配置：连接本地已运行的 MySQL / Redis 实例。
+# AI 模型 key 通过环境变量注入（DEEPSEEK_API_KEY 等），避免提交真实密钥。
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/fish_ai_code
+    username: root
+    password: ${MYSQL_PASSWORD:123456}
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      ttl: 3600
+      database: 0
+      password: ${REDIS_PASSWORD:}
+
+langchain4j:
+  open-ai:
+    chat-model:
+      base-url: ${LLM_BASE_URL:https://api.deepseek.com}
+      api-key: ${DEEPSEEK_API_KEY:}
+      model-name: deepseek-v4-flash
+      log-requests: false
+      log-responses: false
+    streaming-chat-model:
+      base-url: ${LLM_BASE_URL:https://api.deepseek.com}
+      api-key: ${DEEPSEEK_API_KEY:}
+      model-name: deepseek-v4-flash
+      log-requests: false
+      log-responses: false
+    reasoning-streaming-chat-model:
+      base-url: ${LLM_BASE_URL:https://api.deepseek.com}
+      api-key: ${DEEPSEEK_API_KEY:}
+      model-name: deepseek-v4-flash
+      max-tokens: 32768
+      temperature: 0.1
+    routing-chat-model:
+      base-url: ${LLM_BASE_URL:https://api.deepseek.com}
+      api-key: ${DEEPSEEK_API_KEY:}
+      model-name: deepseek-v4-flash
+
+pexels:
+  api-key: ${PEXELS_API_KEY:}
+undraw:
+  token: ${UNDRAW_TOKEN:}

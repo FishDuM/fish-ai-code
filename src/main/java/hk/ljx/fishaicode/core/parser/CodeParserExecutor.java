@@ -2,7 +2,7 @@ package hk.ljx.fishaicode.core.parser;
 
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
-import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;
+import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
 
 /**
  * 代码解析器执行器

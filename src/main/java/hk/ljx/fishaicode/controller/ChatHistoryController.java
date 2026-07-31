@@ -5,12 +5,9 @@ import hk.ljx.fishaicode.annotation.AuthCheck;
 import hk.ljx.fishaicode.common.BaseResponse;
 import hk.ljx.fishaicode.common.ResultUtils;
 import hk.ljx.fishaicode.constant.UserConstant;
-import hk.ljx.fishaicode.exception.ErrorCode;
-import hk.ljx.fishaicode.exception.ThrowUtils;
-import hk.ljx.fishaicode.modal.dto.chathistory.AdminChatHistoryQueryRequest;
-import hk.ljx.fishaicode.modal.entity.App;
-import hk.ljx.fishaicode.modal.entity.ChatHistory;
-import hk.ljx.fishaicode.modal.entity.User;
+import hk.ljx.fishaicode.model.dto.chathistory.AdminChatHistoryQueryRequest;
+import hk.ljx.fishaicode.model.entity.ChatHistory;
+import hk.ljx.fishaicode.model.entity.User;
 import hk.ljx.fishaicode.service.AppService;
 import hk.ljx.fishaicode.service.ChatHistoryService;
 import hk.ljx.fishaicode.service.UserService;
@@ -59,11 +56,7 @@ public class ChatHistoryController {
             @RequestParam(value = "limit", defaultValue = "10") @Min(value = 1, message = "limit 至少为 1") @Max(value = 20, message = "limit 最多为 20") int limit,
             HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
-        App app = appService.getById(appId);
-        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
-        boolean isOwner = app.getUserId().equals(loginUser.getId());
-        boolean isAdmin = UserConstant.ADMIN_ROLE.equals(loginUser.getUserRole());
-        ThrowUtils.throwIf(!isOwner && !isAdmin, ErrorCode.NO_AUTH_ERROR);
+        appService.getAppWithPermission(appId, loginUser);
         List<ChatHistory> list = chatHistoryService.listLatestChatHistory(appId, limit);
         return ResultUtils.success(list);
     }
@@ -86,11 +79,7 @@ public class ChatHistoryController {
             @RequestParam(value = "limit", defaultValue = "10") @Min(value = 1, message = "limit 至少为 1") @Max(value = 20, message = "limit 最多为 20") int limit,
             HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
-        App app = appService.getById(appId);
-        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
-        boolean isOwner = app.getUserId().equals(loginUser.getId());
-        boolean isAdmin = UserConstant.ADMIN_ROLE.equals(loginUser.getUserRole());
-        ThrowUtils.throwIf(!isOwner && !isAdmin, ErrorCode.NO_AUTH_ERROR);
+        appService.getAppWithPermission(appId, loginUser);
         List<ChatHistory> list = chatHistoryService.listChatHistoryBefore(appId, before, beforeId, limit);
         return ResultUtils.success(list);
     }

@@ -1,11 +1,10 @@
 package hk.ljx.fishaicode.service;
 
 import com.mybatisflex.core.paginate.Page;
-import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.core.service.IService;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
-import hk.ljx.fishaicode.modal.dto.chathistory.AdminChatHistoryQueryRequest;
-import hk.ljx.fishaicode.modal.entity.ChatHistory;
+import hk.ljx.fishaicode.model.dto.chathistory.AdminChatHistoryQueryRequest;
+import hk.ljx.fishaicode.model.entity.ChatHistory;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -65,12 +64,4 @@ public interface ChatHistoryService extends IService<ChatHistory> {
      * @return 分页结果
      */
     Page<ChatHistory> adminListChatHistoryByPage(AdminChatHistoryQueryRequest adminChatHistoryQueryRequest);
-
-    /**
-     * 获取管理员查询条件
-     *
-     * @param adminChatHistoryQueryRequest 查询请求
-     * @return 查询条件
-     */
-    QueryWrapper getAdminQueryWrapper(AdminChatHistoryQueryRequest adminChatHistoryQueryRequest);
 }

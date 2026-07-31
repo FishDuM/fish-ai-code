@@ -1,7 +1,7 @@
 package hk.ljx.fishaicode.core.handler;
 
-import hk.ljx.fishaicode.modal.entity.User;
-import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;
+import hk.ljx.fishaicode.model.entity.User;
+import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
 import hk.ljx.fishaicode.service.ChatHistoryService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;

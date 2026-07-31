@@ -1,15 +1,14 @@
 package hk.ljx.fishaicode.service;
 
 import com.mybatisflex.core.paginate.Page;
-import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.core.service.IService;
-import hk.ljx.fishaicode.modal.dto.app.AdminAppQueryRequest;
-import hk.ljx.fishaicode.modal.dto.app.AppAddRequest;
-import hk.ljx.fishaicode.modal.dto.app.AppQueryRequest;
-import hk.ljx.fishaicode.modal.entity.App;
-import hk.ljx.fishaicode.modal.entity.User;
-import hk.ljx.fishaicode.modal.vo.AppVO;
-import hk.ljx.fishaicode.modal.vo.PublicAppVO;
+import hk.ljx.fishaicode.model.dto.app.AdminAppQueryRequest;
+import hk.ljx.fishaicode.model.dto.app.AppAddRequest;
+import hk.ljx.fishaicode.model.dto.app.AppQueryRequest;
+import hk.ljx.fishaicode.model.entity.App;
+import hk.ljx.fishaicode.model.entity.User;
+import hk.ljx.fishaicode.model.vo.AppVO;
+import hk.ljx.fishaicode.model.vo.PublicAppVO;
 import org.springframework.http.codec.ServerSentEvent;
 import reactor.core.publisher.Flux;
 
@@ -53,6 +52,42 @@ public interface AppService extends IService<App> {
     boolean adminUpdateApp(Long id, String appName, String cover, Integer priority);
 
     /**
+     * 获取应用并校验访问权限（仅本人或管理员可访问）。
+     * 应用不存在抛 NOT_FOUND_ERROR，无权限抛 NO_AUTH_ERROR。
+     *
+     * @param appId     应用 id
+     * @param loginUser 当前登录用户
+     * @return 应用实体
+     */
+    App getAppWithPermission(Long appId, User loginUser);
+
+    /**
+     * 获取应用并校验所有权（仅本人可访问，管理员不可代替）。
+     * 应用不存在抛 NOT_FOUND_ERROR，非本人抛 NO_AUTH_ERROR。
+     *
+     * @param appId     应用 id
+     * @param loginUser 当前登录用户
+     * @return 应用实体
+     */
+    App getOwnedApp(Long appId, User loginUser);
+
+    /**
+     * 管理员删除任意应用（连同对话历史，整体在一个事务中）
+     *
+     * @param id 应用 id
+     * @return 是否删除成功
+     */
+    boolean adminDeleteApp(long id);
+
+    /**
+     * 管理员根据 id 查看应用详情（含不存在校验）
+     *
+     * @param id 应用 id
+     * @return 应用实体
+     */
+    App adminGetAppById(long id);
+
+    /**
      * 用户删除自己的应用
      *
      * @param id        应用 id
@@ -85,31 +120,6 @@ public interface AppService extends IService<App> {
      * @return 分页结果
      */
     Page<App> adminListAppsByPage(AdminAppQueryRequest adminAppQueryRequest);
-
-    /**
-     * 获取用户应用的查询条件
-     *
-     * @param appQueryRequest 查询请求
-     * @param userId          用户 id
-     * @return 查询条件
-     */
-    QueryWrapper getMyAppQueryWrapper(AppQueryRequest appQueryRequest, long userId);
-
-    /**
-     * 获取精选应用的查询条件
-     *
-     * @param appQueryRequest 查询请求
-     * @return 查询条件
-     */
-    QueryWrapper getFeaturedAppQueryWrapper(AppQueryRequest appQueryRequest);
-
-    /**
-     * 获取管理员查询条件
-     *
-     * @param adminAppQueryRequest 查询请求
-     * @return 查询条件
-     */
-    QueryWrapper getAdminQueryWrapper(AdminAppQueryRequest adminAppQueryRequest);
 
     /**
      * 获取应用视图对象

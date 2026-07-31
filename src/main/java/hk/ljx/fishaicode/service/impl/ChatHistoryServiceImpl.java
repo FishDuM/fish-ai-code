@@ -8,13 +8,14 @@ import com.mybatisflex.spring.service.impl.ServiceImpl;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
+import hk.ljx.fishaicode.common.PageSortUtils;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.exception.ThrowUtils;
-import hk.ljx.fishaicode.modal.dto.chathistory.AdminChatHistoryQueryRequest;
-import hk.ljx.fishaicode.modal.entity.ChatHistory;
+import hk.ljx.fishaicode.model.dto.chathistory.AdminChatHistoryQueryRequest;
+import hk.ljx.fishaicode.model.entity.ChatHistory;
 import hk.ljx.fishaicode.mapper.ChatHistoryMapper;
-import hk.ljx.fishaicode.modal.enums.MessageTypeEnum;
+import hk.ljx.fishaicode.model.enums.MessageTypeEnum;
 import hk.ljx.fishaicode.service.ChatHistoryService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -152,8 +153,7 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
                 getAdminQueryWrapper(adminChatHistoryQueryRequest));
     }
 
-    @Override
-    public QueryWrapper getAdminQueryWrapper(AdminChatHistoryQueryRequest adminChatHistoryQueryRequest) {
+    private QueryWrapper getAdminQueryWrapper(AdminChatHistoryQueryRequest adminChatHistoryQueryRequest) {
         if (adminChatHistoryQueryRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "请求参数为空");
         }
@@ -166,9 +166,8 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
                 .eq("appId", appId, appId != null)
                 .eq("userId", userId, userId != null)
                 .eq("messageType", messageType, StrUtil.isNotBlank(messageType));
-        if (StrUtil.isNotBlank(sortField) && ALLOWED_SORT_FIELDS.contains(sortField)) {
-            queryWrapper.orderBy(sortField, "ascend".equals(sortOrder));
-        } else {
+        PageSortUtils.applySort(queryWrapper, sortField, sortOrder, ALLOWED_SORT_FIELDS);
+        if (StrUtil.isBlank(sortField) || !ALLOWED_SORT_FIELDS.contains(sortField)) {
             // 默认按时间降序
             queryWrapper.orderBy("createTime", false);
         }

@@ -1,8 +1,5 @@
 package hk.ljx.fishaicode.controller;
 
-import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.util.StrUtil;
-import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.core.paginate.Page;
 import hk.ljx.fishaicode.annotation.AuthCheck;
 import hk.ljx.fishaicode.common.BaseResponse;
@@ -12,9 +9,9 @@ import hk.ljx.fishaicode.constant.UserConstant;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.exception.ThrowUtils;
-import hk.ljx.fishaicode.modal.dto.user.*;
-import hk.ljx.fishaicode.modal.vo.LoginUserVO;
-import hk.ljx.fishaicode.modal.vo.UserVO;
+import hk.ljx.fishaicode.model.dto.user.*;
+import hk.ljx.fishaicode.model.vo.LoginUserVO;
+import hk.ljx.fishaicode.model.vo.UserVO;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -24,11 +21,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import hk.ljx.fishaicode.modal.entity.User;
-import hk.ljx.fishaicode.modal.enums.UserRoleEnum;
+import hk.ljx.fishaicode.model.entity.User;
 import hk.ljx.fishaicode.service.UserService;
 import org.springframework.web.bind.annotation.RestController;
-import java.util.List;
 
 /**
  * 用户 控制层。
@@ -85,30 +80,8 @@ public class UserController {
     @PostMapping("/add")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<Long> addUser(@Valid @RequestBody UserAddRequest userAddRequest) {
-        String userAccount = userAddRequest.getUserAccount();
-        ThrowUtils.throwIf(userAccount.length() < 4, ErrorCode.PARAMS_ERROR, "用户账号过短");
-        String userRole = userAddRequest.getUserRole();
-        if (StrUtil.isNotBlank(userRole)) {
-            ThrowUtils.throwIf(UserRoleEnum.getEnumByValue(userRole) == null, ErrorCode.PARAMS_ERROR, "用户角色不合法");
-        }
-        QueryWrapper queryWrapper = QueryWrapper.create().eq("userAccount", userAccount);
-        long count = userService.count(queryWrapper);
-        ThrowUtils.throwIf(count > 0, ErrorCode.PARAMS_ERROR, "账号已存在");
-        User user = new User();
-        BeanUtil.copyProperties(userAddRequest, user);
-        if (StrUtil.isBlank(user.getUserRole())) {
-            user.setUserRole(UserRoleEnum.USER.getValue());
-        }
-        if (StrUtil.isBlank(user.getUserAvatar())) {
-            user.setUserAvatar("https://api.elaina.cat/random/");
-        }
-        // 默认密码 12345678
-        final String DEFAULT_PASSWORD = "12345678";
-        String encryptPassword = userService.getEncryptPassword(DEFAULT_PASSWORD);
-        user.setUserPassword(encryptPassword);
-        boolean result = userService.save(user);
-        ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
-        return ResultUtils.success(user.getId());
+        long userId = userService.addUser(userAddRequest);
+        return ResultUtils.success(userId);
     }
 
     /**
@@ -117,9 +90,7 @@ public class UserController {
     @GetMapping("/get")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<User> getUserById(@Min(value = 1, message = "id 不合法") long id) {
-        User user = userService.getById(id);
-        ThrowUtils.throwIf(user == null, ErrorCode.NOT_FOUND_ERROR);
-        return ResultUtils.success(user);
+        return ResultUtils.success(userService.getUserById(id));
     }
 
     /**
@@ -127,9 +98,7 @@ public class UserController {
      */
     @GetMapping("/get/vo")
     public BaseResponse<UserVO> getUserVOById(@Min(value = 1, message = "id 不合法") long id) {
-        User user = userService.getById(id);
-        ThrowUtils.throwIf(user == null, ErrorCode.NOT_FOUND_ERROR);
-        return ResultUtils.success(userService.getUserVO(user));
+        return ResultUtils.success(userService.getUserVOById(id));
     }
 
     /**
@@ -138,8 +107,7 @@ public class UserController {
     @PostMapping("/delete")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<Boolean> deleteUser(@Valid @RequestBody DeleteRequest deleteRequest) {
-        boolean b = userService.removeById(deleteRequest.getId());
-        return ResultUtils.success(b);
+        return ResultUtils.success(userService.deleteUser(deleteRequest.getId()));
     }
 
     /**
@@ -148,11 +116,7 @@ public class UserController {
     @PostMapping("/update")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<Boolean> updateUser(@Valid @RequestBody UserUpdateRequest userUpdateRequest) {
-        User user = new User();
-        BeanUtil.copyProperties(userUpdateRequest, user);
-        boolean result = userService.updateById(user);
-        ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
-        return ResultUtils.success(true);
+        return ResultUtils.success(userService.updateUser(userUpdateRequest));
     }
 
     /**
@@ -163,14 +127,8 @@ public class UserController {
     @PostMapping("/list/page/vo")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<Page<UserVO>> listUserVOByPage(@Valid @RequestBody UserQueryRequest userQueryRequest) {
-        long pageNum = userQueryRequest.getPageNum();
-        long pageSize = userQueryRequest.getPageSize();
-        Page<User> userPage = userService.page(Page.of(pageNum, pageSize),
-                userService.getQueryWrapper(userQueryRequest));
-        Page<UserVO> userVOPage = new Page<>(pageNum, pageSize, userPage.getTotalRow());
-        List<UserVO> userVOList = userService.getUserVOList(userPage.getRecords());
-        userVOPage.setRecords(userVOList);
-        return ResultUtils.success(userVOPage);
+        Page<UserVO> result = userService.listUserVOByPage(userQueryRequest);
+        return ResultUtils.success(result);
     }
 
 }

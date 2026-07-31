@@ -2,11 +2,16 @@ package hk.ljx.fishaicode.core;
 
 import hk.ljx.fishaicode.ai.model.HtmlCodeResult;
 import hk.ljx.fishaicode.ai.model.MultiFileCodeResult;
+import hk.ljx.fishaicode.core.parser.HtmlCodeParser;
+import hk.ljx.fishaicode.core.parser.MultiFileCodeParser;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class CodeParserTest {
+
+    private final HtmlCodeParser htmlCodeParser = new HtmlCodeParser();
+    private final MultiFileCodeParser multiFileCodeParser = new MultiFileCodeParser();
 
     @Test
     void parseHtmlCode() {
@@ -25,7 +30,7 @@ class CodeParserTest {
 
                 随便写一段描述
                 """;
-        HtmlCodeResult result = CodeParser.parseHtmlCode(codeContent);
+        HtmlCodeResult result = htmlCodeParser.parseCode(codeContent);
         assertNotNull(result);
         assertNotNull(result.getHtmlCode());
     }
@@ -60,7 +65,7 @@ class CodeParserTest {
                 ```
                 文件创建完成！
                 """;
-        MultiFileCodeResult result = CodeParser.parseMultiFileCode(codeContent);
+        MultiFileCodeResult result = multiFileCodeParser.parseCode(codeContent);
         assertNotNull(result);
         assertNotNull(result.getHtmlCode());
         assertNotNull(result.getCssCode());

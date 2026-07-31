@@ -1,7 +1,7 @@
 package hk.ljx.fishaicode.ai;
 
 import dev.langchain4j.service.SystemMessage;
-import hk.ljx.fishaicode.modal.enums.CodeGenTypeEnum;
+import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
 
 /**
  * AI代码生成类型智能路由服务
