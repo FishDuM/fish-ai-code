@@ -1,0 +1,80 @@
+# ============================================================
+# 本地 / 部署配置模板
+# 使用方法：复制本文件为 application-local.yaml 并填入真实密钥
+#   cp src/main/resources/application-local.yaml.example src/main/resources/application-local.yaml
+# 注意：application-local.yaml 已被 .gitignore 忽略，不会提交到仓库；
+#       本模板文件（.example）随仓库跟踪，便于新环境快速初始化。
+# ============================================================
+
+spring:
+  # MySQL 数据源（先执行 sql/create.sql 建库建表）
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/fish_ai_code?useUnicode=true&characterEncoding=utf8
+    username: root
+    password: "你的MySQL密码"
+
+  # Redis（会话 / 缓存 / 分布式锁 / 限流）
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      ttl: 3600
+      database: 0
+      # 如果 Redis 设置了密码，取消注释并填写
+      # password: "你的Redis密码"
+
+# ------------------------------------------------------------
+# AI 模型配置
+# 模型统一走 OpenAI 兼容协议（base-url 指向对应服务商）
+# ------------------------------------------------------------
+langchain4j:
+  open-ai:
+    # 对话 / 代码生成主模型
+    chat-model:
+      base-url: https://api.deepseek.com
+      api-key: "你的DeepSeek_API_KEY"        # 必填：https://platform.deepseek.com 申请
+      model-name: deepseek-chat
+      log-requests: true
+      log-responses: true
+      response-format: json_object
+      strict-json-schema: true
+      max-retries: 3
+    # 流式生成模型（与主模型可同一把 key）
+    streaming-chat-model:
+      base-url: https://api.deepseek.com
+      api-key: "你的DeepSeek_API_KEY"
+      model-name: deepseek-chat
+      log-requests: true
+      log-responses: true
+      max-retries: 3
+    # 推理模型（图片收集规划 / 代码质量检查）
+    reasoning-streaming-chat-model:
+      base-url: https://api.deepseek.com
+      api-key: "你的DeepSeek_API_KEY"
+      model-name: deepseek-reasoner        # 或 deepseek-chat
+      max-tokens: 32768
+      temperature: 0.1
+      log-requests: true
+      log-responses: true
+    # 智能路由模型（判断生成类型，可选阿里云百炼，比 DeepSeek 便宜）
+    routing-chat-model:
+      base-url: https://api.deepseek.com   # 阿里云百炼: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api-key: "你的DeepSeek_API_KEY"
+      model-name: deepseek-chat
+      log-requests: true
+      log-responses: true
+
+server:
+  # 监听地址：0.0.0.0 允许外部访问；仅本机调试可改 127.0.0.1
+  address: 0.0.0.0
+
+# ------------------------------------------------------------
+# 可选：图片素材搜索（不配置则 AI 生成时跳过图片收集，不影响核心流程）
+# ------------------------------------------------------------
+# https://www.pexels.com/ 申请 API key
+pexels:
+  api-key: "你的Pexels_API_KEY"
+# https://undraw.co 申请 token
+undraw:
+  token: "你的Undraw_TOKEN"

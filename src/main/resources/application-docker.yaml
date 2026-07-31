@@ -1,0 +1,64 @@
+# ============================================================
+# Docker 部署 profile（spring.profiles.active=docker）
+# 所有配置通过环境变量注入，由 docker-compose.yml 或 .env 提供。
+# 默认值与本地开发保持一致，未注入时也能启动（除数据库外）。
+# ============================================================
+
+spring:
+  # MySQL（compose 服务名 mysql）
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${DB_HOST:mysql}:${DB_PORT:3306}/${DB_NAME:fish_ai_code}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:123456}
+  # Redis（compose 服务名 redis）
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      database: 0
+      password: ${REDIS_PASSWORD:}
+
+# AI 模型（OpenAI 兼容协议，key 从环境变量注入）
+langchain4j:
+  open-ai:
+    chat-model:
+      base-url: ${AI_BASE_URL:https://api.deepseek.com}
+      api-key: ${DEEPSEEK_API_KEY:}
+      model-name: ${AI_CHAT_MODEL:deepseek-chat}
+      log-requests: ${AI_LOG_REQUESTS:false}
+      log-responses: ${AI_LOG_RESPONSES:false}
+      response-format: json_object
+      strict-json-schema: true
+      max-retries: 3
+    streaming-chat-model:
+      base-url: ${AI_BASE_URL:https://api.deepseek.com}
+      api-key: ${DEEPSEEK_API_KEY:}
+      model-name: ${AI_CHAT_MODEL:deepseek-chat}
+      log-requests: ${AI_LOG_REQUESTS:false}
+      log-responses: ${AI_LOG_RESPONSES:false}
+      max-retries: 3
+    reasoning-streaming-chat-model:
+      base-url: ${AI_BASE_URL:https://api.deepseek.com}
+      api-key: ${DEEPSEEK_API_KEY:}
+      model-name: ${AI_REASONING_MODEL:deepseek-reasoner}
+      max-tokens: 32768
+      temperature: 0.1
+      log-requests: ${AI_LOG_REQUESTS:false}
+      log-responses: ${AI_LOG_RESPONSES:false}
+    routing-chat-model:
+      base-url: ${AI_BASE_URL:https://api.deepseek.com}
+      api-key: ${DEEPSEEK_API_KEY:}
+      model-name: ${AI_CHAT_MODEL:deepseek-chat}
+      log-requests: ${AI_LOG_REQUESTS:false}
+      log-responses: ${AI_LOG_RESPONSES:false}
+
+# 可选：图片素材搜索（不配置则跳过图片收集）
+pexels:
+  api-key: ${PEXELS_API_KEY:}
+undraw:
+  token: ${UNDRAW_TOKEN:}
+
+# 监听所有网卡，由 compose 暴露端口
+server:
+  address: 0.0.0.0

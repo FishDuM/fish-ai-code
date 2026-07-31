@@ -1,0 +1,29 @@
+# Docker 构建上下文忽略：避免把本地依赖/产物打包进镜像构建上下文
+
+# 后端
+target/
+*.jar
+
+# 前端依赖与产物
+fish-ai-code-frontend/node_modules/
+fish-ai-code-frontend/dist/
+fish-ai-code-frontend/.vite/
+
+# 运行时数据
+tmp/
+data/
+
+# 本地配置（含密钥，绝不进构建上下文）
+src/main/resources/application-local.yaml
+
+# 版本控制 / IDE
+.git/
+.gitignore
+.idea/
+*.iml
+
+# 文档
+面试文档/
+
+# 环境文件
+.env
