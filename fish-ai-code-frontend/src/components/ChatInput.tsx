@@ -5,11 +5,13 @@ import { SendOutlined } from '@ant-design/icons';
 interface ChatInputProps {
   isStreaming: boolean;
   isBackgroundGenerating: boolean;
+  /** 只读模式（非主人非管理员查看他人应用时禁用输入） */
+  disabled?: boolean;
   onSend: (text: string) => void;
   onCancel: () => void;
 }
 
-function ChatInputInner({ isStreaming, isBackgroundGenerating, onSend, onCancel }: ChatInputProps) {
+function ChatInputInner({ isStreaming, isBackgroundGenerating, disabled, onSend, onCancel }: ChatInputProps) {
   const [value, setValue] = useState('');
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -38,13 +40,15 @@ function ChatInputInner({ isStreaming, isBackgroundGenerating, onSend, onCancel 
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={isStreaming
-            ? 'AI 正在生成中...'
-            : isBackgroundGenerating
-              ? '后台正在完成上一轮生成，请稍候...'
-              : '描述你想要的网站... (Enter 发送, Shift+Enter 换行)'}
+          placeholder={disabled
+            ? '登录后可以编辑此应用'
+            : isStreaming
+              ? 'AI 正在生成中...'
+              : isBackgroundGenerating
+                ? '后台正在完成上一轮生成，请稍候...'
+                : '描述你想要的网站... (Enter 发送, Shift+Enter 换行)'}
           autoSize={{ minRows: 1, maxRows: 4 }}
-          disabled={isStreaming || isBackgroundGenerating}
+          disabled={disabled || isStreaming || isBackgroundGenerating}
         />
         {isStreaming ? (
           <Button danger onClick={onCancel}>
@@ -57,6 +61,7 @@ function ChatInputInner({ isStreaming, isBackgroundGenerating, onSend, onCancel 
             className="btn-gradient"
             icon={<SendOutlined />}
             onClick={handleSend}
+            disabled={disabled}
           >
             发送
           </Button>

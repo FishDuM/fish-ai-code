@@ -62,6 +62,16 @@ public interface AppService extends IService<App> {
     App getAppWithPermission(Long appId, User loginUser);
 
     /**
+     * 获取应用（仅精选应用允许公开访问；非精选应用对非本人/非管理员返回无权限）。
+     * 用于详情页公开查看：任何人（含未登录）都能看到精选应用。
+     *
+     * @param appId     应用 id
+     * @param loginUser 当前登录用户（可能为 null）
+     * @return 应用实体
+     */
+    App getPublicAppById(Long appId, User loginUser);
+
+    /**
      * 获取应用并校验所有权（仅本人可访问，管理员不可代替）。
      * 应用不存在抛 NOT_FOUND_ERROR，非本人抛 NO_AUTH_ERROR。
      *

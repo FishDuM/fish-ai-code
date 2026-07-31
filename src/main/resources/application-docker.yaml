@@ -59,6 +59,12 @@ pexels:
 undraw:
   token: ${UNDRAW_TOKEN:}
 
+# 部署配置：域名由 APP_DEPLOY_HOST 注入（nginx 通过 /deploy/ 服务部署产物目录）
+app:
+  deploy:
+    host: ${APP_DEPLOY_HOST:http://localhost}
+    path: ${APP_DEPLOY_PATH:/deploy}
+
 # 监听所有网卡，由 compose 暴露端口
 server:
   address: 0.0.0.0

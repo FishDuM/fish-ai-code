@@ -23,6 +23,11 @@ public class AppDeployProperties {
     private String host = "http://localhost";
 
     /**
+     * 部署产物 URL 路径前缀（nginx location /deploy/ 服务部署目录）
+     */
+    private String path = "/deploy";
+
+    /**
      * 部署访问凭据长度（字母+数字）
      */
     private int keyLength = 16;

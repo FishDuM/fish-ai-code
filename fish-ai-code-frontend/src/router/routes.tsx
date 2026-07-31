@@ -72,11 +72,9 @@ export const routes = [
       {
         path: '/app/:id/chat',
         element: (
-          <RequireAuth>
-            <SuspenseWrap>
-              <AppChat />
-            </SuspenseWrap>
-          </RequireAuth>
+          <SuspenseWrap>
+            <AppChat />
+          </SuspenseWrap>
         ),
       },
     ],

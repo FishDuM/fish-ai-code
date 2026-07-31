@@ -94,6 +94,9 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+    volumes:
+      # 部署产物目录：后端写入 data/code_deploy，nginx 通过 /deploy/ 服务
+      - ./data/code_deploy:/usr/share/nginx/deploy:ro
     ports:
       - "${FRONTEND_PORT:-80}:80"
 

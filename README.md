@@ -45,7 +45,7 @@ AI 自动生成完整代码，支持三种模式：
 生成的代码打包为 ZIP 下载，或一键部署到内置服务器。
 
 ### 用户与安全
-注册登录、Redis 会话管理、角色权限控制（用户/管理员）、敏感词过滤。
+注册登录、Redis 会话管理、角色权限控制（用户/管理员）、敏感词过滤；精选应用公开可见（未登录可浏览），对话/编辑仅创建者与管理员。
 
 ### 性能优化
 - Redis 旁路缓存
@@ -180,7 +180,7 @@ docker compose up -d       # 重新启动（不重新构建）
 ```
 
 > **Vue 构建说明**：后端容器通过挂载 `/var/run/docker.sock` 调用宿主机 Docker 运行隔离构建（`--network none`、只读、无内核能力），构建镜像需先在宿主机执行第 2 步的 `docker build`。
-> **数据目录**：生成的代码在 `data/code_output/`，部署产物在 `data/code_deploy/`（已加入 .gitignore）。
+> **数据目录**：生成的代码在 `data/code_output/`，部署产物在 `data/code_deploy/`（已加入 .gitignore）。部署产物由 nginx 通过 `http://<主机>/deploy/{deployKey}` 提供访问（后端返回的部署链接即此格式）。
 
 ### 方式二：传统部署（手动）
 
@@ -229,7 +229,7 @@ server {
 
 - `application-local.yaml` 的 `server.address: 0.0.0.0` 允许外部访问，请确保防火墙 / 安全组只开放必要端口
 - 代码生成目录 `tmp/code_output/` 与部署目录 `tmp/code_deploy/` 在启动目录下生成，建议给足磁盘空间
-- 部署域名可在 `application.yaml` 的 `app.deploy.host` 配置（默认 `http://localhost`）
+- 部署访问域名可在 `application.yaml` 的 `app.deploy.host` 配置（默认 `http://localhost`），Docker 方式在 `.env` 里配 `APP_DEPLOY_HOST`；部署链接格式为 `{host}/deploy/{deployKey}`，由 nginx 的 `location /deploy/` 服务
 
 ---
 

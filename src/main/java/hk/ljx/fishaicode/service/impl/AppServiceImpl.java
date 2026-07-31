@@ -207,6 +207,24 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     }
 
     /**
+     * 公开查看应用详情：精选应用任何人可看（含未登录）；非精选应用仅本人或管理员可看。
+     */
+    @Override
+    public App getPublicAppById(Long appId, User loginUser) {
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不合法");
+        App app = this.getById(appId);
+        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        boolean isOwner = loginUser != null && app.getUserId().equals(loginUser.getId());
+        boolean isAdmin = loginUser != null && UserConstant.ADMIN_ROLE.equals(loginUser.getUserRole());
+        // 精选应用公开可见；非精选应用保持仅本人/管理员可见
+        boolean isFeatured = AppConstant.FEATURED_PRIORITY == app.getPriority();
+        if (!isFeatured && !isOwner && !isAdmin) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "没有权限访问该应用");
+        }
+        return app;
+    }
+
+    /**
      * 获取应用并校验所有权（仅本人可访问，管理员不可代替）
      */
     @Override
@@ -407,8 +425,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         // 2、获取应用信息
         App app = this.getById(appId);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
-        // 3、权限校验，仅本人可以和自己的应用对话
-        ThrowUtils.throwIf(!app.getUserId().equals(loginUser.getId()), ErrorCode.NO_AUTH_ERROR, "没有权限");
+        // 3、权限校验：仅应用主人或管理员可以对话（编辑权限）
+        boolean isOwner = app.getUserId().equals(loginUser.getId());
+        boolean isAdmin = UserConstant.ADMIN_ROLE.equals(loginUser.getUserRole());
+        ThrowUtils.throwIf(!isOwner && !isAdmin, ErrorCode.NO_AUTH_ERROR, "没有权限");
         // AI 内容安全审查：检查用户输入是否涉及法律违规或政治敏感
         String checkResult = sensitiveCheckFactory.create().verify(message);
         if (!"PASS".equals(checkResult.trim())) {
@@ -509,7 +529,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         updateApp.setDeployedTime(LocalDateTime.now());
         boolean updateResult = this.updateById(updateApp);
         ThrowUtils.throwIf(!updateResult, ErrorCode.PARAMS_ERROR, "更新应用部署信息失败");
-        // 10、返回访问的 URL（部署域名由 app.deploy.host 配置，默认 http://localhost）
-        return String.format("%s/%s", appDeployProperties.getHost(), deployKey);
+        // 10、返回访问的 URL（部署域名由 app.deploy.host 配置，产物路径前缀由 app.deploy.path 配置）
+        //     nginx 通过 location /deploy/ 服务部署目录
+        String deployBase = appDeployProperties.getHost().replaceAll("/+$", "")
+                + appDeployProperties.getPath().replaceAll("^/+", "");
+        return String.format("%s/%s", deployBase, deployKey);
     }
 }

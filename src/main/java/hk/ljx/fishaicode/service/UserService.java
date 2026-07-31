@@ -56,6 +56,15 @@ public interface UserService extends IService<User> {
     User getLoginUser(HttpServletRequest request);
 
     /**
+     * 获取当前登录用户（未登录时返回 null，不抛异常）
+     * 用于公开接口：登录状态可空获取，由调用方决定是否需要登录
+     *
+     * @param request http 请求
+     * @return 当前登录用户，未登录为 null
+     */
+    User getLoginUserOrNull(HttpServletRequest request);
+
+    /**
      * 用户注销
      *
      * @param request http 请求

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router';
-import { Button, App, Tabs, Spin, Modal, Input, Switch, Tooltip, Result } from 'antd';
+import { Button, App, Tabs, Spin, Modal, Input, Switch, Tooltip } from 'antd';
 import {
   CodeOutlined,
   EyeOutlined,
@@ -565,6 +565,9 @@ export default function AppChat() {
   useTitle(app?.appName || '对话');
 
   const isOwner = loginUser != null && app != null && loginUser.id === app.userId;
+  const isAdmin = loginUser?.userRole === 'admin';
+  // 可编辑：应用主人或管理员（对话 / 编辑 / 自动发送初始化）
+  const canEdit = isOwner || isAdmin;
 
   // Source of truth for Vue project files: read straight from disk via the
   // dev-only Vite plugin (`/__dev__/vue-files/{appId}/list`). The backend
@@ -866,7 +869,7 @@ export default function AppChat() {
       !appId ||
 	      !app ||
 	      !shouldAutoSendInit ||
-	      !isOwner ||
+	      !canEdit ||
 	      messages.length > 0 ||
 	      !app.initPrompt
 	    ) return;
@@ -903,7 +906,7 @@ export default function AppChat() {
 	    messages,
 	    app,
 	    backgroundGeneration,
-	    isOwner,
+	    canEdit,
 	    appId,
 	    start,
 	    wasAutoSent,
@@ -1028,8 +1031,8 @@ export default function AppChat() {
   // ── Send ─────────────────────────────────────────────────────────
   const handleSend = useCallback((text: string) => {
     if (!text || isStreamingRef.current || backgroundGeneration || !appId) return;
-    if (!isOwner) {
-      message.warning('只有应用创建者可以继续编辑这个应用');
+    if (!canEdit) {
+      message.warning('只有应用创建者或管理员可以继续编辑这个应用');
       return;
     }
     setMessages((prev) => [...prev, { id: newMsgId(), role: 'user', content: text, createTime: new Date().toISOString() }]);
@@ -1048,14 +1051,14 @@ export default function AppChat() {
     previewHandledRef.current = false;
     setHtmlPreviewCode('');
     start(appId, text);
-  }, [appId, backgroundGeneration, isOwner, message, start, isStreamingRef]);
+  }, [appId, backgroundGeneration, canEdit, message, start, isStreamingRef]);
 
   // ── Edit-mode send (element + prompt) ─────────────────────────────
   const handleEditSend = useCallback(
     (instruction: string) => {
       if (!instruction || isStreamingRef.current || backgroundGeneration || !appId || !selectedElement) return;
-      if (!isOwner) {
-        message.warning('只有应用创建者可以使用编辑模式');
+      if (!canEdit) {
+        message.warning('只有应用创建者或管理员可以使用编辑模式');
         return;
       }
       const composed = buildEditPrompt(instruction, selectedElement);
@@ -1084,7 +1087,7 @@ export default function AppChat() {
       setPopoverPosition(null);
       start(appId, composed);
     },
-    [appId, backgroundGeneration, isOwner, message, selectedElement, start, isStreamingRef, postEditModeMessage],
+    [appId, backgroundGeneration, canEdit, message, selectedElement, start, isStreamingRef, postEditModeMessage],
   );
 
   const handleEditCancel = useCallback(() => {
@@ -1110,7 +1113,8 @@ export default function AppChat() {
   }, [selectedElement, computePopoverPosition]);
 
   const htmlPreviewSrcUrl = htmlPreviewUrl;
-  const supportsEditMode = Boolean(app?.codeGenType);
+  // 编辑模式仅主人/管理员可用：只读访客不显示编辑工具栏
+  const supportsEditMode = Boolean(app?.codeGenType) && canEdit;
   const hasEditablePreview = Boolean(htmlPreviewSrcUrl);
   const showPreviewToolbar = (showPreview || Boolean(htmlPreviewSrcUrl)) && hasEditablePreview;
   const editModeTooltip = supportsEditMode
@@ -1291,35 +1295,15 @@ export default function AppChat() {
   // worse than just letting the layout settle. The page below renders
   // its own affordances once the app data is in.
 
-  if (app && loginUser && !isOwner) {
-    return (
-      <div className="chat-workbench">
-        <ChatHeader
-          appName={app.appName || '未命名应用'}
-          isOwner={false}
-          showPreview={false}
-          isStreaming={false}
-          deploying={false}
-          onDeploy={handleDeploy}
-          onDownload={handleDownload}
-          onRename={handleRename}
-          onDelete={handleDelete}
-        />
-        <Result
-          status="403"
-          title="无权访问"
-          subTitle="这个应用只能由创建者继续编辑。"
-          extra={<Button type="primary" onClick={() => navigate('/dashboard')}>返回我的应用</Button>}
-        />
-      </div>
-    );
-  }
+  // 只读访问：精选应用对所有人公开可看（含未登录）。未登录或非主人非管理员时
+  // 隐藏编辑入口，保留预览与聊天记录；登录后才可编辑（主人或管理员）。
+  const isReadOnly = app != null && !canEdit;
 
   return (
     <div className="chat-workbench">
       <ChatHeader
         appName={app?.appName || '未命名应用'}
-        isOwner={isOwner}
+        isOwner={canEdit}
         showPreview={showPreview}
         isStreaming={isGenerationBusy}
         deploying={deploying}
@@ -1414,6 +1398,7 @@ export default function AppChat() {
           <ChatInput
             isStreaming={isStreaming}
             isBackgroundGenerating={backgroundGeneration}
+            disabled={isReadOnly}
             onSend={handleSend}
             onCancel={handleCancel}
           />

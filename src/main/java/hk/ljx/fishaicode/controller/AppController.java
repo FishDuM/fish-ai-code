@@ -31,6 +31,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
@@ -72,6 +73,7 @@ public class AppController {
      */
     @PostMapping("/add")
     @RateLimit(key = "app", rate = 10, rateInterval = 60, limitType = RateLimitType.USER, message = "当前还在内测阶段，AI服务请求有限制哦~")
+    @CacheEvict(value = "public_good_app_page", allEntries = true)
     public BaseResponse<Long> addApp(@Valid @RequestBody AppAddRequest appAddRequest, HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
         long appId = appService.addApp(appAddRequest, loginUser);
@@ -86,6 +88,7 @@ public class AppController {
      * @return 是否更新成功
      */
     @PostMapping("/update")
+    @CacheEvict(value = "public_good_app_page", allEntries = true)
     public BaseResponse<Boolean> updateMyApp(@Valid @RequestBody AppUpdateRequest appUpdateRequest, HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
         boolean result = appService.updateMyApp(appUpdateRequest.getId(), appUpdateRequest.getAppName(), loginUser);
@@ -100,6 +103,7 @@ public class AppController {
      * @return 是否删除成功
      */
     @PostMapping("/delete")
+    @CacheEvict(value = "public_good_app_page", allEntries = true)
     public BaseResponse<Boolean> deleteMyApp(@Valid @RequestBody DeleteRequest deleteRequest, HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
         boolean result = appService.deleteMyApp(deleteRequest.getId(), loginUser);
@@ -114,8 +118,9 @@ public class AppController {
      */
     @GetMapping("/get/vo")
     public BaseResponse<AppVO> getAppVOById(@Min(value = 1, message = "id 不合法") long id, HttpServletRequest request) {
-        User loginUser = userService.getLoginUser(request);
-        App app = appService.getAppWithPermission(id, loginUser);
+        // 公开查看：精选应用任何人可看（含未登录），非精选应用仅本人/管理员可看
+        User loginUser = userService.getLoginUserOrNull(request);
+        App app = appService.getPublicAppById(id, loginUser);
         return ResultUtils.success(appService.getAppVO(app));
     }
 
@@ -234,6 +239,7 @@ public class AppController {
      */
     @PostMapping("/admin/delete")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    @CacheEvict(value = "public_good_app_page", allEntries = true)
     public BaseResponse<Boolean> adminDeleteApp(@Valid @RequestBody DeleteRequest deleteRequest) {
         boolean result = appService.adminDeleteApp(deleteRequest.getId());
         return ResultUtils.success(result);
@@ -247,6 +253,7 @@ public class AppController {
      */
     @PostMapping("/admin/update")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    @CacheEvict(value = "public_good_app_page", allEntries = true)
     public BaseResponse<Boolean> adminUpdateApp(@Valid @RequestBody AdminAppUpdateRequest adminAppUpdateRequest) {
         boolean result = appService.adminUpdateApp(
                 adminAppUpdateRequest.getId(),

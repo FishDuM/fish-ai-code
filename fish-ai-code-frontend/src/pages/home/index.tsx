@@ -217,7 +217,10 @@ export default function Home() {
                   <AppCard
                     app={app}
                     showActions={false}
-                    onOpen={() => message.info('精选应用仅供公开展示，请创建自己的应用后继续编辑')}
+                    onOpen={(featuredApp) => {
+                      // 精选应用公开可见：任何人可点进查看（未登录/非主人只读）
+                      navigate(`/app/${featuredApp.id}/chat`);
+                    }}
                   />
                 </Col>
               ))}

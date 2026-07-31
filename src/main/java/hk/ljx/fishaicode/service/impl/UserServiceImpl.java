@@ -175,6 +175,18 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
     }
 
     @Override
+    public User getLoginUserOrNull(HttpServletRequest request) {
+        // 先判断是否已登录（未登录返回 null，不抛异常，供公开接口使用）
+        Object userIdObj = request.getSession().getAttribute(USER_LOGIN_STATE);
+        if (userIdObj == null) {
+            return null;
+        }
+        // 从数据库查询最新用户信息
+        Long userId = ((Number) userIdObj).longValue();
+        return this.getById(userId);
+    }
+
+    @Override
     public boolean userLogout(HttpServletRequest request) {
         // 先判断是否已登录
         Object userIdObj = request.getSession().getAttribute(USER_LOGIN_STATE);
