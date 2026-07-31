@@ -152,8 +152,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
         if (user == null || !passwordEncoder.matches(userPassword, user.getUserPassword())) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户不存在或密码错误");
         }
-        // 3. 记录用户的登录态
-        request.getSession().setAttribute(USER_LOGIN_STATE, user);
+        // 3. 记录登录态（仅存 userId）
+        request.getSession().setAttribute(USER_LOGIN_STATE, user.getId());
         // 4. 获得脱敏后的用户信息
         return this.getLoginUserVO(user);
     }
@@ -161,14 +161,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
     @Override
     public User getLoginUser(HttpServletRequest request) {
         // 先判断是否已登录
-        Object userObj = request.getSession().getAttribute(USER_LOGIN_STATE);
-        User currentUser = (User) userObj;
-        if (currentUser == null || currentUser.getId() == null) {
+        Object userIdObj = request.getSession().getAttribute(USER_LOGIN_STATE);
+        if (userIdObj == null) {
             throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
         }
-        // 从数据库查询（追求性能的话可以注释，直接返回上述结果）
-        long userId = currentUser.getId();
-        currentUser = this.getById(userId);
+        // 从数据库查询最新用户信息
+        Long userId = ((Number) userIdObj).longValue();
+        User currentUser = this.getById(userId);
         if (currentUser == null) {
             throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
         }
@@ -178,8 +177,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
     @Override
     public boolean userLogout(HttpServletRequest request) {
         // 先判断是否已登录
-        Object userObj = request.getSession().getAttribute(USER_LOGIN_STATE);
-        if (userObj == null) {
+        Object userIdObj = request.getSession().getAttribute(USER_LOGIN_STATE);
+        if (userIdObj == null) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "未登录");
         }
         // 移除登录态

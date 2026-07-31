@@ -1,14 +1,6 @@
 /**
- * Build a unique CSS selector path for a DOM element.
- *
- * Used by the edit-mode injector: when the user clicks an element inside the
- * preview iframe, we capture a selector that the AI can re-use to find the
- * same element after it rewrites the page. nth-of-type handles the common
- * case of repeated siblings (e.g. several <li> in a list).
- *
- * We intentionally avoid relying on id/class alone — both are frequently
- * absent on AI-generated markup, and class names are often generic
- * (".card", ".container") so they'd match multiple elements.
+ * 构建元素的唯一 CSS 选择器路径（AI 重写页面后仍可定位）。
+ * 不依赖 id/class：AI 生成的标记常缺 id，class 多为通用名（.card/.container）会误匹配多个元素。
  */
 export function buildCssSelector(el: Element): string {
   if (!el || el.nodeType !== 1) return '';

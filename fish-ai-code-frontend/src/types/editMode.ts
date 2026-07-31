@@ -1,12 +1,6 @@
 /**
- * Types for the AI-generated-site visual edit mode.
- *
- * The user toggles "edit mode" from the Preview tab. While edit mode is on,
- * the preview iframe injects a small script that highlights elements on
- * hover and, on click, sends the element's metadata back to the parent
- * window via postMessage. The parent renders a prompt popover; on submit it
- * composes a structured message ("element context + user instruction") and
- * feeds it into the existing SSE chat pipeline.
+ * AI 生成站点的可视化编辑模式类型：iframe 内高亮元素，点击后经 postMessage
+ * 回传元素元数据，由父窗口组装 prompt 走 SSE 聊天链路。
  */
 
 export interface SelectedElement {

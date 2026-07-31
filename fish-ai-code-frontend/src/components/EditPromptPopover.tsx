@@ -26,14 +26,9 @@ const MAX_WIDTH = 360;
 const GAP_PX = 8;
 
 /**
- * Floating popover that appears anchored to the element the user selected
- * in the preview iframe. Renders an element summary + a TextArea + send /
- * cancel buttons. Keeps its own draft state, so navigating between
- * selections or hitting cancel doesn't leak text between attempts.
- *
- * Positioning is driven entirely by `position` — this component does not
- * touch the iframe. Translation work happens in Chat.tsx where the iframe
- * ref is in scope.
+ * 锚定在 iframe 选中元素上的浮动弹层（元素摘要 + 输入框 + 发送/取消）。
+ * 自持草稿状态，切换选中/取消不会残留文本；定位完全由 position 驱动，
+ * 组件不接触 iframe，坐标换算在 Chat.tsx 中完成。
  */
 export default function EditPromptPopover({
   element,

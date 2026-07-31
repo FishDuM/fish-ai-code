@@ -5,16 +5,8 @@ function escapeMarkdownFenceContent(value: string): string {
 }
 
 /**
- * Compose the final prompt sent to the AI backend from a user instruction
- * and (optionally) the element the user selected in edit mode.
- *
- * The backend's `AiCodeGeneratorService` treats the entire query string as
- * a single `@UserMessage`. We embed the element context as a structured
- * prefix so the model clearly separates "what was selected" from "what to
- * change", and we keep the user instruction verbatim at the end.
- *
- * When no element was selected, we pass the user's raw instruction through
- * untouched — preserves the existing chat behaviour for normal messages.
+ * 组装发送给 AI 的最终 prompt：将选中元素信息作为结构化前缀注入，
+ * 用户指令原样保留在末尾（无选中元素时原样透传，保持普通聊天行为）。
  */
 export function buildEditPrompt(
   instruction: string,

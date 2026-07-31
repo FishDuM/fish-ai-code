@@ -533,7 +533,8 @@ export default function AppChat() {
   useEffect(() => {
     if (!streamingMessage || !streamingMessage.isStreaming) return;
     setStreamingMessage((prev) => {
-      if (!prev || prev.content === cleanedCode) return prev;
+      if (!prev || prev.content === '') return prev; // 本流首个 chunk 尚未到达，跳过，避免把上一轮的 currentCode 预填进新气泡
+      if (prev.content === cleanedCode) return prev;
       return { ...prev, content: cleanedCode };
     });
   }, [cleanedCode, streamingMessage]);
