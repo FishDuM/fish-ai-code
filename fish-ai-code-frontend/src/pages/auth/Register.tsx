@@ -51,7 +51,7 @@ export default function Register() {
               { min: 8, max: 16, message: '密码长度需在 8-16 个字符之间' },
             ]}
           >
-            <Input.Password prefix={<LockOutlined />} placeholder="密码" />
+            <Input.Password prefix={<LockOutlined />} placeholder="密码" autoComplete="new-password" />
           </Form.Item>
 
           <Form.Item
@@ -69,7 +69,7 @@ export default function Register() {
               }),
             ]}
           >
-            <Input.Password prefix={<LockOutlined />} placeholder="确认密码" />
+            <Input.Password prefix={<LockOutlined />} placeholder="确认密码" autoComplete="new-password" />
           </Form.Item>
 
           <Form.Item>

@@ -208,8 +208,9 @@ public class AppController {
     public BaseResponse<Boolean> getGenerationStatus(
             @NotNull(message = "应用 ID 不能为空") @Min(value = 1, message = "应用 ID 不合法") @RequestParam("appId") Long appId,
             HttpServletRequest request) {
-        User loginUser = userService.getLoginUser(request);
-        appService.getAppWithPermission(appId, loginUser);
+        // 精选应用公开可查状态（未登录/非主人也可）；非精选仅本人/管理员
+        User loginUser = userService.getLoginUserOrNull(request);
+        appService.getPublicAppById(appId, loginUser);
         return ResultUtils.success(generationCoordinator.isBusy(appId));
     }
 
