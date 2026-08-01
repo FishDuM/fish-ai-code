@@ -8,8 +8,10 @@ import cn.hutool.core.util.StrUtil;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
+import dev.langchain4j.community.store.memory.chat.redis.RedisChatMemoryStore;
 import hk.ljx.fishaicode.ai.AiCodeGenTypeRoutingService;
 import hk.ljx.fishaicode.ai.AiCodeGenTypeRoutingServiceFactory;
+import hk.ljx.fishaicode.ai.AiAppNameServiceFactory;
 import hk.ljx.fishaicode.common.PageSortUtils;
 import hk.ljx.fishaicode.constant.AppConstant;
 import hk.ljx.fishaicode.constant.AppDeployProperties;
@@ -83,6 +85,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     private AiCodeGenTypeRoutingServiceFactory aiCodeGenTypeRoutingServiceFactory;
 
     @Resource
+    private AiAppNameServiceFactory aiAppNameServiceFactory;
+
+    @Resource
     private SensitiveCheckFactory sensitiveCheckFactory;
 
     @Resource
@@ -90,6 +95,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     @Resource
     private GenerationCoordinator generationCoordinator;
+
+    @Resource
+    private RedisChatMemoryStore redisChatMemoryStore;
 
 
     @Override
@@ -110,8 +118,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (!"PASS".equals(checkResult.trim())) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "输入内容包含不符合本网站提供的范围或违规信息");
         }
-        // 2. 构建应用对象：应用名使用提示词前 6 个字符，路由仍使用完整提示词
-        String appName = initPrompt.length() > 6 ? initPrompt.substring(0, 6) : initPrompt;
+        // 2. 构建应用对象：应用名由 AI 智能提炼（不超过 15 字），失败时降级为提示词前 6 个字符，路由仍使用完整提示词
+        String appName = generateAppNameSafely(initPrompt);
         App app = App.builder()
                         .appName(appName).build();
         BeanUtil.copyProperties(appAddRequest, app);
@@ -131,6 +139,41 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "创建应用失败");
         }
         return app.getId();
+    }
+
+    /**
+     * 由 AI 智能提炼应用名，任何异常都降级为提示词前 6 个字符截断，保证创建应用永远成功。
+     */
+    private String generateAppNameSafely(String initPrompt) {
+        try {
+            String name = aiAppNameServiceFactory.createAiAppNameService().generateAppName(initPrompt);
+            String cleaned = cleanAppName(name);
+            if (StrUtil.isNotBlank(cleaned)) {
+                return cleaned;
+            }
+        } catch (Exception e) {
+            log.warn("AI 生成应用名失败，降级为截断，appName 前缀: {}", StrUtil.sub(initPrompt, 0, 6), e);
+        }
+        // 降级：提示词前 6 个字符
+        return initPrompt.length() > 6 ? initPrompt.substring(0, 6) : initPrompt;
+    }
+
+    /**
+     * 清洗 AI 返回的应用名：去空白、引号、首尾标点，超 15 字截断。
+     */
+    static String cleanAppName(String name) {
+        if (name == null) {
+            return "";
+        }
+        String cleaned = StrUtil.trim(name)
+                .replaceAll("[\"'“”‘’《》【】「」『』]", "")
+                .replaceAll("^[\\s:：,，。.!！?？\\-—]+|[\\s:：,，。.!！?？\\-—]+$", "")
+                .trim();
+        if (StrUtil.isBlank(cleaned)) {
+            return "";
+        }
+        // 截断保护：模型偶发超长时截到 15 字
+        return cleaned.length() > 15 ? cleaned.substring(0, 15) : cleaned;
     }
 
     @Override
@@ -299,11 +342,12 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     }
 
     /**
-     * 事务提交后清理该应用在磁盘上的代码/部署产物。
+     * 事务提交后清理该应用的磁盘产物与 Redis 对话记忆。
      *
      * <p>文件删除不可回滚，不能放进 DB 事务：若事务回滚，已删的文件无法恢复。
-     * 因此注册 afterCommit 同步回调，DB 删除确认成功后，再用虚拟线程异步清理磁盘，
-     * 避免占用 Tomcat 线程，也避免磁盘泄漏与"已删应用内容仍可访问"。</p>
+     * 因此注册 afterCommit 同步回调，DB 删除确认成功后，再用虚拟线程异步清理磁盘
+     * 和 Redis 对话记忆，避免占用 Tomcat 线程，也避免磁盘泄漏、"已删应用内容仍可访问"
+     * 与"应用已删但旧对话记忆残留"的问题。</p>
      */
     private void cleanAppFilesAfterCommit(App app) {
         if (app == null) {
@@ -317,7 +361,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         Path deployDir = StrUtil.isBlank(deployKey) ? null
                 : Paths.get(AppConstant.CODE_DEPLOY_ROOT_DIR, deployKey);
 
-        Runnable cleanup = () -> deleteDirectoryQuietly(codeDir, deployDir, app.getId());
+        Runnable cleanup = () -> {
+            deleteDirectoryQuietly(codeDir, deployDir, app.getId());
+            deleteChatMemoryQuietly(app.getId());
+        };
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             // 有事务：提交成功后执行；回滚则不删文件（DB 里应用还在）
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
@@ -329,6 +376,19 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         } else {
             // 无事务（理论上不会走到）：直接异步清理
             Thread.ofVirtual().name("clean-app-files-" + app.getId()).start(cleanup);
+        }
+    }
+
+    /**
+     * 清理 Redis 中该应用的对话记忆（LangChain4j RedisChatMemoryStore 以 appId 为 key）。
+     * 失败只记日志，不影响主流程。
+     */
+    private void deleteChatMemoryQuietly(long appId) {
+        try {
+            redisChatMemoryStore.deleteMessages(appId);
+            log.info("已清理应用 Redis 对话记忆，appId: {}", appId);
+        } catch (Exception e) {
+            log.error("清理应用 Redis 对话记忆失败，appId: {}", appId, e);
         }
     }
 
@@ -594,6 +654,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         //     nginx 通过 location /deploy/ 服务部署目录
         String deployBase = appDeployProperties.getHost().replaceAll("/+$", "")
                 + "/" + appDeployProperties.getPath().replaceAll("^/+", "").replaceAll("/+$", "");
-        return String.format("%s/%s", deployBase, deployKey);
+        // 必须以尾斜杠结尾：部署产物是相对路径引用（./assets/...），
+        // 无尾斜杠时浏览器会把 ./assets 解析到上一级（/deploy/assets），导致资源 404、页面空白。
+        return String.format("%s/%s/", deployBase, deployKey);
     }
 }

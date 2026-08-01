@@ -18,7 +18,7 @@ import EditPromptPopover from '@/components/EditPromptPopover';
 import { useSSE } from '@/hooks/useSSE';
 import { useTitle } from '@/hooks/useTitle';
 import { useAuthStore } from '@/stores/useAuthStore';
-import { applyEditModeToSrcDoc } from '@/utils/editModeInjector';
+import { applyEditModeToSrcDoc, buildEditModeScript } from '@/utils/editModeInjector';
 import { buildEditPrompt } from '@/utils/editPromptBuilder';
 import { getVueFilesListUrl } from '@/utils/vueProjectUrls';
 import {
@@ -161,6 +161,9 @@ export default function AppChat() {
   const pendingHighlightSelectorRef = useRef<string | null>(pendingHighlightSelector);
   const streamingMessageRef = useRef(streamingMessage);
   const codeGenTypeRef = useRef(app?.codeGenType);
+  // 记录"本次流开始时"的旧代码值：useSSE 故意不清 currentCode（防预览 iframe 闪白），
+  // 新流首个 chunk 到达前 cleanedCode 仍是旧值，同步 effect 靠它区分"旧代码"与"新流内容"。
+  const streamStartCodeRef = useRef('');
   // The callback is declared below because it depends on other hooks.  Keep a
   // stable no-op until the synchronising effect assigns the real callback.
   const refreshHtmlPreviewRef = useRef<(targetAppId?: string, codeGenType?: string | null) => void>(() => {});
@@ -202,6 +205,22 @@ export default function AppChat() {
       );
     } catch {
       // cross-origin or detached — ignore
+    }
+  }, []);
+
+  // Vue 项目：iframe 加载同源 URL（经 Vite/nginx 代理，浏览器视角同源），
+  // 在 onLoad 后把编辑脚本直接注入 iframe 文档（同源可访问 contentDocument）。
+  // 不用 srcDoc 是因为 Vue Router（history 模式）依赖真实 URL，srcDoc 的
+  // opaque origin 无法操作 history API，页面会抛 SecurityError 白屏。
+  const injectEditScriptIntoVueFrame = useCallback((iframe: HTMLIFrameElement) => {
+    try {
+      const doc = iframe.contentDocument;
+      if (!doc) return;
+      const s = doc.createElement('script');
+      s.textContent = buildEditModeScript();
+      (doc.body || doc.documentElement).appendChild(s);
+    } catch {
+      // cross-origin or detached — 编辑模式注入失败则保持普通预览
     }
   }, []);
 
@@ -533,7 +552,10 @@ export default function AppChat() {
   useEffect(() => {
     if (!streamingMessage || !streamingMessage.isStreaming) return;
     setStreamingMessage((prev) => {
-      if (!prev || prev.content === '') return prev; // 本流首个 chunk 尚未到达，跳过，避免把上一轮的 currentCode 预填进新气泡
+      // 新流首个 chunk 尚未到达（cleanedCode 仍是流开始时的旧代码值）时跳过，
+      // 避免把上一轮的 currentCode（旧代码预览）预填进新气泡；chunk 一旦到达，
+      // currentCode 从空开始累积为新内容，cleanedCode 不再等于旧值，才同步进气泡。
+      if (!prev || cleanedCode === streamStartCodeRef.current) return prev;
       if (prev.content === cleanedCode) return prev;
       return { ...prev, content: cleanedCode };
     });
@@ -890,6 +912,8 @@ export default function AppChat() {
     // Same as handleSend: allocate the live streaming bubble up front so the
     // chat panel shows the typing bubble from the very first frame of the
     // auto-sent stream.
+    // 记录旧代码值：新流首个 chunk 到达前，用它跳过"旧代码预填进新气泡"。
+    streamStartCodeRef.current = cleanedCode;
     setStreamingMessage({
       id: newMsgId(),
       role: 'ai',
@@ -1039,6 +1063,8 @@ export default function AppChat() {
     // Allocate the live streaming bubble up front, with the same id the
     // final commit in handleStreamComplete will use. React keeps the
     // instance alive for the entire stream → commit lifecycle.
+    // 记录旧代码值：新流首个 chunk 到达前，用它跳过"旧代码预填进新气泡"。
+    streamStartCodeRef.current = cleanedCode;
     setStreamingMessage({
       id: newMsgId(),
       role: 'ai',
@@ -1071,6 +1097,8 @@ export default function AppChat() {
         ...prev,
         { id: newMsgId(), role: 'user', content: composed, createTime: new Date().toISOString() },
       ]);
+      // 记录旧代码值：新流首个 chunk 到达前，用它跳过"旧代码预填进新气泡"。
+      streamStartCodeRef.current = cleanedCode;
       setStreamingMessage({
         id: newMsgId(),
         role: 'ai',
@@ -1113,6 +1141,9 @@ export default function AppChat() {
   }, [selectedElement, computePopoverPosition]);
 
   const htmlPreviewSrcUrl = htmlPreviewUrl;
+  // Vue 项目：编辑模式无法用 srcDoc（module script 在 opaque origin 被 CORS 拦），
+  // 改用同源 URL 加载 + 后端 ?edit=1 注入编辑脚本；HTML/MULTI_FILE 仍走 srcDoc 注入。
+  const isVuePreview = app?.codeGenType === 'vue_project';
   // 编辑模式仅主人/管理员可用：只读访客不显示编辑工具栏
   const supportsEditMode = Boolean(app?.codeGenType) && canEdit;
   const hasEditablePreview = Boolean(htmlPreviewSrcUrl);
@@ -1137,6 +1168,11 @@ export default function AppChat() {
   }, []);
 
   useEffect(() => {
+    // Vue 编辑模式走同源 URL 加载 + onLoad 注入脚本，不走 srcDoc fetch 链路。
+    if (isVuePreview) {
+      setPreviewCode('');
+      return;
+    }
     if (!editMode || !supportsEditMode || !htmlPreviewSrcUrl || !htmlPreviewBaseUrl) {
       setPreviewCode('');
       return;
@@ -1160,7 +1196,7 @@ export default function AppChat() {
       });
 
     return () => controller.abort();
-  }, [addBaseHrefForSrcDoc, editMode, htmlPreviewBaseUrl, htmlPreviewSrcUrl, supportsEditMode]);
+  }, [addBaseHrefForSrcDoc, editMode, htmlPreviewBaseUrl, htmlPreviewSrcUrl, supportsEditMode, isVuePreview]);
 
   // The actual srcDoc passed to the iframe — base preview + edit-mode
   // script injection when applicable.
@@ -1445,7 +1481,28 @@ export default function AppChat() {
                       {htmlPreviewSrcUrl ? (
                         <>
                           {editMode ? (
-                            htmlPreviewSrcDoc ? (
+                            isVuePreview ? (
+                              <iframe
+                                ref={htmlPreviewIframeRef}
+                                src={htmlPreviewSrcUrl}
+                                key={`vue-edit:${htmlPreviewSrcUrl}`}
+                                // allow-same-origin 必须加：Vue Router 需要真实 origin 操作 history，
+                                // 且父页面需同源注入编辑脚本。
+                                sandbox="allow-scripts allow-same-origin"
+                                onLoad={(e) => {
+                                  setHtmlPreviewFrameLoading(false);
+                                  injectEditScriptIntoVueFrame(e.currentTarget);
+                                }}
+                                style={{
+                                  width: '100%',
+                                  height: '100%',
+                                  border: 'none',
+                                  borderRadius: 8,
+                                  pointerEvents: 'auto',
+                                }}
+                                title="Vue 应用预览（编辑模式）"
+                              />
+                            ) : htmlPreviewSrcDoc ? (
                               <iframe
                                 ref={htmlPreviewIframeRef}
                                 srcDoc={htmlPreviewSrcDoc}

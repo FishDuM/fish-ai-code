@@ -175,13 +175,15 @@ export function extractVueProjectFiles(rawCode: string): ProjectFile[] {
  * Clean Vue project AI output for display in the chat panel.
  * Strips internal tool-call markers, replaces them with a friendly icon,
  * and collapses excessive blank lines.
+ *
+ * 工具调用标记统一为 "[写入文件] 路径" / "[修改文件] 路径" / "[删除文件] 路径" 结构，
+ * 由 ChatMessage 的 markdown 渲染层识别并转成带 SVG 图标的行（不用 emoji）。
  */
 export function cleanVueOutput(rawCode: string): string {
   return rawCode
     .replace(/\[选择工具\][\s\S]*?(?=\n?\[(?:选择工具|工具调用)\]|$)/g, '')
-    .replace(/\[工具调用\] 写入文件 /g, '📄 ')
-    .replace(/\[工具调用\] 修改文件 /g, '🛠️ ')
-    .replace(/\[工具调用\] 删除文件 /g, '🗑️ ')
+    // 兼容带空格与不带空格两种形态（[工具调用]写入文件 与 [工具调用] 写入文件）
+    .replace(/\[工具调用\]\s*(写入文件|修改文件|删除文件|读取文件|读取目录)\s+/g, '[$1] ')
     .replace(/\n{4,}/g, '\n\n')
     .trim();
 }

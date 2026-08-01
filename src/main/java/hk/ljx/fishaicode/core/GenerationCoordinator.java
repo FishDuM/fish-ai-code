@@ -129,7 +129,14 @@ public class GenerationCoordinator {
             // 模型回调可能在与加锁线程不同的线程执行，显式传递持锁线程 ID。
             lock.unlockAsync(ownerThreadId).whenComplete((unused, error) -> {
                 if (error != null) {
-                    log.error("释放应用生成锁失败，appId: {}", appId, error);
+                    // IllegalMonitorStateException 说明锁已被释放/过期（如 watchdog 停止续期后
+                    // 锁过期、或部署等其他路径已解锁），此时锁已不在，无需再处理，按正常释放对待。
+                    // 其余异常才需要关注，避免"锁已释放但误报失败"。
+                    if (error.getCause() instanceof IllegalMonitorStateException) {
+                        log.warn("释放应用生成锁时锁已不存在（可能已过期或已被释放），appId: {}，按已释放处理", appId);
+                    } else {
+                        log.error("释放应用生成锁失败，appId: {}", appId, error);
+                    }
                 }
             });
         } catch (Exception e) {

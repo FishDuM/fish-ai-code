@@ -274,6 +274,13 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: backendTarget,
           changeOrigin: true,
+          // 关键：SSE 流式响应不能被代理缓冲，否则前端一次性收到全部内容、失去流式效果
+          configure: (proxy) => {
+            proxy.on('proxyRes', (proxyRes) => {
+              proxyRes.headers['X-Accel-Buffering'] = 'no';
+              proxyRes.headers['Cache-Control'] = 'no-cache';
+            });
+          },
         },
         // Static resources are served via /api/static/{deployKey}/
         // (handled by the /api proxy rule above since backend has context-path: /api)

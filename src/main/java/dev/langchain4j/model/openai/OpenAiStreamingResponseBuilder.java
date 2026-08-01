@@ -110,10 +110,7 @@ public class OpenAiStreamingResponseBuilder {
         }
 
         if (delta.toolCalls() != null) {
-            System.out.println("OLOLO " + delta.toolCalls()); // TODO
-
             for (ToolCall toolCall : delta.toolCalls()) {
-
                 ToolExecutionRequestBuilder builder = this.indexToToolExecutionRequestBuilder.computeIfAbsent(
                         toolCall.index(),
                         idx -> new ToolExecutionRequestBuilder()

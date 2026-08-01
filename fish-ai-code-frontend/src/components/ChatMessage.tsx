@@ -1,5 +1,5 @@
 import { Avatar, Button, App } from 'antd';
-import { UserOutlined, RobotOutlined, CopyOutlined, CheckOutlined } from '@ant-design/icons';
+import { UserOutlined, RobotOutlined, CopyOutlined, CheckOutlined, FileTextOutlined, EditOutlined, DeleteOutlined, FileSearchOutlined, FolderOpenOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import React, { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
@@ -275,9 +275,90 @@ function ChatMessageInner({ role, content, isStreaming }: ChatMessageProps) {
       }
       return <CodeBlock language={language} children={displayCode} isStreaming={isStreaming} />;
     }
+
+    // 工具调用段落：识别 "[写入文件]/[修改文件]/[删除文件] 路径" 结构，
+    // 渲染成带 SVG 图标 + 文件路径的醒目行（替代 emoji）。
+    // 注意流式中途 children 可能是数组/元素，统一先转字符串再匹配。
+    // 工具调用段落：识别 "[写入文件]/[修改文件]/[删除文件]/[读取文件]/[读取目录] 路径" 结构。
+    // AI 输出里标记可能内联在叙述文本中（如 "内容：[读取目录] 根目录[读取文件] X 当前..."），
+    // 因此用 split 拆分：标记片段渲染成带 SVG 图标的醒目行，其余文本保持原样。
+    // 路径匹配策略：优先匹配带文件扩展名的路径（src/pages/Dashboard.vue），
+    // 扩展名结束后即停，避免吞掉紧跟的叙述文字；无扩展名时匹配到空白/标点/下个标记。
+    const TOOL_CALL_SPLIT_RE =
+      /(\[(?:写入文件|修改文件|删除文件|读取文件|读取目录)\]\s+(?:[^\s\[\]，。、；：（）()]*?\.[a-zA-Z0-9]{1,6}|[^\s\[\]，。、；：（）()]+))/g;
+    const TOOL_ACTION_RE =
+      /^\[(写入文件|修改文件|删除文件|读取文件|读取目录)\]\s+([^\s\[\]，。、；：（）()]*?\.[a-zA-Z0-9]{1,6}|[^\s\[\]，。、；：（）()]+)/;
+    function ToolCallParagraph({ children }: { children?: React.ReactNode }) {
+      const text = toCodeString(children);
+      const parts = text.split(TOOL_CALL_SPLIT_RE);
+      // 无工具标记：用 div 代替 p（工具调用行常与代码块相邻，p 不能嵌套 div/pre）
+      if (parts.length === 1) {
+        return <div>{children}</div>;
+      }
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, margin: '4px 0' }}>
+          {parts.map((part, i) => {
+            const m = TOOL_ACTION_RE.exec(part.trim());
+            if (!m) {
+              return part ? <span key={i}>{part}</span> : null;
+            }
+            const [, action, filePath] = m;
+            const Icon =
+              action === '写入文件' ? FileTextOutlined :
+              action === '修改文件' ? EditOutlined :
+              action === '删除文件' ? DeleteOutlined :
+              action === '读取文件' ? FileSearchOutlined :
+              FolderOpenOutlined;
+            return (
+              <span
+                key={i}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  margin: '2px 0',
+                  padding: '4px 10px',
+                  borderRadius: 6,
+                  background: 'rgba(17,25,37,0.07)',
+                  border: '1px solid rgba(17,25,37,0.08)',
+                  fontSize: '0.92em',
+                  color: '#4b5563',
+                  width: 'fit-content',
+                }}
+              >
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontWeight: 600,
+                    color: '#374151',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <Icon style={{ fontSize: 14, color: '#6b7280' }} />
+                  {action}
+                </span>
+                <code
+                  style={{
+                    fontFamily: 'inherit',
+                    wordBreak: 'break-all',
+                    color: '#374151',
+                  }}
+                >
+                  {filePath}
+                </code>
+              </span>
+            );
+          })}
+        </div>
+      );
+    }
+
     return {
       ...markdownBaseComponents,
       code: Code,
+      p: ToolCallParagraph,
     };
   }, [isStreaming]);
 
