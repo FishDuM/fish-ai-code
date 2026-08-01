@@ -593,7 +593,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         // 10、返回访问的 URL（部署域名由 app.deploy.host 配置，产物路径前缀由 app.deploy.path 配置）
         //     nginx 通过 location /deploy/ 服务部署目录
         String deployBase = appDeployProperties.getHost().replaceAll("/+$", "")
-                + appDeployProperties.getPath().replaceAll("^/+", "");
+                + "/" + appDeployProperties.getPath().replaceAll("^/+", "").replaceAll("/+$", "");
         return String.format("%s/%s", deployBase, deployKey);
     }
 }

@@ -310,6 +310,14 @@ body {
 }
 
 /* Typing animation */
+.typing-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-dim, #8b95a1);
+  font-size: 13px;
+}
+
 .typing-dots span {
   animation: typing 1.4s infinite;
   display: inline-block;

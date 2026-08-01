@@ -39,3 +39,4 @@ build/
 # Docker compose 运行时数据
 /data/
 /exc/
+/.reasonix/

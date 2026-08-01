@@ -407,10 +407,13 @@ function ChatMessageInner({ role, content, isStreaming }: ChatMessageProps) {
         ) : isStreaming ? (
           // Stream just started, no text yet — show typing dots instead
           // of an empty bubble so the user sees the AI is "alive".
-          <span className="typing-dots">
-            <span>●</span>
-            <span>●</span>
-            <span>●</span>
+          <span className="typing-hint">
+            正在生成中，请耐心等待
+            <span className="typing-dots">
+              <span>●</span>
+              <span>●</span>
+              <span>●</span>
+            </span>
           </span>
         ) : null}
       </div>
