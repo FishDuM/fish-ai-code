@@ -599,14 +599,14 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
                     .doOnComplete(() -> {
                         String codeDir = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + codeGenType + "_" + appId;
                         try {
-                            var qualityResult = workflowService.runQualityCheck(codeDir);
+                            var qualityResult = workflowService.runQualityCheck(codeDir, codeGenType);
                             if (qualityResult != null) {
-                                log.info("代码质量检查完成 - 通过: {}, 错误数: {}",
+                                log.info("产物完整性校验完成 - 通过: {}, 缺失文件: {}",
                                         qualityResult.getIsValid(),
                                         qualityResult.getErrors() != null ? qualityResult.getErrors().size() : 0);
                             }
                         } catch (Exception e) {
-                            log.warn("代码质量检查异常（不影响已生成的代码）: {}", e.getMessage(), e);
+                            log.warn("产物完整性校验异常（不影响已生成的代码）: {}", e.getMessage(), e);
                         }
                     });
         });
@@ -633,7 +633,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     private String deployAppWithProjectLock(Long appId, User loginUser) {
         // 2、查询应用信息
         App app = this.getById(appId);
-        ThrowUtils.throwIf(app == null, ErrorCode.PARAMS_ERROR, "应用不存在");
+        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
         // 3、检查是否为本人应用
         ThrowUtils.throwIf(!app.getUserId().equals(loginUser.getId()), ErrorCode.NO_AUTH_ERROR, "非本人应用");
         // 4、检查是否 deployKey 没有则生成（字母+数字，长度由 app.deploy.key-length 配置，默认 16 位）
@@ -649,7 +649,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         String sourceDirPath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + sourceDirName;
         // 6、检查路径是否存在
         File sourceDir = new File(sourceDirPath);
-        ThrowUtils.throwIf(!sourceDir.exists() || !sourceDir.isDirectory(), ErrorCode.PARAMS_ERROR, "代码生成路径不存在，请先生成路径");
+        ThrowUtils.throwIf(!sourceDir.exists() || !sourceDir.isDirectory(), ErrorCode.NOT_FOUND_ERROR, "代码生成路径不存在，请先生成路径");
         // 7. Vue 项目特殊处理：执行构建
         CodeGenTypeEnum codeGenTypeEnum = CodeGenTypeEnum.getEnumByValue(codeGenType);
         if (codeGenTypeEnum == CodeGenTypeEnum.VUE_PROJECT) {
@@ -669,7 +669,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             FileUtil.copyContent(sourceDir, new File(deployDirPath), true);
         } catch (Exception e) {
             log.error("部署失败，{}", e.getMessage());
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "部署失败，请稍后重试");
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "部署失败，请稍后重试");
         }
         // 9、更新数据库
         App updateApp = new App();
@@ -677,7 +677,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         updateApp.setDeployKey(deployKey);
         updateApp.setDeployedTime(LocalDateTime.now());
         boolean updateResult = this.updateById(updateApp);
-        ThrowUtils.throwIf(!updateResult, ErrorCode.PARAMS_ERROR, "更新应用部署信息失败");
+        ThrowUtils.throwIf(!updateResult, ErrorCode.OPERATION_ERROR, "更新应用部署信息失败");
         // 10、返回访问的 URL（部署域名由 app.deploy.host 配置，产物路径前缀由 app.deploy.path 配置）
         //     nginx 通过 location /deploy/ 服务部署目录
         String deployBase = appDeployProperties.getHost().replaceAll("/+$", "")

@@ -210,6 +210,8 @@ public class VueProjectBuilder {
      * 构建命令独立出来，以便测试安全限制不会被后续修改移除。
      */
     List<String> createDockerCommand(Path sourceDir, Path workspaceDir, Path outputDir) {
+        String containerRoot = getOutputRoot().toString();
+        String hostRoot = properties.getHostCodeOutputDir();
         List<String> command = new ArrayList<>(List.of(
                 "docker", "run", "--rm",
                 "--network", "none",
@@ -222,17 +224,36 @@ public class VueProjectBuilder {
                 "--cap-drop", "ALL",
                 "--security-opt", "no-new-privileges",
                 "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=64m,uid=1000,gid=1000,mode=700",
-                "--mount", "type=bind,src=" + sourceDir + ",dst=/input,readonly,bind-propagation=rprivate",
-                "--mount", "type=bind,src=" + workspaceDir + ",dst=/workspace,bind-propagation=rprivate",
-                "--mount", "type=bind,src=" + outputDir + ",dst=/output,bind-propagation=rprivate",
+                "--mount", "type=bind,src=" + toHostMountSource(containerRoot, hostRoot, sourceDir) + ",dst=/input,readonly,bind-propagation=rprivate",
+                "--mount", "type=bind,src=" + toHostMountSource(containerRoot, hostRoot, workspaceDir) + ",dst=/workspace,bind-propagation=rprivate",
+                "--mount", "type=bind,src=" + toHostMountSource(containerRoot, hostRoot, outputDir) + ",dst=/output,bind-propagation=rprivate",
                 "--env", "npm_config_update_notifier=false",
                 properties.getDockerImage(),
                 "sh", "-ec",
+                // node_modules 软链到镜像内 seed，避免 cp -a 逐文件复制（~31s）；删除目录须 NOFOLLOW（见 deleteRecursively）
                 "cp -a /input/. /workspace/ && "
-                        + "cp -a /opt/offline-seed/node_modules /workspace/node_modules && "
+                        + "ln -s /opt/offline-seed/node_modules /workspace/node_modules && "
                         + "npm run build && test -d dist && cp -a dist/. /output/"
         ));
         return command;
+    }
+
+    /**
+     * 把容器内路径映射为宿主机 daemon 可解析的 bind 源路径。
+     * docker.sock 模式下 --mount 的 src 由宿主机 daemon 解析，compose 部署时
+     * 容器内根（/app/tmp/code_output）在宿主机上不存在，需替换为宿主机根；未配置则原样返回。
+     */
+    static String toHostMountSource(String containerRoot, String hostRoot, Path containerPath) {
+        if (containerRoot == null || containerRoot.isBlank()
+                || hostRoot == null || hostRoot.isBlank()) {
+            return containerPath.toString();
+        }
+        Path containerRootPath = Path.of(containerRoot);
+        if (containerPath.startsWith(containerRootPath)) {
+            Path relative = containerRootPath.relativize(containerPath);
+            return Path.of(hostRoot).resolve(relative).normalize().toString();
+        }
+        return containerPath.toString();
     }
 
     private void monitorWorkspaceSize(Process process, Path workspaceDir, AtomicBoolean limitExceeded) {
@@ -318,7 +339,7 @@ public class VueProjectBuilder {
         }
     }
 
-    private Path getOutputRoot() throws IOException {
+    private Path getOutputRoot() {
         return Path.of(AppConstant.CODE_OUTPUT_ROOT_DIR).toAbsolutePath().normalize();
     }
 

@@ -3,7 +3,6 @@ package hk.ljx.fishaicode.workflow.service;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
-import hk.ljx.fishaicode.workflow.ai.CodeQualityCheckService;
 import hk.ljx.fishaicode.workflow.ai.ImageCollectionPlanService;
 import hk.ljx.fishaicode.workflow.model.ImageCollectionPlan;
 import hk.ljx.fishaicode.workflow.model.ImageResource;
@@ -15,13 +14,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
+import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * 代码生成工作流服务 - 串联图片收集 → 提示词增强 → 质量检查 → 项目构建
+ * 代码生成工作流服务 - 串联图片收集 → 提示词增强 → 产物完整性校验 → 项目构建
  * 代码生成本身由 AiCodeGeneratorFacade 直接调用 LLM 完成（支持流式 SSE 输出给前端）
  */
 @Slf4j
@@ -36,9 +35,6 @@ public class WorkflowService {
 
     @Resource
     private UndrawIllustrationTool undrawIllustrationTool;
-
-    @Resource
-    private CodeQualityCheckService codeQualityCheckService;
 
     @Resource(name = "virtualThreadExecutor")
     private java.util.concurrent.ExecutorService virtualThreadExecutor;
@@ -57,29 +53,55 @@ public class WorkflowService {
     }
 
     /**
-     * 执行代码质量检查
+     * 校验生成产物是否完整：HTML 需 index.html、MULTI_FILE 需三个入口文件、
+     * VUE_PROJECT 需 dist 构建产物，缺文件即判定不通过。
      *
      * @param generatedCodeDir 生成的代码目录
-     * @return 质量检查结果
+     * @param codeGenType      代码生成类型（html / multi_file / vue_project）
+     * @return 校验结果（isValid=false 时 errors 列出缺失文件）
      */
-    public QualityResult runQualityCheck(String generatedCodeDir) {
+    public QualityResult runQualityCheck(String generatedCodeDir, String codeGenType) {
         if (StrUtil.isBlank(generatedCodeDir)) {
-            log.warn("代码目录为空，跳过质量检查");
+            log.warn("代码目录为空，跳过产物完整性校验");
             return null;
         }
-        try {
-            String codeContent = readAndConcatenateCodeFiles(generatedCodeDir);
-            if (StrUtil.isBlank(codeContent)) {
-                log.warn("未找到可检查的代码文件，跳过质量检查");
-                return null;
+        File dir = new File(generatedCodeDir);
+        if (!dir.isDirectory()) {
+            return QualityResult.builder().isValid(false)
+                    .errors(List.of("代码目录不存在: " + generatedCodeDir))
+                    .build();
+        }
+
+        List<String> requiredFiles = resolveRequiredFiles(codeGenType);
+        List<String> missing = new ArrayList<>();
+        for (String fileName : requiredFiles) {
+            if (!FileUtil.exist(Paths.get(dir.getAbsolutePath(), fileName).toString())) {
+                missing.add(fileName);
             }
-            QualityResult result = codeQualityCheckService.checkCodeQuality(codeContent);
-            log.info("代码质量检查完成 - 是否通过: {}", result.getIsValid());
-            return result;
-        } catch (Exception e) {
-            log.error("代码质量检查异常: {}", e.getMessage(), e);
-            return null;
         }
+        boolean valid = missing.isEmpty();
+        QualityResult.QualityResultBuilder builder = QualityResult.builder().isValid(valid);
+        if (valid) {
+            log.info("产物完整性校验通过: {}", dir.getAbsolutePath());
+        } else {
+            builder.errors(missing);
+            log.warn("产物完整性校验失败，缺失文件: {}", missing);
+        }
+        return builder.build();
+    }
+
+    /**
+     * 各生成模式必须存在的入口文件（VUE_PROJECT 需 dist 构建产物）。
+     */
+    private List<String> resolveRequiredFiles(String codeGenType) {
+        if ("vue_project".equals(codeGenType)) {
+            return List.of("dist", "dist/index.html");
+        }
+        if ("multi_file".equals(codeGenType)) {
+            return List.of("index.html", "style.css", "script.js");
+        }
+        // html 及其他默认
+        return List.of("index.html");
     }
 
     // ========== 私有方法 ==========
@@ -163,53 +185,5 @@ public class WorkflowService {
         log.info("提示词增强完成（注入{}张，总共{}张），增强后长度: {} 字符",
                 maxImages, imageList.size(), enhancedPrompt.length());
         return enhancedPrompt;
-    }
-
-    /**
-     * 需要检查的文件扩展名
-     */
-    private static final List<String> CODE_EXTENSIONS = Arrays.asList(
-            ".html", ".htm", ".css", ".js", ".json", ".vue", ".ts", ".jsx", ".tsx"
-    );
-
-    /**
-     * 读取并拼接代码目录下的所有代码文件
-     */
-    private String readAndConcatenateCodeFiles(String codeDir) {
-        File directory = new File(codeDir);
-        if (!directory.exists() || !directory.isDirectory()) {
-            log.error("代码目录不存在: {}", codeDir);
-            return "";
-        }
-        StringBuilder codeContent = new StringBuilder();
-        codeContent.append("# 项目文件结构和代码内容\n\n");
-        FileUtil.walkFiles(directory, file -> {
-            if (shouldSkipFile(file, directory)) {
-                return;
-            }
-            if (isCodeFile(file)) {
-                String relativePath = FileUtil.subPath(directory.getAbsolutePath(), file.getAbsolutePath());
-                codeContent.append("## 文件: ").append(relativePath).append("\n\n");
-                String fileContent = FileUtil.readUtf8String(file);
-                codeContent.append(fileContent).append("\n\n");
-            }
-        });
-        return codeContent.toString();
-    }
-
-    private boolean shouldSkipFile(File file, File rootDir) {
-        String relativePath = FileUtil.subPath(rootDir.getAbsolutePath(), file.getAbsolutePath());
-        if (file.getName().startsWith(".")) {
-            return true;
-        }
-        return relativePath.contains("node_modules" + File.separator) ||
-                relativePath.contains("dist" + File.separator) ||
-                relativePath.contains("target" + File.separator) ||
-                relativePath.contains(".git" + File.separator);
-    }
-
-    private boolean isCodeFile(File file) {
-        String fileName = file.getName().toLowerCase();
-        return CODE_EXTENSIONS.stream().anyMatch(fileName::endsWith);
     }
 }

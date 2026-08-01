@@ -1,6 +1,6 @@
 # Vue 离线构建镜像
 
-运行时构建容器使用 `--network none`，直接复制镜像内预装的 `node_modules` 后执行 `npm run build`。因此，运行时不会执行 npm 安装，也不要求生成项目带有 `package-lock.json`。
+运行时构建容器使用 `--network none`，通过符号链接直接引用镜像内预装的 `node_modules`（避免在 bind mount 上逐文件复制依赖，Windows 本地可提速 ~6 倍），随后执行 `npm run build`。因此，运行时不会执行 npm 安装，也不要求生成项目带有 `package-lock.json`。
 
 首次或更新依赖白名单后，由管理员在可联网的受控环境执行：
 

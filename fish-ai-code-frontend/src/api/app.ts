@@ -130,5 +130,6 @@ export async function downloadAppCode(appId: string): Promise<void> {
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  window.URL.revokeObjectURL(url);
+  // 延时释放：立即 revoke 在部分浏览器（Safari/旧 Firefox）会取消尚未开始的下载
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
 }

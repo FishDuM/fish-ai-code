@@ -103,6 +103,8 @@ export function formatCodeForDisplay(code: string, language: string): string {
   const lang = language.toLowerCase();
   if (!FORMATTABLE_LANGS.has(lang)) return code;
   if (code.includes('\n') && code.split('\n').length > 4) return code;
+  // 流式未闭合的代码块是长单行，跳过格式化防压扁
+  if (!code.includes('\n') && code.length > 200) return code;
 
   if (lang === 'html' || lang === 'markup' || lang === 'xml' || lang === 'svg') {
     return formatHtmlLike(code);

@@ -11,6 +11,8 @@ public class PageRequest {
     /**
      * 当前页号
      */
+    @Min(value = 1, message = "页码至少为 1")
+    @Max(value = 1000, message = "页码过大")
     private int pageNum = 1;
 
     /**

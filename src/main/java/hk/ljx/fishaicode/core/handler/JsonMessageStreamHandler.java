@@ -60,8 +60,10 @@ public class JsonMessageStreamHandler {
                     },
                     error -> {
                         try {
-                            String errorMessage = "AI回复失败: " + error.getMessage();
-                            chatHistoryService.addChatHistory(appId, loginUser.getId(), errorMessage, MessageTypeEnum.AI.getValue());
+                            // 写入固定文案，避免把内部异常文本暴露进对话历史；原始异常只记日志
+                            log.error("AI 回复失败，appId: {}", appId, error);
+                            chatHistoryService.addChatHistory(appId, loginUser.getId(),
+                                    "AI回复失败，请重试", MessageTypeEnum.AI.getValue());
                         } catch (Exception e) {
                             // 历史记录失败不能吞掉原始错误：记日志并继续上报原始异常，
                             // 否则外层 GenerationCoordinator 收不到 complete/error，锁会永久泄漏。
@@ -107,6 +109,11 @@ public class JsonMessageStreamHandler {
         // 解析 JSON
         StreamMessage streamMessage = JSONUtil.toBean(chunk, StreamMessage.class);
         StreamMessageTypeEnum typeEnum = StreamMessageTypeEnum.getEnumByValue(streamMessage.getType());
+        // type/工具名/参数均来自 AI 输出，不可信，容错处理避免 NPE 打断整个 SSE 流
+        if (typeEnum == null) {
+            log.warn("收到未知消息类型: {}", streamMessage.getType());
+            return "";
+        }
         switch (typeEnum) {
             case AI_RESPONSE -> {
                 AiResponseMessage aiMessage = JSONUtil.toBean(chunk, AiResponseMessage.class);
@@ -123,6 +130,10 @@ public class JsonMessageStreamHandler {
                     // 第一次调用这个工具，记录 ID 并完整返回工具信息
                     seenToolIds.add(toolId);
                     BaseTool tool = toolManager.getTool(toolRequestMessage.getName());
+                    if (tool == null) {
+                        log.warn("未知工具名: {}", toolRequestMessage.getName());
+                        return "";
+                    }
                     return tool.generateToolRequestResponse();
                 } else {
                     // 不是第一次调用这个工具，直接返回空
@@ -132,10 +143,19 @@ public class JsonMessageStreamHandler {
             case TOOL_EXECUTED -> {
                 ToolExecutedMessage toolExecutedMessage = JSONUtil.toBean(chunk, ToolExecutedMessage.class);
                 String toolName = toolExecutedMessage.getName();
-                JSONObject jsonObject = JSONUtil.parseObj(toolExecutedMessage.getArguments());
-                // 根据工具名称获取工具实例并生成相应的结果格式
                 BaseTool tool = toolManager.getTool(toolName);
-                String result = tool.generateToolExecutedResult(jsonObject);
+                if (tool == null) {
+                    log.warn("未知工具名: {}", toolName);
+                    return "";
+                }
+                String result;
+                try {
+                    JSONObject jsonObject = JSONUtil.parseObj(toolExecutedMessage.getArguments());
+                    result = tool.generateToolExecutedResult(jsonObject);
+                } catch (Exception e) {
+                    log.warn("解析工具执行结果失败，工具: {}", toolName, e);
+                    return "";
+                }
                 // 输出前端和要持久化的内容
                 String output = String.format("\n\n%s\n\n", result);
                 chatHistoryStringBuilder.append(output);

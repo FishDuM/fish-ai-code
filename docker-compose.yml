@@ -74,13 +74,19 @@ services:
       UNDRAW_TOKEN: ${UNDRAW_TOKEN:-}
       # Vue 构建镜像名（后端容器内 docker run 使用；对应 vue-build.docker-image）
       VUE_BUILD_DOCKER_IMAGE: ${VUE_BUILDER_IMAGE:-fish-ai-code-vue-builder:20}
+      # Vue 隔离构建的宿主机代码输出根目录（对应 vue-build.host-code-output-dir）：
+      # 后端容器内的 docker CLI 经 docker.sock 把 --mount 交给宿主机 daemon，bind 源
+      # 按宿主机文件系统解析，src 必须是宿主机绝对路径 → 默认传 ./data/code_output 的
+      # 宿主路径（可用 .env 的 CODE_OUTPUT_HOST_DIR 覆盖）。
+      CODE_OUTPUT_HOST_DIR: ${CODE_OUTPUT_HOST_DIR:-${PWD}/data/code_output}
       # 部署访问域名
       APP_DEPLOY_HOST: ${APP_DEPLOY_HOST:-http://localhost}
     volumes:
       # 挂载宿主 Docker，供后端调用 docker run 做 Vue 隔离构建
       - /var/run/docker.sock:/var/run/docker.sock
-      # 代码生成/部署目录：宿主机路径 = 容器内 user.dir(/app) + tmp/code_*
-      # Vue 构建的 bind mount 用容器内绝对路径，宿主机必须真实存在 → 挂载到同路径
+      # 代码生成/部署目录：宿主机 ./data/code_* ↔ 容器 /app/tmp/code_*（后端 user.dir=/app）。
+      # Vue 构建的 bind 源路径由 CODE_OUTPUT_HOST_DIR 显式传给后端（见 environment），
+      # 因为 docker.sock 模式下 --mount src 由宿主机 daemon 解析，容器内路径在宿主机不存在。
       - ./data/code_output:/app/tmp/code_output
       - ./data/code_deploy:/app/tmp/code_deploy
     ports:

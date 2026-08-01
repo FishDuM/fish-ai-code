@@ -28,12 +28,25 @@ const CodeBlock = React.memo(function CodeBlock({
   const [copied, setCopied] = useState(false);
   const highlighter = useHighlighter(language || undefined);
   const { message } = App.useApp();
+  const copyTimerRef = useRef<number | null>(null);
+
+  // 组件卸载时清理复制提示的定时器，避免在已卸载组件上 setState
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleCopy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(children);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+      copyTimerRef.current = window.setTimeout(() => setCopied(false), 2000);
     } catch {
       message.error('复制失败');
     }
@@ -509,5 +522,12 @@ function ChatMessageInner({ role, content, isStreaming }: ChatMessageProps) {
   );
 }
 
-const ChatMessage = React.memo(ChatMessageInner);
+const ChatMessage = React.memo(ChatMessageInner, (prev, next) => {
+  // 流结束或 content 变化必须重渲染，否则 renderedContent 卡在流式中间态
+  return (
+    prev.role === next.role &&
+    prev.content === next.content &&
+    prev.isStreaming === next.isStreaming
+  );
+});
 export default ChatMessage;

@@ -717,7 +717,13 @@ export default function AppChat() {
       Boolean(code.htmlCode || code.cssCode || code.jsCode);
     if (currentCode) {
       const streamedCode = parseMultiFileCode(currentCode);
-      if (isParsedCode(streamedCode)) return streamedCode;
+      // 流式中 html 先闭合、css/js 后到，只拿到 html 时不能直接返回（否则代码栏 css/js 一直"等待生成"），继续往下兜底
+      if (streamedCode.cssCode && streamedCode.jsCode && isParsedCode(streamedCode)) {
+        return streamedCode;
+      }
+      if (streamedCode.htmlCode && (streamedCode.cssCode || streamedCode.jsCode)) {
+        return streamedCode;
+      }
     }
     // 已完成会话中的 currentCode 为空时，优先从聊天记录恢复；若历史只保存了
     // 说明文字，则使用刚才从已落盘文件读取的完整三文件内容。
@@ -1542,8 +1548,7 @@ export default function AppChat() {
                                 ref={htmlPreviewIframeRef}
                                 src={htmlPreviewSrcUrl}
                                 key={`vue-edit:${htmlPreviewSrcUrl}`}
-                                // allow-same-origin 必须加：Vue Router 需要真实 origin 操作 history，
-                                // 且父页面需同源注入编辑脚本。
+                                // allow-same-origin：Vue Router 需要真实 origin 操作 history，且父页面需同源注入编辑脚本
                                 sandbox="allow-scripts allow-same-origin"
                                 onLoad={(e) => {
                                   setHtmlPreviewFrameLoading(false);
@@ -1563,7 +1568,7 @@ export default function AppChat() {
                                 ref={htmlPreviewIframeRef}
                                 srcDoc={htmlPreviewSrcDoc}
                                 key={`srcdoc:${htmlPreviewSrcDoc}`}
-                                sandbox="allow-scripts"
+                                sandbox="allow-scripts allow-same-origin"
                                 style={{
                                   width: '100%',
                                   height: '100%',
@@ -1587,7 +1592,8 @@ export default function AppChat() {
                                 ref={htmlPreviewIframeRef}
                                 src={htmlPreviewSrcUrl}
                                 key={`url:${htmlPreviewSrcUrl}`}
-                                sandbox="allow-scripts"
+                                // allow-same-origin：子资源（style.css/script.js）需携带 session cookie 通过鉴权
+                                sandbox="allow-scripts allow-same-origin"
                                 onLoad={() => setHtmlPreviewFrameLoading(false)}
                                 style={{
                                   width: '100%',

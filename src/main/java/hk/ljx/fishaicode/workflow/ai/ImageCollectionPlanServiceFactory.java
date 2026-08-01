@@ -14,7 +14,7 @@ import org.springframework.context.annotation.Configuration;
 public class ImageCollectionPlanServiceFactory {
 
     @Resource
-    @Qualifier("openAiChatModel")
+    @Qualifier("imagePlanChatModelPrototype")
     private ChatModel chatModel;
 
     @Bean

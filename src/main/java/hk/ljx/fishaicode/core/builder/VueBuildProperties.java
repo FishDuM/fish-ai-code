@@ -3,6 +3,7 @@ package hk.ljx.fishaicode.core.builder;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -47,4 +48,10 @@ public class VueBuildProperties {
     @Min(1)
     @Max(100_000)
     private int maxOutputFiles = 10_000;
+
+    /**
+     * 宿主机代码输出根目录（仅 docker.sock 部署模式需要，空=不映射用容器内路径）
+     */
+    @Size(max = 2048)
+    private String hostCodeOutputDir = "";
 }

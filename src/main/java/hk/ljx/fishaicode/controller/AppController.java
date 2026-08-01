@@ -31,6 +31,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.MediaType;
@@ -117,11 +118,18 @@ public class AppController {
      * @return 应用视图对象
      */
     @GetMapping("/get/vo")
-    public BaseResponse<AppVO> getAppVOById(@Min(value = 1, message = "id 不合法") long id, HttpServletRequest request) {
+    public BaseResponse<?> getAppVOById(@Min(value = 1, message = "id 不合法") long id, HttpServletRequest request) {
         // 公开查看：精选应用任何人可看（含未登录），非精选应用仅本人/管理员可看
         User loginUser = userService.getLoginUserOrNull(request);
         App app = appService.getPublicAppById(id, loginUser);
-        return ResultUtils.success(appService.getAppVO(app));
+        // 仅本人/管理员返回完整视图（含 initPrompt），其他人返回脱敏公开视图
+        boolean isOwnerOrAdmin = loginUser != null
+                && (app.getUserId().equals(loginUser.getId())
+                    || UserConstant.ADMIN_ROLE.equals(loginUser.getUserRole()));
+        if (isOwnerOrAdmin) {
+            return ResultUtils.success(appService.getAppVO(app));
+        }
+        return ResultUtils.success(appService.getPublicAppVO(app));
     }
 
     /**
@@ -167,7 +175,7 @@ public class AppController {
     @RateLimit(key = "chat", rate = 10, rateInterval = 60, limitType = RateLimitType.USER, message = "当前还在内测阶段，AI服务一分钟内请求次数过多，请稍后重试")
     public Flux<ServerSentEvent<String>> chatToGenCode(
             @NotNull(message = "应用 ID 不能为空") @Min(value = 1, message = "应用 ID 不合法") @RequestParam("appId") Long appId,
-            @NotBlank(message = "消息内容不能为空") @RequestParam("message") String message,
+            @NotBlank(message = "消息内容不能为空") @Size(max = 20000, message = "消息内容过长（最多 20000 字）") @RequestParam("message") String message,
             HttpServletRequest request) {
         try {
             User loginUser = userService.getLoginUser(request);

@@ -1,5 +1,6 @@
 package hk.ljx.fishaicode.workflow.tools;
 
+import cn.hutool.core.net.URLEncodeUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.http.HttpRequest;
 import cn.hutool.http.HttpResponse;
@@ -30,7 +31,9 @@ public class UndrawIllustrationTool {
         int searchCount = 2;
         String UNDRAW_API_URL = "https://undraw.co/_next/data/" + undrawToken + "/search/%s.json?term=%s";
 
-        String apiUrl = String.format(UNDRAW_API_URL, query, query);
+        // query 来自 LLM 推断，可能含 / ? & # 等特殊字符，必须 URL 编码后再拼进 URL
+        String encodedQuery = URLEncodeUtil.encode(query);
+        String apiUrl = String.format(UNDRAW_API_URL, encodedQuery, encodedQuery);
 
         // 使用 try-with-resources 自动释放 HTTP 资源
         try (HttpResponse response = HttpRequest.get(apiUrl).timeout(10000).execute()) {

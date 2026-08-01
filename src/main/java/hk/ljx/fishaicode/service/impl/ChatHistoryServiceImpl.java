@@ -57,12 +57,12 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
     @Override
     public int loadChatHistoryToMemory(Long appId, MessageWindowChatMemory chatMemory, int maxCount) {
         try {
-            // 直接构造查询条件，起始点为 1 而不是 0，用于排除最新的用户消息
+            // 取最新 maxCount 条（不跳过）：当前用户消息尚未落库，跳过会丢掉上一条 AI 回复
             QueryWrapper queryWrapper = QueryWrapper.create()
                     .eq(ChatHistory::getAppId, appId)
                     .orderBy(ChatHistory::getCreateTime, false)
                     .orderBy(ChatHistory::getId, false)
-                    .limit(1, maxCount);
+                    .limit(0, maxCount);
             List<ChatHistory> historyList = this.list(queryWrapper);
             if (CollUtil.isEmpty(historyList)) {
                 return 0;

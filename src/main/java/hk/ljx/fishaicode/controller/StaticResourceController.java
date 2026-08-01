@@ -113,6 +113,9 @@ public class StaticResourceController {
                                     + "media-src 'none'; object-src 'none'; worker-src 'none'; base-uri 'none'; "
                                     + "form-action 'none'; frame-ancestors 'self'")
                     .body(resource);
+        } catch (java.nio.file.NoSuchFileException e) {
+            // 预览目录或文件不存在（应用未生成/已删除/未构建）：语义是 404，不是服务错误
+            return ResponseEntity.notFound().build();
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }

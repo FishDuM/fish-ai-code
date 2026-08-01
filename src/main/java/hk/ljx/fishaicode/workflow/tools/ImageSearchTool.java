@@ -29,12 +29,13 @@ public class ImageSearchTool {
     public List<ImageResource> searchContentImages(@P("搜索关键词") String query) {
         List<ImageResource> imageList = new ArrayList<>();
         int searchCount = 2;
-        // 调用 API，注意释放资源
+        // 调用 API，注意释放资源；设置超时防止外部 API 挂起导致生成请求永久阻塞
         try (HttpResponse response = HttpRequest.get(PEXELS_API_URL)
                 .header("Authorization", pexelsApiKey)
                 .form("query", query)
                 .form("per_page", searchCount)
                 .form("page", 1)
+                .timeout(5000)
                 .execute()) {
             if (response.isOk()) {
                 JSONObject result = JSONUtil.parseObj(response.body());

@@ -40,6 +40,8 @@ function scheduleAuthRedirect(): void {
   window.dispatchEvent(new CustomEvent('auth:logout'));
   setTimeout(() => {
     window.location.href = buildLoginRedirectUrl();
+    // 跳转完成后复位，避免本页面生命周期内后续 401（如跳转被浏览器延迟/拦截时）永久失效
+    redirecting = false;
   }, 0);
 }
 

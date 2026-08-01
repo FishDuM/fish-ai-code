@@ -48,7 +48,7 @@ langchain4j:
       log-requests: true
       log-responses: true
       max-retries: 3
-    # 推理模型（图片收集规划 / 代码质量检查）
+    # 推理模型（Vue 项目工具调用生成）
     reasoning-streaming-chat-model:
       base-url: https://api.deepseek.com
       api-key: "你的DeepSeek_API_KEY"
@@ -59,6 +59,13 @@ langchain4j:
       log-responses: true
     # 智能路由模型（判断生成类型，可选阿里云百炼，比 DeepSeek 便宜）
     routing-chat-model:
+      base-url: https://api.deepseek.com   # 阿里云百炼: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api-key: "你的DeepSeek_API_KEY"
+      model-name: deepseek-chat
+      log-requests: true
+      log-responses: true
+    # 图片收集规划模型（短输出任务用轻量模型，避免推理模型耗时+烧 token）
+    image-plan-chat-model:
       base-url: https://api.deepseek.com   # 阿里云百炼: https://dashscope.aliyuncs.com/compatible-mode/v1
       api-key: "你的DeepSeek_API_KEY"
       model-name: deepseek-chat

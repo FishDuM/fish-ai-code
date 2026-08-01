@@ -38,6 +38,10 @@ langchain4j:
       base-url: ${LLM_BASE_URL:https://api.deepseek.com}
       api-key: ${DEEPSEEK_API_KEY:}
       model-name: deepseek-v4-flash
+    image-plan-chat-model:
+      base-url: ${LLM_BASE_URL:https://api.deepseek.com}
+      api-key: ${DEEPSEEK_API_KEY:}
+      model-name: deepseek-v4-flash
 
 pexels:
   api-key: ${PEXELS_API_KEY:}

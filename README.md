@@ -39,7 +39,7 @@ AI 自动生成完整代码，支持三种模式：
 |------|------|
 | **单文件 HTML** | 快速生成独立 HTML 页面 |
 | **多文件项目** | 生成包含 HTML/CSS/JS 的多文件结构 |
-| **Vue 项目** | 工作流编排生成完整 Vue 项目，Docker 隔离构建并检查代码质量 |
+| **Vue 项目** | 工作流编排生成完整 Vue 项目，Docker 隔离构建，构建产物做完整性校验 |
 
 ### 项目下载与部署
 生成的代码打包为 ZIP 下载，或一键部署到内置服务器。
@@ -179,7 +179,7 @@ docker compose down -v     # 停止并清空数据库数据（慎用）
 docker compose up -d       # 重新启动（不重新构建）
 ```
 
-> **Vue 构建说明**：后端容器通过挂载 `/var/run/docker.sock` 调用宿主机 Docker 运行隔离构建（`--network none`、只读、无内核能力），构建镜像需先在宿主机执行第 2 步的 `docker build`。
+> **Vue 构建说明**：后端容器通过挂载 `/var/run/docker.sock` 调用宿主机 Docker 运行隔离构建（`--network none`、只读、无内核能力），构建镜像需先在宿主机执行第 2 步的 `docker build`。由于 docker.sock 模式下 `--mount` 的 bind 源由宿主机 daemon 按宿主机文件系统解析，compose 已通过 `CODE_OUTPUT_HOST_DIR`（即 `${PWD}/data/code_output`）把宿主机代码输出根目录传给后端（`vue-build.host-code-output-dir`），后端会把构建命令的挂载源映射为宿主机绝对路径。
 > **数据目录**：生成的代码在 `data/code_output/`，部署产物在 `data/code_deploy/`（已加入 .gitignore）。部署产物由 nginx 通过 `http://<主机>/deploy/{deployKey}` 提供访问（后端返回的部署链接即此格式）。
 
 ### 方式二：传统部署（手动）
