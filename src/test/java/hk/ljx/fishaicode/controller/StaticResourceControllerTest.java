@@ -29,7 +29,8 @@ class StaticResourceControllerTest {
 
     private final AppService appService = mock(AppService.class);
     private final UserService userService = mock(UserService.class);
-    private final StaticResourceController controller = new StaticResourceController(appService, userService);
+    private final PreviewTokenController tokenController = new PreviewTokenController(appService, userService);
+    private final StaticResourceController controller = new StaticResourceController(appService, userService, tokenController);
     private final String testId = Long.toString(ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE));
     private final Path outputRoot = Path.of(AppConstant.CODE_OUTPUT_ROOT_DIR);
     private final String htmlPreviewKey = "html_" + testId;
@@ -57,9 +58,9 @@ class StaticResourceControllerTest {
         when(appService.getPublicAppById(any(), any()))
                 .thenReturn(App.builder().id(Long.parseLong(testId)).build());
         // 手动 new 不走 Spring，@Value 不生效：反射注入与默认配置一致的 secret
-        java.lang.reflect.Field secretField = StaticResourceController.class.getDeclaredField("previewTokenSecret");
+        java.lang.reflect.Field secretField = PreviewTokenController.class.getDeclaredField("previewTokenSecret");
         secretField.setAccessible(true);
-        secretField.set(controller, "fish-ai-code-preview-secret-dev");
+        secretField.set(tokenController, "fish-ai-code-preview-secret-dev");
     }
 
     @AfterEach
@@ -225,9 +226,31 @@ class StaticResourceControllerTest {
                 response.getBody().getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
     }
 
+    @Test
+    void verifyRejectsTokenWhenSecretNotConfigured() throws Exception {
+        // secret 未配置（置空）时：验签不抛 NPE；无权限场景应返回 404 而非 500
+        java.lang.reflect.Field secretField = PreviewTokenController.class.getDeclaredField("previewTokenSecret");
+        secretField.setAccessible(true);
+        Object original = secretField.get(tokenController);
+        secretField.set(tokenController, "");
+        try {
+            // 非精选且非本人：cookie 鉴权也失败 → 应 404（而不是 500 NPE）
+            when(appService.getPublicAppById(any(), any()))
+                    .thenThrow(new BusinessException(ErrorCode.NO_AUTH_ERROR, "没有权限访问该应用"));
+            MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/static/" + htmlPreviewKey + "/index.html");
+            request.setAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE, "/static/" + htmlPreviewKey + "/index.html");
+
+            ResponseEntity<Resource> response = controller.serveStaticResource(htmlPreviewKey, "fake.token.abc", request);
+
+            assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        } finally {
+            secretField.set(tokenController, original);
+        }
+    }
+
     private String issueTokenForTest(String previewKey, long expiresAt) {
-        // 复用 controller 的签名逻辑（同 secret 默认值），保证测试与实现一致
-        return controller.signPreviewTokenForTest(previewKey, expiresAt);
+        // 复用 token controller 的签名逻辑（同 secret 默认值），保证测试与实现一致
+        return tokenController.signPreviewTokenForTest(previewKey, expiresAt);
     }
 
     @Test

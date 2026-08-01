@@ -1,6 +1,9 @@
 spring:
   application:
     name: fish-ai-code
+  threads:
+    virtual:
+      enabled: true
   session:
     store-type: redis
     # session 7 天过期

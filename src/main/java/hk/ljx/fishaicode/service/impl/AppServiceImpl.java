@@ -40,9 +40,6 @@ import hk.ljx.fishaicode.service.ChatHistoryService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import reactor.core.publisher.Flux;
 
 import java.io.File;
@@ -103,6 +100,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     @Resource
     private RedisChatMemoryStore redisChatMemoryStore;
+
+    @Resource
+    private org.springframework.transaction.support.TransactionTemplate transactionTemplate;
 
 
     @Override
@@ -301,10 +301,13 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     }
 
     /**
-     * 用户删除自己的应用（连同对话历史，整体在一个事务中，避免脏数据）
+     * 用户删除自己的应用（连同对话历史）。
+     *
+     * <p>删除在应用级锁内执行：锁覆盖"DB 删除 + 磁盘清理"全程，保证清理时
+     * 没有生成/部署任务在写同一目录。DB 删除用独立事务（TransactionTemplate），
+     * 事务提交后再同步清理文件——文件操作不参与 DB 事务，也不会被回滚。</p>
      */
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public boolean deleteMyApp(long id, User loginUser) {
         // 1. 校验
         if (id <= 0) {
@@ -319,20 +322,20 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (!oldApp.getUserId().equals(loginUser.getId())) {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
         }
-        // 4. 删除应用的所有对话历史
-        chatHistoryService.removeByAppId(id);
-        // 5. 删除应用
-        boolean result = this.removeById(id);
-        // 6. 事务提交后清理磁盘上的代码/部署产物，避免磁盘泄漏与已删内容仍可访问
-        cleanAppFilesAfterCommit(oldApp);
-        return result;
+        // 4. 锁内删除：正在生成/部署时立即失败，避免磁盘清理与写文件竞争
+        return generationCoordinator.executeExclusively(id, () -> {
+            // 5. 独立事务删除 DB（事务提交后才清文件，见 cleanAppFilesSync）
+            boolean result = deleteAppInTransaction(id);
+            // 6. 锁内同步清理磁盘产物与 Redis 记忆
+            cleanAppFilesSync(oldApp);
+            return result;
+        });
     }
 
     /**
-     * 管理员删除任意应用（连同对话历史，整体在一个事务中，避免脏数据）
+     * 管理员删除任意应用（连同对话历史）。
      */
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public boolean adminDeleteApp(long id) {
         // 1. 校验
         if (id <= 0) {
@@ -340,14 +343,31 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         }
         App app = this.getById(id);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
-        // 2. 先清理对话历史，避免数据孤儿
-        chatHistoryService.removeByAppId(id);
-        // 3. 删除应用
-        boolean result = this.removeById(id);
-        ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
-        // 4. 事务提交后清理磁盘上的代码/部署产物，避免磁盘泄漏与已删内容仍可访问
-        cleanAppFilesAfterCommit(app);
-        return true;
+        // 2. 锁内删除：正在生成/部署时立即失败，避免磁盘清理与写文件竞争
+        return generationCoordinator.executeExclusively(id, () -> {
+            // 3. 独立事务删除 DB
+            deleteAppInTransaction(id);
+            // 4. 锁内同步清理磁盘产物与 Redis 记忆
+            cleanAppFilesSync(app);
+            return true;
+        });
+    }
+
+    /**
+     * 独立事务删除应用与对话历史：事务提交后调用方才清理磁盘，
+     * 避免事务边界与锁边界错位（锁内提交、锁内清理）。
+     */
+    private boolean deleteAppInTransaction(long id) {
+        return Boolean.TRUE.equals(transactionTemplate.execute(status -> {
+            // 先清理对话历史，避免数据孤儿
+            chatHistoryService.removeByAppId(id);
+            // 删除应用
+            boolean result = this.removeById(id);
+            if (!result) {
+                throw new BusinessException(ErrorCode.OPERATION_ERROR);
+            }
+            return result;
+        }));
     }
 
     @Override
@@ -358,14 +378,13 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     }
 
     /**
-     * 事务提交后清理该应用的磁盘产物与 Redis 对话记忆。
+     * 锁内同步清理该应用的磁盘产物与 Redis 对话记忆。
      *
-     * <p>文件删除不可回滚，不能放进 DB 事务：若事务回滚，已删的文件无法恢复。
-     * 因此注册 afterCommit 同步回调，DB 删除确认成功后，再用虚拟线程异步清理磁盘
-     * 和 Redis 对话记忆，避免占用 Tomcat 线程，也避免磁盘泄漏、"已删应用内容仍可访问"
-     * 与"应用已删但旧对话记忆残留"的问题。</p>
+     * <p>删除方法在 GenerationCoordinator 应用锁内调用：锁保证清理期间没有
+     * 生成/部署任务在写同一目录。文件删除不可回滚，但删除操作本身极少回滚，
+     * 若事务回滚最多留下孤儿文件（DB 里应用还在，可重新生成覆盖）。</p>
      */
-    private void cleanAppFilesAfterCommit(App app) {
+    private void cleanAppFilesSync(App app) {
         if (app == null) {
             return;
         }
@@ -377,22 +396,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         Path deployDir = StrUtil.isBlank(deployKey) ? null
                 : Paths.get(AppConstant.CODE_DEPLOY_ROOT_DIR, deployKey);
 
-        Runnable cleanup = () -> {
-            deleteDirectoryQuietly(codeDir, deployDir, app.getId());
-            deleteChatMemoryQuietly(app.getId());
-        };
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            // 有事务：提交成功后执行；回滚则不删文件（DB 里应用还在）
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    Thread.ofVirtual().name("clean-app-files-" + app.getId()).start(cleanup);
-                }
-            });
-        } else {
-            // 无事务（理论上不会走到）：直接异步清理
-            Thread.ofVirtual().name("clean-app-files-" + app.getId()).start(cleanup);
-        }
+        deleteDirectoryQuietly(codeDir, deployDir, app.getId());
+        deleteChatMemoryQuietly(app.getId());
     }
 
     /**

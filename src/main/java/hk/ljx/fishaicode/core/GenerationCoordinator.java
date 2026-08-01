@@ -24,6 +24,12 @@ public class GenerationCoordinator {
 
     private static final String LOCK_KEY_PREFIX = "app:generation:";
 
+    /** 生成流总时长上限：正常生成（流式 + 工具循环）远小于此，防模型挂起时锁被无限续期 */
+    private static final java.time.Duration GENERATION_TIMEOUT = java.time.Duration.ofMinutes(30);
+
+    /** 部署/下载等短任务锁 leaseTime：覆盖最长 180s 的 Docker 构建，留足异常兜底余量 */
+    private static final long SHORT_TASK_LOCK_LEASE_MINUTES = 10;
+
     private final RedissonClient redissonClient;
 
     public GenerationCoordinator(RedissonClient redissonClient) {
@@ -64,6 +70,9 @@ public class GenerationCoordinator {
 
             // 独立订阅生成流。客户端取消订阅只会停止 SSE 转发，不能中止后台模型任务或提前释放锁。
             generationFlux
+                    // 生成总时长上限 30 分钟：take 是总时长、timeout 是间隔超时（模型持续吐
+                    // token 时永不触发），30 分钟到 take 正常 complete → doFinally 释放锁。
+                    .take(GENERATION_TIMEOUT)
                     // 兜底：无论流以 complete/error/cancel 哪种方式终结，都确保锁被释放。
                     // 防止上游回调（如保存聊天历史、构建检查）抛异常导致 complete/error 永远不来，
                     // 锁被 Redisson watchdog 无限续期、该应用永久锁死。
@@ -84,12 +93,14 @@ public class GenerationCoordinator {
 
     /**
      * 为部署、下载等需要读取稳定项目目录的操作获取同一把互斥锁。
+     * 显式 leaseTime：短任务锁到期自动释放，避免异常路径下被 watchdog 无限续期。
      */
     public <T> T executeExclusively(long appId, Supplier<T> action) {
         RLock lock = redissonClient.getLock(LOCK_KEY_PREFIX + appId);
         final boolean locked;
         try {
-            locked = lock.tryLock();
+            // waitTime=0 保持"正在生成则立即失败"语义；leaseTime 到期由 Redisson 自动释放
+            locked = lock.tryLock(0, SHORT_TASK_LOCK_LEASE_MINUTES, java.util.concurrent.TimeUnit.MINUTES);
         } catch (Exception e) {
             log.error("获取应用任务锁失败，appId: {}", appId, e);
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "暂时无法执行该操作，请稍后重试");

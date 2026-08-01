@@ -85,3 +85,10 @@ pexels:
 # https://undraw.co 申请 token
 undraw:
   token: "你的Undraw_TOKEN"
+
+# ------------------------------------------------------------
+# 预览静态资源签名 token 密钥（本地开发固定值即可，无公网攻击面）
+# 生产部署由 docker-compose 的 PREVIEW_TOKEN_SECRET 注入强随机值
+# ------------------------------------------------------------
+app:
+  preview-token-secret: fish-ai-code-preview-secret-dev

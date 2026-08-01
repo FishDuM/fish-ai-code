@@ -76,6 +76,9 @@ app:
   deploy:
     host: ${APP_DEPLOY_HOST:http://localhost}
     path: ${APP_DEPLOY_PATH:/deploy}
+  # 预览静态资源签名 token 的密钥：生产必须注入强随机值（如 openssl rand -base64 32）。
+  # 默认空——未注入时预览 token 签发接口拒绝服务（见 StaticResourceController），不会回落弱密钥。
+  preview-token-secret: ${PREVIEW_TOKEN_SECRET:}
 
 # Vue 隔离构建：宿主机代码输出根目录由 compose 注入（docker.sock 模式下 bind 源由宿主机 daemon 解析）
 vue-build:

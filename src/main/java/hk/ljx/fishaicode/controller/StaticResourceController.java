@@ -1,16 +1,12 @@
 package hk.ljx.fishaicode.controller;
 
-import cn.hutool.crypto.digest.HMac;
-import cn.hutool.crypto.digest.HmacAlgorithm;
 import hk.ljx.fishaicode.constant.AppConstant;
 import hk.ljx.fishaicode.exception.BusinessException;
-import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
 import hk.ljx.fishaicode.model.entity.User;
 import hk.ljx.fishaicode.service.AppService;
 import hk.ljx.fishaicode.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -25,112 +21,47 @@ import org.springframework.web.servlet.HandlerMapping;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Base64;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
+/**
+ * 提供生成代码的预览资源访问（含 Vue 项目源码文件清单）。
+ * 鉴权支持 previewToken（无 cookie 的 iframe 场景）或 session cookie 两种方式。
+ */
 @RestController
 @RequestMapping("/static")
 public class StaticResourceController {
 
-    private static final Pattern PREVIEW_KEY_PATTERN = Pattern.compile("^(html|multi_file|vue_project)_([1-9]\\d*)$");
-
-    /** 预览 token 有效期：15 分钟 */
-    private static final long TOKEN_TTL_MS = 15 * 60 * 1000L;
-
-    private final AppService appService;
-    private final UserService userService;
-
-    /** 预览 token 签名密钥，生产用环境变量 app.preview-token-secret 覆盖 */
-    @Value("${app.preview-token-secret:fish-ai-code-preview-secret-dev}")
-    private String previewTokenSecret;
-
-    public StaticResourceController(AppService appService, UserService userService) {
-        this.appService = appService;
-        this.userService = userService;
-    }
-
-    /**
-     * 签发预览访问 token（无状态 HMAC 签名）。
-     * 预览 iframe 无法带 cookie（sandbox 无 allow-same-origin），静态资源改用短时 token 鉴权。
-     *
-     * @return { token, expiresIn }
-     */
-    @GetMapping("/preview-token/{previewKey}")
-    public Map<String, Object> issuePreviewToken(
-            @PathVariable String previewKey,
-            HttpServletRequest request) {
-        Matcher matcher = previewKey == null ? null : PREVIEW_KEY_PATTERN.matcher(previewKey);
-        if (matcher == null || !matcher.matches()) {
-            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "预览资源不存在");
-        }
-        Long appId = Long.parseLong(matcher.group(2));
-        User loginUser = userService.getLoginUserOrNull(request);
-        try {
-            appService.getPublicAppById(appId, loginUser);
-        } catch (BusinessException e) {
-            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "预览资源不存在");
-        }
-
-        long expiresAt = System.currentTimeMillis() + TOKEN_TTL_MS;
-        String token = signPreviewToken(previewKey, expiresAt);
-        Map<String, Object> result = new HashMap<>();
-        result.put("token", token);
-        result.put("expiresIn", TOKEN_TTL_MS / 1000);
-        return result;
-    }
-
-    String signPreviewTokenForTest(String previewKey, long expiresAt) {
-        return signPreviewToken(previewKey, expiresAt);
-    }
-
-    private String signPreviewToken(String previewKey, long expiresAt) {
-        String payload = previewKey + "." + expiresAt;
-        HMac hmac = new HMac(HmacAlgorithm.HmacSHA256, previewTokenSecret.getBytes(StandardCharsets.UTF_8));
-        String sig = Base64.getUrlEncoder().withoutPadding()
-                .encodeToString(hmac.digest(payload));
-        return payload + "." + sig;
-    }
-
-    private boolean verifyPreviewToken(String previewKey, String token) {
-        if (token == null || token.isBlank()) {
-            return false;
-        }
-        String[] parts = token.split("\\.");
-        if (parts.length != 3) {
-            return false;
-        }
-        // token 必须绑定请求的 previewKey：防止"持有 A 应用的 token 读 B 应用资源"
-        if (!parts[0].equals(previewKey)) {
-            return false;
-        }
-        long expiresAt;
-        try {
-            expiresAt = Long.parseLong(parts[1]);
-            if (System.currentTimeMillis() > expiresAt) {
-                return false;
-            }
-        } catch (NumberFormatException e) {
-            return false;
-        }
-        String expected = signPreviewToken(parts[0], expiresAt);
-        return expected.equals(token);
-    }
-
     /** 源码清单忽略的目录与文件扩展名（与前端 vite 插件保持一致） */
-    private static final java.util.Set<String> IGNORED_DIRS = java.util.Set.of(
+    private static final Set<String> IGNORED_DIRS = Set.of(
             "node_modules", "dist", ".git", ".vscode");
-    private static final java.util.Set<String> SOURCE_FILE_EXTS = java.util.Set.of(
+    private static final Set<String> SOURCE_FILE_EXTS = Set.of(
             ".vue", ".js", ".ts", ".jsx", ".tsx", ".json", ".html", ".css",
             ".scss", ".less", ".md", ".txt", ".env", ".gitignore");
 
+    private final AppService appService;
+    private final UserService userService;
+    private final PreviewTokenController previewTokenController;
+
+    public StaticResourceController(AppService appService, UserService userService,
+                                    PreviewTokenController previewTokenController) {
+        this.appService = appService;
+        this.userService = userService;
+        this.previewTokenController = previewTokenController;
+    }
+
     /**
      * 返回 Vue 项目源码文件清单（供前端"代码"tab 文件树使用）。
-     * 原 dev-only Vite 插件在生产无路由，这里在静态资源接口下提供等价能力，鉴权复用 previewToken/cookie。
+     * 原 dev-only Vite 插件在生产无路由，这里在静态资源接口下提供等价能力。
      *
      * @return [{ path, content }, ...]，按目录优先、字母序排列
      */
@@ -139,24 +70,21 @@ public class StaticResourceController {
             @PathVariable String previewKey,
             @RequestParam(value = "previewToken", required = false) String previewToken,
             HttpServletRequest request) {
-        Matcher matcher = previewKey == null ? null : PREVIEW_KEY_PATTERN.matcher(previewKey);
-        if (matcher == null || !matcher.matches()) {
+        if (!isValidPreviewKey(previewKey) || !isAuthorized(previewKey, previewToken, request)) {
             return ResponseEntity.notFound().build();
         }
-        if (!isAuthorized(previewKey, previewToken, request)) {
-            return ResponseEntity.notFound().build();
-        }
-        Path projectRoot = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, previewKey)
+        Path sourceRoot = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, previewKey)
                 .toAbsolutePath()
+                .normalize()
+                .resolve("src")
                 .normalize();
-        Path sourceRoot = projectRoot.resolve("src").normalize();
         if (!Files.isDirectory(sourceRoot)) {
-            return ResponseEntity.ok(java.util.List.of());
+            return ResponseEntity.ok(List.of());
         }
         try {
-            java.util.List<Map<String, String>> files = new java.util.ArrayList<>();
+            List<Map<String, String>> files = new ArrayList<>();
             walkSourceTree(sourceRoot, sourceRoot, files);
-            files.sort(java.util.Comparator
+            files.sort(Comparator
                     .comparingInt((Map<String, String> f) -> f.get("path").split("/").length)
                     .thenComparing(f -> f.get("path")));
             return ResponseEntity.ok()
@@ -167,17 +95,21 @@ public class StaticResourceController {
         }
     }
 
-    private void walkSourceTree(Path sourceRoot, Path dir, java.util.List<Map<String, String>> out) throws Exception {
-        try (java.util.stream.Stream<Path> stream = Files.list(dir)) {
+    private void walkSourceTree(Path sourceRoot, Path dir, List<Map<String, String>> out) throws Exception {
+        try (Stream<Path> stream = Files.list(dir)) {
             for (Path entry : (Iterable<Path>) stream::iterator) {
                 String name = entry.getFileName().toString();
                 if (IGNORED_DIRS.contains(name)) {
                     continue;
                 }
-                if (Files.isDirectory(entry, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                if (Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)) {
                     walkSourceTree(sourceRoot, entry, out);
-                } else if (Files.isRegularFile(entry, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                } else if (Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)) {
                     String fileName = entry.getFileName().toString();
+                    // 排除 .env* 等敏感配置文件：源码清单会向有预览权限的人返回完整内容
+                    if (fileName.startsWith(".env")) {
+                        continue;
+                    }
                     String ext = fileName.contains(".")
                             ? fileName.substring(fileName.lastIndexOf('.')).toLowerCase()
                             : "";
@@ -194,24 +126,6 @@ public class StaticResourceController {
         }
     }
 
-    private boolean isAuthorized(String previewKey, String previewToken, HttpServletRequest request) {
-        if (verifyPreviewToken(previewKey, previewToken)) {
-            return true;
-        }
-        Matcher matcher = PREVIEW_KEY_PATTERN.matcher(previewKey);
-        if (!matcher.matches()) {
-            return false;
-        }
-        Long appId = Long.parseLong(matcher.group(2));
-        User loginUser = userService.getLoginUserOrNull(request);
-        try {
-            appService.getPublicAppById(appId, loginUser);
-            return true;
-        } catch (BusinessException e) {
-            return false;
-        }
-    }
-
     /**
      * 提供生成代码的预览资源访问，支持目录重定向。
      * 部署后的资源由 Nginx 从部署目录提供。
@@ -225,11 +139,9 @@ public class StaticResourceController {
             @RequestParam(value = "previewToken", required = false) String previewToken,
             HttpServletRequest request) {
         try {
-            Matcher matcher = previewKey == null ? null : PREVIEW_KEY_PATTERN.matcher(previewKey);
-            if (matcher == null || !matcher.matches()) {
+            if (!isValidPreviewKey(previewKey)) {
                 return ResponseEntity.notFound().build();
             }
-            Long appId = Long.parseLong(matcher.group(2));
 
             // 从 path 中解析 token：/static/{previewKey}/{token}/... 或 /static/{previewKey}/...
             String resourcePath = (String) request.getAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE);
@@ -237,17 +149,15 @@ public class StaticResourceController {
             if (resourcePath == null || !resourcePath.startsWith(requestPrefix)) {
                 return ResponseEntity.notFound().build();
             }
-            resourcePath = resourcePath.substring(requestPrefix.length()); // 形如 "/token/assets/a.js" 或 "/" 或 ""
+            resourcePath = resourcePath.substring(requestPrefix.length());
             String pathToken = null;
             if (!resourcePath.isEmpty() && !resourcePath.equals("/")) {
-                // 统一去掉前导 /，便于定位 token 段（token 一定紧跟 previewKey 之后）
                 String rest = resourcePath.startsWith("/") ? resourcePath.substring(1) : resourcePath;
                 String firstSegment = rest.contains("/")
                         ? rest.substring(0, rest.indexOf('/'))
                         : rest;
-                if (verifyPreviewToken(previewKey, firstSegment)) {
+                if (previewTokenController.verifyPreviewToken(previewKey, firstSegment)) {
                     pathToken = firstSegment;
-                    // rest.substring 可能是 ""（token 结尾）、"/"（token 后跟目录斜杠）或 "/assets/a.js"
                     String afterToken = rest.substring(firstSegment.length());
                     resourcePath = afterToken.isEmpty()
                             ? "/"
@@ -255,29 +165,24 @@ public class StaticResourceController {
                 }
             }
 
-            // 鉴权：path token → query token → session cookie，任一通过即可
-            boolean authorized = pathToken != null || verifyPreviewToken(previewKey, previewToken);
+            // 鉴权：path token 或 query token 或 session cookie，任一通过即可
+            boolean authorized = pathToken != null || isAuthorized(previewKey, previewToken, request);
             if (!authorized) {
-                // 应用不存在与无权限统一返回 404，避免向攻击者泄露应用是否存在。
-                User loginUser = userService.getLoginUserOrNull(request);
-                try {
-                    appService.getPublicAppById(appId, loginUser);
-                } catch (BusinessException e) {
-                    return ResponseEntity.notFound().build();
-                }
+                return ResponseEntity.notFound().build();
             }
 
-            // 目录访问（无尾斜杠）：重定向到带斜杠的 URL，保证相对子资源基准正确
+            // 目录访问（无尾斜杠）：重定向到带斜杠的 URL，保证相对子资源基准正确。
+            // 保留 query string：query 里可能带 previewToken，getRequestURI() 不含 query 会把它丢掉。
             if (resourcePath.isEmpty()) {
                 HttpHeaders headers = new HttpHeaders();
-                headers.add("Location", request.getRequestURI() + "/");
+                String query = request.getQueryString();
+                headers.add("Location", request.getRequestURI() + "/" + (query == null ? "" : "?" + query));
                 return new ResponseEntity<>(headers, HttpStatus.MOVED_PERMANENTLY);
             }
             // 目录根（/ 或 /{token}/）：返回 index.html
             if (resourcePath.equals("/")) {
                 resourcePath = "/index.html";
             }
-            // 预览根目录仅由合法的 previewKey 决定，用户路径只能作为相对路径拼接。
             Path previewRoot = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, previewKey)
                     .toAbsolutePath()
                     .normalize();
@@ -298,7 +203,6 @@ public class StaticResourceController {
                 return ResponseEntity.notFound().build();
             }
 
-            // 返回文件资源
             Resource resource = new FileSystemResource(realTargetPath);
             return ResponseEntity.ok()
                     .header("Content-Type", getContentTypeWithCharset(realTargetPath.toString()))
@@ -313,6 +217,29 @@ public class StaticResourceController {
             return ResponseEntity.notFound().build();
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    private boolean isValidPreviewKey(String previewKey) {
+        Matcher matcher = previewKey == null ? null : PreviewTokenController.PREVIEW_KEY_PATTERN.matcher(previewKey);
+        return matcher != null && matcher.matches();
+    }
+
+    private boolean isAuthorized(String previewKey, String previewToken, HttpServletRequest request) {
+        if (previewTokenController.verifyPreviewToken(previewKey, previewToken)) {
+            return true;
+        }
+        Matcher matcher = PreviewTokenController.PREVIEW_KEY_PATTERN.matcher(previewKey);
+        if (!matcher.matches()) {
+            return false;
+        }
+        Long appId = Long.parseLong(matcher.group(2));
+        User loginUser = userService.getLoginUserOrNull(request);
+        try {
+            appService.getPublicAppById(appId, loginUser);
+            return true;
+        } catch (BusinessException e) {
+            return false;
         }
     }
 

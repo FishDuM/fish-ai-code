@@ -81,6 +81,8 @@ services:
       CODE_OUTPUT_HOST_DIR: ${CODE_OUTPUT_HOST_DIR:-${PWD}/data/code_output}
       # 部署访问域名
       APP_DEPLOY_HOST: ${APP_DEPLOY_HOST:-http://localhost}
+      # 预览静态资源签名 token 密钥（必填：生产用强随机值，如 openssl rand -base64 32）
+      PREVIEW_TOKEN_SECRET: ${PREVIEW_TOKEN_SECRET:?请设置 PREVIEW_TOKEN_SECRET}
     volumes:
       # 挂载宿主 Docker，供后端调用 docker run 做 Vue 隔离构建
       - /var/run/docker.sock:/var/run/docker.sock

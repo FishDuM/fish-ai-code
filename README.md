@@ -45,7 +45,7 @@ AI 自动生成完整代码，支持三种模式：
 生成的代码打包为 ZIP 下载，或一键部署到内置服务器。
 
 ### 用户与安全
-注册登录、Redis 会话管理、角色权限控制（用户/管理员）、敏感词过滤；精选应用公开可见（未登录可浏览），对话/编辑仅创建者与管理员。
+注册登录、Redis 会话管理、角色权限控制（用户/管理员）、敏感词过滤；精选应用公开可见（未登录可浏览），对话/编辑仅创建者与管理员。预览静态资源（AI 生成的代码）使用短时签名 token 鉴权（HMAC + 15 分钟过期），iframe 沙箱隔离不可信内容，不授予父页面同源权限。
 
 ### 性能优化
 - Redis 旁路缓存
@@ -97,6 +97,7 @@ cp src/main/resources/application-local.yaml.example src/main/resources/applicat
 #   - spring.datasource.password    MySQL 密码
 #   - langchain4j.open-ai.*.api-key  DeepSeek API Key（4 处，可填同一把）
 #   - （可选）pexels.api-key / undraw.token  图片搜索，不填则跳过图片收集
+#   - app.preview-token-secret 预览签名密钥（模板已带本地开发默认值，生产用环境变量覆盖）
 ```
 
 > DeepSeek API Key 在 [https://platform.deepseek.com](https://platform.deepseek.com) 申请。
@@ -149,6 +150,7 @@ npm run dev
 # 1. 复制环境变量模板并填入真实密钥
 cp .env.example .env
 #    必填：DEEPSEEK_API_KEY（https://platform.deepseek.com 申请）
+#          PREVIEW_TOKEN_SECRET（预览静态资源签名密钥，用 `openssl rand -base64 32` 生成）
 #    可选：DB_PASSWORD / REDIS_PASSWORD / PEXELS_API_KEY / UNDRAW_TOKEN / 端口等
 
 # 2. 构建 Vue 隔离构建镜像（仅使用 Vue 项目生成需要，HTML/多文件模式可跳过）

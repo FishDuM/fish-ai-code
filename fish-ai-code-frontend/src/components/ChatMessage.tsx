@@ -1,5 +1,5 @@
 import { Avatar, Button, App } from 'antd';
-import { UserOutlined, RobotOutlined, CopyOutlined, CheckOutlined, FileTextOutlined, EditOutlined, DeleteOutlined, FileSearchOutlined, FolderOpenOutlined } from '@ant-design/icons';
+import { UserOutlined, RobotOutlined, CopyOutlined, CheckOutlined, FileTextOutlined, EditOutlined, DeleteOutlined, FileSearchOutlined, FolderOpenOutlined, ToolOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import React, { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
@@ -289,18 +289,21 @@ function ChatMessageInner({ role, content, isStreaming }: ChatMessageProps) {
       return <CodeBlock language={language} children={displayCode} isStreaming={isStreaming} />;
     }
 
-    // 工具调用段落：识别 "[写入文件]/[修改文件]/[删除文件] 路径" 结构，
-    // 渲染成带 SVG 图标 + 文件路径的醒目行（替代 emoji）。
-    // 注意流式中途 children 可能是数组/元素，统一先转字符串再匹配。
-    // 工具调用段落：识别 "[写入文件]/[修改文件]/[删除文件]/[读取文件]/[读取目录] 路径" 结构。
-    // AI 输出里标记可能内联在叙述文本中（如 "内容：[读取目录] 根目录[读取文件] X 当前..."），
-    // 因此用 split 拆分：标记片段渲染成带 SVG 图标的醒目行，其余文本保持原样。
-    // 路径匹配策略：优先匹配带文件扩展名的路径（src/pages/Dashboard.vue），
-    // 扩展名结束后即停，避免吞掉紧跟的叙述文字；无扩展名时匹配到空白/标点/下个标记。
-    const TOOL_CALL_SPLIT_RE =
-      /(\[(?:写入文件|修改文件|删除文件|读取文件|读取目录)\]\s+(?:[^\s\[\]，。、；：（）()]*?\.[a-zA-Z0-9]{1,6}|[^\s\[\]，。、；：（）()]+))/g;
-    const TOOL_ACTION_RE =
-      /^\[(写入文件|修改文件|删除文件|读取文件|读取目录)\]\s+([^\s\[\]，。、；：（）()]*?\.[a-zA-Z0-9]{1,6}|[^\s\[\]，。、；：（）()]+)/;
+    // 工具调用段落：识别后端输出 "[工具调用] 读取目录 根目录" / "[选择工具] 写入文件"
+    // （动作名不带方括号），以及 AI 自由输出可能带的 "[修改文件] src/App.vue"（动作带方括号），
+    // 统一渲染成带 SVG 图标的醒目气泡卡片。
+    // 动作词白名单限定（写入/修改/删除/读取文件、读取目录），避免把 "[注意]" 这类普通文本误渲染。
+    // 路径优先匹配带扩展名的（src/pages/Dashboard.vue），扩展名后即停，避免吞掉叙述文字。
+    const TOOL_ACTIONS = '写入文件|修改文件|删除文件|读取文件|读取目录';
+    const TOOL_CALL_SPLIT_RE = new RegExp(
+      `((?:\\[(?:工具调用|选择工具)\\]\\s*(?:${TOOL_ACTIONS})\\s*(?:[^\\s[\\]，。、；：（）()]*?\\.[a-zA-Z0-9]{1,6}|[^\\s[\\]，。、；：（）()]+)?)|(?:\\[(?:${TOOL_ACTIONS})\\]\\s+(?:[^\\s[\\]，。、；：（）()]*?\\.[a-zA-Z0-9]{1,6}|[^\\s[\\]，。、；：（）()]+)))`,
+      'g',
+    );
+    // 动作作为捕获组 1，路径作为捕获组 2（带扩展名）/ 3（不带）——与下方解构一一对应。
+    // 兼容三种格式：[工具调用] 写入文件 [路径] / [选择工具] 写入文件 / [修改文件] src/App.vue（动作带方括号）
+    const TOOL_ACTION_RE = new RegExp(
+      `^(?:\\[(?:工具调用|选择工具)\\]\\s*)?\\[?(${TOOL_ACTIONS})\\]?(?:\\s+(?:([^\\s[\\]，。、；：（）()]*?\\.[a-zA-Z0-9]{1,6})|([^\\s[\\]，。、；：（）()]+)))?$`,
+    );
     function ToolCallParagraph({ children }: { children?: React.ReactNode }) {
       const text = toCodeString(children);
       const parts = text.split(TOOL_CALL_SPLIT_RE);
@@ -311,56 +314,67 @@ function ChatMessageInner({ role, content, isStreaming }: ChatMessageProps) {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, margin: '4px 0' }}>
           {parts.map((part, i) => {
+            // split 结果奇数索引是工具捕获片段，偶数索引是普通叙述：只解析工具片段，
+            // 避免 "已完成" 这类普通词被 TOOL_ACTION_RE 误匹配渲染成卡片。
+            if (i % 2 === 0) {
+              return part ? <span key={i}>{part}</span> : null;
+            }
             const m = TOOL_ACTION_RE.exec(part.trim());
             if (!m) {
               return part ? <span key={i}>{part}</span> : null;
             }
-            const [, action, filePath] = m;
+            const action = m[1];
+            const [, , extPath, rawPath] = m;
+            const filePath = extPath ?? rawPath;
             const Icon =
               action === '写入文件' ? FileTextOutlined :
               action === '修改文件' ? EditOutlined :
               action === '删除文件' ? DeleteOutlined :
               action === '读取文件' ? FileSearchOutlined :
-              FolderOpenOutlined;
+              action === '读取目录' ? FolderOpenOutlined :
+              ToolOutlined;
             return (
               <span
                 key={i}
                 style={{
-                  display: 'inline-flex',
+                  display: 'flex',
                   alignItems: 'center',
-                  gap: 6,
-                  margin: '2px 0',
-                  padding: '4px 10px',
-                  borderRadius: 6,
-                  background: 'rgba(17,25,37,0.07)',
-                  border: '1px solid rgba(17,25,37,0.08)',
+                  gap: 8,
+                  margin: '4px 0',
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  background: 'linear-gradient(135deg, rgba(54,210,190,0.10), rgba(79,157,255,0.06))',
+                  border: '1px solid rgba(54,210,190,0.22)',
                   fontSize: '0.92em',
-                  color: '#4b5563',
+                  color: '#374151',
                   width: 'fit-content',
+                  maxWidth: '100%',
                 }}
               >
                 <span
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: 4,
+                    gap: 6,
                     fontWeight: 600,
-                    color: '#374151',
+                    color: '#0e9f92',
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  <Icon style={{ fontSize: 14, color: '#6b7280' }} />
+                  <Icon style={{ fontSize: 16, color: '#16ab9c' }} />
                   {action}
                 </span>
-                <code
-                  style={{
-                    fontFamily: 'inherit',
-                    wordBreak: 'break-all',
-                    color: '#374151',
-                  }}
-                >
-                  {filePath}
-                </code>
+                {filePath ? (
+                  <code
+                    style={{
+                      fontFamily: 'inherit',
+                      wordBreak: 'break-all',
+                      color: '#374151',
+                    }}
+                  >
+                    {filePath}
+                  </code>
+                ) : null}
               </span>
             );
           })}
