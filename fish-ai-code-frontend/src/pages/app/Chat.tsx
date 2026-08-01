@@ -36,6 +36,7 @@ import {
   deployApp,
   downloadAppCode,
   getGenerationStatus,
+  getPreviewToken,
 } from '@/api/app';
 import { getLatestChatHistory, listChatHistoryBefore } from '@/api/chatHistory';
 import {
@@ -85,6 +86,37 @@ function buildHtmlPreviewBaseUrl(
 ): string {
   if (!targetAppId || !codeGenType) return '';
   return `${API_BASE_URL}/static/${codeGenType}_${targetAppId}/`;
+}
+
+// 预览 token 缓存（15 分钟有效，提前 30s 过期复用）
+const previewTokenCache = new Map<string, { token: string; expiresAt: number }>();
+
+async function getPreviewTokenCached(previewKey: string): Promise<string> {
+  const cached = previewTokenCache.get(previewKey);
+  if (cached && cached.expiresAt - 30_000 > Date.now()) {
+    return cached.token;
+  }
+  const { token, expiresIn } = await getPreviewToken(previewKey);
+  previewTokenCache.set(previewKey, { token, expiresAt: Date.now() + expiresIn * 1000 });
+  return token;
+}
+
+/** 拼出带预览 token 的完整预览 URL（token 用于 iframe 无 cookie 场景的静态资源鉴权） */
+async function buildPreviewUrlWithToken(
+  targetAppId: string,
+  codeGenType: string,
+): Promise<string> {
+  const baseUrl = buildHtmlPreviewBaseUrl(targetAppId, codeGenType);
+  if (!baseUrl) return '';
+  try {
+    const token = await getPreviewTokenCached(`${codeGenType}_${targetAppId}`);
+    // token 放 path 首段：HTML 内相对子资源（./assets/xxx.js）会自动继承，
+    // 无需在每处 query 拼 token（query 不随相对路径继承）
+    return `${baseUrl}${token}/`;
+  } catch {
+    // 取 token 失败（未登录且非精选）：退回无 token 的 URL，走 cookie 鉴权
+    return `${baseUrl}?t=${Date.now()}`;
+  }
 }
 
 // Cross-tab coordination channel: when one tab auto-sends a fresh app's
@@ -340,7 +372,16 @@ export default function AppChat() {
           }
           setHtmlPreviewCode(text);
           setHtmlPreviewFrameLoading(true);
-          setHtmlPreviewUrl(`${baseUrl}?t=${Date.now()}`);
+          // iframe 无同源时子资源不带 cookie，预览 URL 须带签名 token
+          buildPreviewUrlWithToken(targetAppId, codeGenType ?? 'html')
+            .then((url) => {
+              if (targetAppId === appIdRef.current) setHtmlPreviewUrl(url);
+            })
+            .catch(() => {
+              if (targetAppId === appIdRef.current) {
+                setHtmlPreviewUrl(`${baseUrl}?t=${Date.now()}`);
+              }
+            });
           setHtmlPreviewLoading(false);
         })
         .catch((error: unknown) => {
@@ -535,12 +576,17 @@ export default function AppChat() {
     }, []),
     // Handle business-error events from the backend (rate limiting, auth failures, etc.)
     // Commits the error as a non-streaming AI message before onDone clears the bubble.
+    // 若 AI 已流出部分内容则保留并追加错误，避免整段生成内容被一条报错覆盖。
     useCallback((code: number, errorMessage: string) => {
       setStreamingMessage((current) => {
         if (!current || !current.isStreaming) return current;
         setMessages((prev) => {
           if (prev.some((m) => m.id === current.id)) return prev;
-          return [...prev, { ...current, content: `❌ ${errorMessage}`, isStreaming: false }];
+          const hadContent = current.content && current.content.trim().length > 0;
+          const content = hadContent
+            ? `${current.content}\n\n> ⚠️ ${errorMessage}`
+            : `❌ ${errorMessage}`;
+          return [...prev, { ...current, content, isStreaming: false }];
         });
         return null;
       });
@@ -604,12 +650,8 @@ export default function AppChat() {
   // 可编辑：应用主人或管理员（对话 / 编辑 / 自动发送初始化）
   const canEdit = isOwner || isAdmin;
 
-  // Source of truth for Vue project files: read straight from disk via the
-  // dev-only Vite plugin (`/__dev__/vue-files/{appId}/list`). The backend
-  // already wrote the full project tree to tmp/code_output/vue_project_xxx/
-  // — this gives us reliable file paths + contents regardless of how the
-  // AI formatted its markdown. The SSE-stream-text fallback below is kept
-  // for the brief window before the first API response lands.
+  // Vue 项目文件清单：走后端 /static/{previewKey}/__list__（dev 与生产一致），
+  // 读落盘的完整项目树，不依赖 AI markdown 格式。SSE 流文本提取仅作接口返回前的过渡。
   const vueFilesAbortRef = useRef<AbortController | null>(null);
   const fetchVueProjectFiles = useCallback(async () => {
     if (!appId) return;
@@ -622,6 +664,7 @@ export default function AppChat() {
       const res = await fetch(url, {
         signal: controller.signal,
         cache: 'no-store',
+        credentials: 'include',
       });
       if (!res.ok) return;
       const files: ProjectFile[] = await res.json();
@@ -787,7 +830,15 @@ export default function AppChat() {
           const baseUrl = buildHtmlPreviewBaseUrl(myAppId, appData.codeGenType);
           if (baseUrl) {
             setHtmlPreviewFrameLoading(true);
-            setHtmlPreviewUrl(`${baseUrl}?t=${Date.now()}`);
+            buildPreviewUrlWithToken(myAppId, appData.codeGenType)
+              .then((url) => {
+                if (myAppId === appIdRef.current) setHtmlPreviewUrl(url);
+              })
+              .catch(() => {
+                if (myAppId === appIdRef.current) {
+                  setHtmlPreviewUrl(`${baseUrl}?t=${Date.now()}`);
+                }
+              });
             setHtmlPreviewLoading(false);
             // 预览已由应用详情加载：标记已处理，避免对话记录加载完成后
             // 的 effect（依赖 messages）再次刷新预览，导致 iframe key 变化、页面闪一下。
@@ -1023,7 +1074,15 @@ export default function AppChat() {
         const baseUrl = getHtmlPreviewBaseUrl(appId, app.codeGenType);
         if (baseUrl && !htmlPreviewUrl) {
           setHtmlPreviewFrameLoading(true);
-          setHtmlPreviewUrl(`${baseUrl}?t=${Date.now()}`);
+          buildPreviewUrlWithToken(appId, app.codeGenType)
+            .then((url) => {
+              if (appId === appIdRef.current) setHtmlPreviewUrl(url);
+            })
+            .catch(() => {
+              if (appId === appIdRef.current) {
+                setHtmlPreviewUrl(`${baseUrl}?t=${Date.now()}`);
+              }
+            });
           return;
         }
         refreshHtmlPreviewFromFile(appId, app.codeGenType);
@@ -1212,6 +1271,25 @@ export default function AppChat() {
     () => getHtmlPreviewBaseUrl(appId, app?.codeGenType),
     [appId, app?.codeGenType, getHtmlPreviewBaseUrl],
   );
+  // srcDoc 预览的 base href 需带 previewToken（srcDoc iframe 无同源，子资源不带 cookie）
+  const [previewBaseUrlWithToken, setPreviewBaseUrlWithToken] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    if (!appId || !app?.codeGenType) {
+      setPreviewBaseUrlWithToken('');
+      return;
+    }
+    buildPreviewUrlWithToken(appId, app.codeGenType)
+      .then((url) => {
+        if (!cancelled) setPreviewBaseUrlWithToken(url);
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewBaseUrlWithToken('');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [appId, app?.codeGenType]);
   const addBaseHrefForSrcDoc = useCallback((html: string, baseUrl: string) => {
     if (!html || !baseUrl) return html;
     const escapedBase = baseUrl.replace(/"/g, '&quot;');
@@ -1243,7 +1321,7 @@ export default function AppChat() {
       .then(async (response) => {
         if (!response.ok) throw new Error('preview file not available');
         const html = await response.text();
-        setPreviewCode(addBaseHrefForSrcDoc(html, htmlPreviewBaseUrl));
+        setPreviewCode(addBaseHrefForSrcDoc(html, previewBaseUrlWithToken || htmlPreviewBaseUrl));
       })
       .catch((error: unknown) => {
         if ((error as { name?: string })?.name !== 'AbortError') {
@@ -1252,7 +1330,7 @@ export default function AppChat() {
       });
 
     return () => controller.abort();
-  }, [addBaseHrefForSrcDoc, editMode, htmlPreviewBaseUrl, htmlPreviewSrcUrl, supportsEditMode, isVuePreview]);
+  }, [addBaseHrefForSrcDoc, editMode, previewBaseUrlWithToken, htmlPreviewBaseUrl, htmlPreviewSrcUrl, supportsEditMode, isVuePreview]);
 
   // The actual srcDoc passed to the iframe — base preview + edit-mode
   // script injection when applicable.
@@ -1548,7 +1626,7 @@ export default function AppChat() {
                                 ref={htmlPreviewIframeRef}
                                 src={htmlPreviewSrcUrl}
                                 key={`vue-edit:${htmlPreviewSrcUrl}`}
-                                // allow-same-origin：Vue Router 需要真实 origin 操作 history，且父页面需同源注入编辑脚本
+                                // Vue 编辑必须同源：编辑脚本经 contentDocument 注入，且 Vue Router history 需真实 origin
                                 sandbox="allow-scripts allow-same-origin"
                                 onLoad={(e) => {
                                   setHtmlPreviewFrameLoading(false);
@@ -1568,7 +1646,7 @@ export default function AppChat() {
                                 ref={htmlPreviewIframeRef}
                                 srcDoc={htmlPreviewSrcDoc}
                                 key={`srcdoc:${htmlPreviewSrcDoc}`}
-                                sandbox="allow-scripts allow-same-origin"
+                                sandbox="allow-scripts"
                                 style={{
                                   width: '100%',
                                   height: '100%',
@@ -1592,8 +1670,9 @@ export default function AppChat() {
                                 ref={htmlPreviewIframeRef}
                                 src={htmlPreviewSrcUrl}
                                 key={`url:${htmlPreviewSrcUrl}`}
-                                // allow-same-origin：子资源（style.css/script.js）需携带 session cookie 通过鉴权
-                                sandbox="allow-scripts allow-same-origin"
+                                // 只读预览不加 allow-same-origin：AI 生成内容不应获得父页面同源权限，
+                                // 静态资源已改用 URL 签名 token 鉴权，无需 cookie
+                                sandbox="allow-scripts"
                                 onLoad={() => setHtmlPreviewFrameLoading(false)}
                                 style={{
                                   width: '100%',

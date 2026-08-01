@@ -136,132 +136,13 @@ function vuePreviewPlugin(): Plugin {
   };
 }
 
-/**
- * Vite plugin: expose the Vue project's source files (src/, package.json,
- * vite.config.js, etc.) for the frontend code-tab file tree. Backend writes
- * the full project to {project_root}/tmp/code_output/vue_project_{appId}/
- * but the SSE stream only carries a markdown-embedded version of those
- * files, which is fragile to parse. This plugin reads straight from disk.
- *
- * Endpoints (dev-only):
- *   GET /__dev__/vue-files/{appId}/list   →  JSON [{ path, content }, ...]
- *   GET /__dev__/vue-files/{appId}/raw/{relativePath}  →  file content
- */
-function vueSourceFilesPlugin(): Plugin {
-  const CODE_OUTPUT_DIR = path.resolve(__dirname, '../tmp/code_output');
-
-  // Skip these so the file tree stays focused on actual project sources
-  const IGNORED_DIRS = new Set(['node_modules', 'dist', '.git', '.vscode']);
-  const SOURCE_FILE_EXTS = new Set([
-    '.vue', '.js', '.ts', '.jsx', '.tsx', '.json', '.html', '.css',
-    '.scss', '.less', '.md', '.txt', '.env', '.gitignore',
-  ]);
-
-  function listProjectFiles(projectDir: string): { path: string; content: string }[] {
-    if (!fs.existsSync(projectDir)) return [];
-    const results: { path: string; content: string }[] = [];
-
-    function walk(dir: string, prefix: string) {
-      let entries: fs.Dirent[];
-      try {
-        entries = fs.readdirSync(dir, { withFileTypes: true });
-      } catch {
-        return;
-      }
-      for (const entry of entries) {
-        if (IGNORED_DIRS.has(entry.name)) continue;
-        const full = path.join(dir, entry.name);
-        const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-        if (entry.isDirectory()) {
-          walk(full, rel);
-        } else if (entry.isFile()) {
-          const ext = path.extname(entry.name).toLowerCase();
-          // Include only source-ish files; everything else (images, fonts,
-          // sourcemaps) is noise for a code-tab viewer.
-          if (!SOURCE_FILE_EXTS.has(ext) && !entry.name.startsWith('.')) continue;
-          try {
-            const content = fs.readFileSync(full, 'utf8');
-            results.push({ path: rel, content });
-          } catch {
-            // skip files we can't read
-          }
-        }
-      }
-    }
-
-    walk(projectDir, '');
-    // Sort: directories first, then alphabetical
-    results.sort((a, b) => {
-      const aDepth = a.path.split('/').length;
-      const bDepth = b.path.split('/').length;
-      if (aDepth !== bDepth) return aDepth - bDepth;
-      return a.path.localeCompare(b.path);
-    });
-    return results;
-  }
-
-  return {
-    name: 'vue-source-files',
-    configureServer(server) {
-      server.middlewares.use('/__dev__/vue-files/', (req, res, next) => {
-        const url = req.url || '';
-        const pathname = url.split('?')[0];
-        // /__dev__/vue-files/{appId}/list
-        // /__dev__/vue-files/{appId}/raw/{relativePath...}
-        const listMatch = pathname.match(/^\/([^/]+)\/list\/?$/);
-        const rawMatch = pathname.match(/^\/([^/]+)\/raw\/(.+)$/);
-
-        if (!listMatch && !rawMatch) return next();
-
-        const appId = (listMatch ?? rawMatch)![1];
-        if (appId.includes('..') || appId === '.' || appId === '') return next();
-        const projectDir = path.join(CODE_OUTPUT_DIR, `vue_project_${appId}`);
-
-        // Security: ensure projectDir stays within CODE_OUTPUT_DIR.
-        const resolved = path.resolve(projectDir);
-        const codeOutputResolved = path.resolve(CODE_OUTPUT_DIR);
-        const rel = path.relative(codeOutputResolved, resolved);
-        if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
-          res.statusCode = 403;
-          res.end('Forbidden');
-          return;
-        }
-
-        if (listMatch) {
-          const files = listProjectFiles(resolved);
-          res.setHeader('Content-Type', 'application/json; charset=UTF-8');
-          res.setHeader('Cache-Control', 'no-store');
-          res.end(JSON.stringify(files));
-          return;
-        }
-
-        if (rawMatch) {
-          const relPath = rawMatch[2];
-          const full = path.resolve(resolved, relPath);
-          const fullRel = path.relative(resolved, full);
-          if (fullRel === '' || fullRel.startsWith('..') || path.isAbsolute(fullRel)
-              || !fs.existsSync(full) || !fs.statSync(full).isFile()) {
-            res.statusCode = 404;
-            res.end('Not Found');
-            return;
-          }
-          res.setHeader('Content-Type', 'text/plain; charset=UTF-8');
-          res.setHeader('Cache-Control', 'no-store');
-          res.end(fs.readFileSync(full, 'utf8'));
-          return;
-        }
-      });
-    },
-  };
-}
-
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, __dirname, '');
   const backendTarget = env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8911';
 
   return {
-    plugins: [react(), vuePreviewPlugin(), vueSourceFilesPlugin()],
+    plugins: [react(), vuePreviewPlugin()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),

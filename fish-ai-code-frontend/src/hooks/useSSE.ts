@@ -93,8 +93,14 @@ export function useSSE(onComplete?: (finalCode: string) => void, onToolExecuted?
       },
       onBusinessError: (code, message) => {
         if (epochRef.current !== myEpoch) return;
+        // 先把已累积内容 flush 到 currentCode，再回调业务错误处理——
+        // 否则 streamingMessage.content 停在最后一次 200ms 防抖的值，尾部内容丢失。
+        if (timerRef.current) clearTimeout(timerRef.current);
+        timerRef.current = null;
+        setCurrentCode(accumulated);
         isStreamingRef.current = false;
         setIsStreaming(false);
+        setPreparing(false);
         onBusinessErrorRef.current?.(code, message);
       },
     });
