@@ -39,9 +39,13 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import reactor.core.publisher.Flux;
 
 import java.io.File;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -259,7 +263,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         // 4. 删除应用的所有对话历史
         chatHistoryService.removeByAppId(id);
         // 5. 删除应用
-        return this.removeById(id);
+        boolean result = this.removeById(id);
+        // 6. 事务提交后清理磁盘上的代码/部署产物，避免磁盘泄漏与已删内容仍可访问
+        cleanAppFilesAfterCommit(oldApp);
+        return result;
     }
 
     /**
@@ -279,6 +286,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         // 3. 删除应用
         boolean result = this.removeById(id);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
+        // 4. 事务提交后清理磁盘上的代码/部署产物，避免磁盘泄漏与已删内容仍可访问
+        cleanAppFilesAfterCommit(app);
         return true;
     }
 
@@ -287,6 +296,58 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         App app = this.getById(id);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
         return app;
+    }
+
+    /**
+     * 事务提交后清理该应用在磁盘上的代码/部署产物。
+     *
+     * <p>文件删除不可回滚，不能放进 DB 事务：若事务回滚，已删的文件无法恢复。
+     * 因此注册 afterCommit 同步回调，DB 删除确认成功后，再用虚拟线程异步清理磁盘，
+     * 避免占用 Tomcat 线程，也避免磁盘泄漏与"已删应用内容仍可访问"。</p>
+     */
+    private void cleanAppFilesAfterCommit(App app) {
+        if (app == null) {
+            return;
+        }
+        // 生成目录：{codeGenType}_{appId}
+        String codeDirName = app.getCodeGenType() + "_" + app.getId();
+        Path codeDir = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, codeDirName);
+        // 部署目录：{deployKey}
+        String deployKey = app.getDeployKey();
+        Path deployDir = StrUtil.isBlank(deployKey) ? null
+                : Paths.get(AppConstant.CODE_DEPLOY_ROOT_DIR, deployKey);
+
+        Runnable cleanup = () -> deleteDirectoryQuietly(codeDir, deployDir, app.getId());
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            // 有事务：提交成功后执行；回滚则不删文件（DB 里应用还在）
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    Thread.ofVirtual().name("clean-app-files-" + app.getId()).start(cleanup);
+                }
+            });
+        } else {
+            // 无事务（理论上不会走到）：直接异步清理
+            Thread.ofVirtual().name("clean-app-files-" + app.getId()).start(cleanup);
+        }
+    }
+
+    /**
+     * 静默删除目录：不存在或删除失败都只记日志，不影响主流程。
+     */
+    private void deleteDirectoryQuietly(Path codeDir, Path deployDir, long appId) {
+        for (Path dir : new Path[]{codeDir, deployDir}) {
+            if (dir == null) {
+                continue;
+            }
+            try {
+                FileUtil.del(dir.toFile());
+                log.info("已清理应用磁盘产物，appId: {}，目录: {}", appId, dir);
+            } catch (Exception e) {
+                // 文件删除失败不应影响删除结果，仅记录日志，避免孤儿目录持续增长。
+                log.error("清理应用磁盘产物失败，appId: {}，目录: {}", appId, dir, e);
+            }
+        }
     }
 
     @Override

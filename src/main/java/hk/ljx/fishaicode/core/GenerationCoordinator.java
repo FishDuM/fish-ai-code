@@ -63,17 +63,22 @@ public class GenerationCoordinator {
             }
 
             // 独立订阅生成流。客户端取消订阅只会停止 SSE 转发，不能中止后台模型任务或提前释放锁。
-            generationFlux.subscribe(
-                    clientSink::next,
-                    error -> {
-                        clientSink.error(error);
-                        releaseLock.run();
-                    },
-                    () -> {
-                        clientSink.complete();
-                        releaseLock.run();
-                    }
-            );
+            generationFlux
+                    // 兜底：无论流以 complete/error/cancel 哪种方式终结，都确保锁被释放。
+                    // 防止上游回调（如保存聊天历史、构建检查）抛异常导致 complete/error 永远不来，
+                    // 锁被 Redisson watchdog 无限续期、该应用永久锁死。
+                    .doFinally(signalType -> releaseLock.run())
+                    .subscribe(
+                            clientSink::next,
+                            error -> {
+                                clientSink.error(error);
+                                releaseLock.run();
+                            },
+                            () -> {
+                                clientSink.complete();
+                                releaseLock.run();
+                            }
+                    );
         }, FluxSink.OverflowStrategy.BUFFER);
     }
 

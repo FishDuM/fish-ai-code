@@ -59,21 +59,40 @@ public class JsonMessageStreamHandler {
                         }
                     },
                     error -> {
-                        String errorMessage = "AI回复失败: " + error.getMessage();
-                        chatHistoryService.addChatHistory(appId, loginUser.getId(), errorMessage, MessageTypeEnum.AI.getValue());
+                        try {
+                            String errorMessage = "AI回复失败: " + error.getMessage();
+                            chatHistoryService.addChatHistory(appId, loginUser.getId(), errorMessage, MessageTypeEnum.AI.getValue());
+                        } catch (Exception e) {
+                            // 历史记录失败不能吞掉原始错误：记日志并继续上报原始异常，
+                            // 否则外层 GenerationCoordinator 收不到 complete/error，锁会永久泄漏。
+                            log.error("保存 AI 失败消息到对话历史出错，appId: {}", appId, e);
+                        }
                         sink.error(error);
                     },
                     () -> {
                         String aiResponse = chatHistoryStringBuilder.toString();
-                        chatHistoryService.addChatHistory(appId, loginUser.getId(), aiResponse, MessageTypeEnum.AI.getValue());
+                        try {
+                            chatHistoryService.addChatHistory(appId, loginUser.getId(), aiResponse, MessageTypeEnum.AI.getValue());
+                        } catch (Exception e) {
+                            // 与 error 回调同理：保存历史失败不能阻止 onComplete，
+                            // 否则外层锁永远不释放、该应用永久锁死。
+                            log.error("保存 AI 消息到对话历史出错，appId: {}", appId, e);
+                        }
                         // 必须等构建成功，才允许向客户端结束生成流。
                         Thread.ofVirtual().name("vue-build-result-" + appId).start(() -> {
                             String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/vue_project_" + appId;
-                            if (vueProjectBuilder.buildProjectWhenReady(projectPath)) {
-                                sink.complete();
-                            } else {
-                                sink.error(new BusinessException(ErrorCode.OPERATION_ERROR,
-                                        "Vue 项目构建失败，请检查生成代码后重试"));
+                            try {
+                                if (vueProjectBuilder.buildProjectWhenReady(projectPath)) {
+                                    sink.complete();
+                                } else {
+                                    sink.error(new BusinessException(ErrorCode.OPERATION_ERROR,
+                                            "Vue 项目构建失败，请检查生成代码后重试"));
+                                }
+                            } catch (Exception e) {
+                                // 构建检查本身抛异常（目录损坏等）也必须终结流，
+                                // 否则锁永远不释放、该应用永久锁死。
+                                log.error("Vue 项目构建检查异常，appId: {}", appId, e);
+                                sink.error(e);
                             }
                         });
                     }
