@@ -52,6 +52,8 @@ langchain4j:
       model-name: ${AI_CHAT_MODEL:deepseek-chat}
       log-requests: ${AI_LOG_REQUESTS:false}
       log-responses: ${AI_LOG_RESPONSES:false}
+      # 限制输出长度：审查/命名/路由都是短输出任务，防推理模型长思考拖慢创建应用
+      max-tokens: ${AI_ROUTING_MAX_TOKENS:100}
 
 # 可选：图片素材搜索（不配置则跳过图片收集）
 pexels:

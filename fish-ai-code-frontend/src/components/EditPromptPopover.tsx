@@ -184,7 +184,7 @@ export default function EditPromptPopover({
           loading={sending}
           disabled={!draft.trim()}
         >
-          {sending ? '生成中…' : '发送'}
+          添加到队列
         </Button>
       </Space>
     </div>

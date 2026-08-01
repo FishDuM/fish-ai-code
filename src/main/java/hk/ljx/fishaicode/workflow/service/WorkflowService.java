@@ -40,6 +40,9 @@ public class WorkflowService {
     @Resource
     private CodeQualityCheckService codeQualityCheckService;
 
+    @Resource(name = "virtualThreadExecutor")
+    private java.util.concurrent.ExecutorService virtualThreadExecutor;
+
     /**
      * 增强提示词：图片收集 + 提示词增强
      *
@@ -101,7 +104,7 @@ public class WorkflowService {
                 for (ImageCollectionPlan.ImageSearchTask task : plan.getContentImageTasks()) {
                     if (taskCount >= maxTasks) break;
                     futures.add(CompletableFuture.supplyAsync(() ->
-                            imageSearchTool.searchContentImages(task.query())));
+                            imageSearchTool.searchContentImages(task.query()), virtualThreadExecutor));
                     taskCount++;
                 }
             }
@@ -110,7 +113,7 @@ public class WorkflowService {
                 for (ImageCollectionPlan.IllustrationTask task : plan.getIllustrationTasks()) {
                     if (taskCount >= maxTasks) break;
                     futures.add(CompletableFuture.supplyAsync(() ->
-                            undrawIllustrationTool.searchIllustrations(task.query())));
+                            undrawIllustrationTool.searchIllustrations(task.query()), virtualThreadExecutor));
                     taskCount++;
                 }
             }

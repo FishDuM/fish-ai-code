@@ -51,6 +51,8 @@ import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
 /**
@@ -96,6 +98,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     @Resource
     private GenerationCoordinator generationCoordinator;
 
+    @Resource(name = "virtualThreadExecutor")
+    private ExecutorService virtualThreadExecutor;
+
     @Resource
     private RedisChatMemoryStore redisChatMemoryStore;
 
@@ -113,20 +118,31 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (initPrompt.length() > 10000) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "初始化 prompt 过长");
         }
-        // AI 内容安全审查：检查用户输入是否涉及法律违规或政治敏感
-        String checkResult = sensitiveCheckFactory.create().verify(initPrompt);
+        // 前置 AI 调用并行化：敏感审查、应用名生成、类型路由互不依赖，
+        // 用虚拟线程并发执行（都是短输出任务，max-tokens:100 限长后单次 ~2s）。
+        // 敏感审查是硬门槛——失败必须提前中断，不等待其余两个。
+        CompletableFuture<String> checkFuture = CompletableFuture.supplyAsync(
+                () -> sensitiveCheckFactory.create().verify(initPrompt), virtualThreadExecutor);
+        CompletableFuture<String> nameFuture = CompletableFuture.supplyAsync(
+                () -> generateAppNameSafely(initPrompt), virtualThreadExecutor);
+        CompletableFuture<CodeGenTypeEnum> typeFuture = CompletableFuture.supplyAsync(() -> {
+            AiCodeGenTypeRoutingService routingService = aiCodeGenTypeRoutingServiceFactory.createAiCodeGenTypeRoutingService();
+            return routingService.routeCodeGenType(initPrompt);
+        }, virtualThreadExecutor);
+
+        // 先等敏感审查：失败立即抛（此时其余两个仍在后台跑，但不会再被使用）
+        String checkResult = checkFuture.join();
         if (!"PASS".equals(checkResult.trim())) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "输入内容包含不符合本网站提供的范围或违规信息");
         }
-        // 2. 构建应用对象：应用名由 AI 智能提炼（不超过 15 字），失败时降级为提示词前 6 个字符，路由仍使用完整提示词
-        String appName = generateAppNameSafely(initPrompt);
+
+        // 审查通过，取应用名与类型（生成应用名失败已降级为截断，不会抛）
+        String appName = nameFuture.join();
+        CodeGenTypeEnum codeGenTypeEnum = typeFuture.join();
         App app = App.builder()
                         .appName(appName).build();
         BeanUtil.copyProperties(appAddRequest, app);
         app.setUserId(loginUser.getId());
-        // 使用 AI 智能选择代码生成类型（多例模式）
-        AiCodeGenTypeRoutingService routingService = aiCodeGenTypeRoutingServiceFactory.createAiCodeGenTypeRoutingService();
-        CodeGenTypeEnum codeGenTypeEnum = routingService.routeCodeGenType(initPrompt);
         app.setCodeGenType(codeGenTypeEnum.getValue());
         // 优先级默认 0
         if (app.getPriority() == null) {
@@ -550,24 +566,36 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         boolean isOwner = app.getUserId().equals(loginUser.getId());
         boolean isAdmin = UserConstant.ADMIN_ROLE.equals(loginUser.getUserRole());
         ThrowUtils.throwIf(!isOwner && !isAdmin, ErrorCode.NO_AUTH_ERROR, "没有权限");
-        // AI 内容安全审查：检查用户输入是否涉及法律违规或政治敏感
-        String checkResult = sensitiveCheckFactory.create().verify(message);
-        if (!"PASS".equals(checkResult.trim())) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "输入内容包含不符合本网站提供的范围或违规信息");
-        }
+
         // 4、应用代码生成类型
         String codeGenType = app.getCodeGenType();
         CodeGenTypeEnum enumByValue = CodeGenTypeEnum.getEnumByValue(codeGenType);
         if (enumByValue == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR ,"应用代码生成类型错误");
         }
+
+        // 前置校验并行化：敏感审查与提示词增强（含图片收集）互不依赖，用虚拟线程并发执行。
+        // 敏感审查是硬门槛——失败必须提前中断，不等待图片收集；通过后再等增强完成。
+        final CodeGenTypeEnum genType = enumByValue;
+        CompletableFuture<String> checkFuture = CompletableFuture.supplyAsync(
+                () -> sensitiveCheckFactory.create().verify(message), virtualThreadExecutor);
+        CompletableFuture<String> enhanceFuture = CompletableFuture.supplyAsync(
+                () -> workflowService.enhancePrompt(message), virtualThreadExecutor);
+
+        // 先等敏感审查：失败立即抛（此时图片收集仍在后台跑，但不会再被使用）
+        String checkResult = checkFuture.join();
+        if (!"PASS".equals(checkResult.trim())) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "输入内容包含不符合本网站提供的范围或违规信息");
+        }
+        // 审查通过，等提示词增强（图片收集）完成
+        String enhancedMessage = enhanceFuture.join();
+        log.info("提示词增强完成（增强前长度:{} → 增强后长度:{}）", message.length(), enhancedMessage.length());
+
         return generationCoordinator.execute(appId, () -> {
-            String enhancedMessage = workflowService.enhancePrompt(message);
-            log.info("提示词增强完成（增强前长度:{} → 增强后长度:{}）", message.length(), enhancedMessage.length());
-            Flux<String> stringFlux = aiCodeGeneratorFacade.generateAndSaveCodeStream(enhancedMessage, enumByValue, appId);
+            Flux<String> stringFlux = aiCodeGeneratorFacade.generateAndSaveCodeStream(enhancedMessage, genType, appId);
             // 锁获取成功且流创建就绪后才持久化用户消息，避免流初始化异常导致写入了用户消息但没有 AI 回复。
             chatHistoryService.addChatHistory(appId, loginUser.getId(), message, MessageTypeEnum.USER.getValue());
-            return streamHandlerExecutor.doExecute(stringFlux, chatHistoryService, appId, loginUser, enumByValue)
+            return streamHandlerExecutor.doExecute(stringFlux, chatHistoryService, appId, loginUser, genType)
                     .doOnComplete(() -> {
                         String codeDir = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + codeGenType + "_" + appId;
                         try {

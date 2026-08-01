@@ -19,7 +19,7 @@ import { useSSE } from '@/hooks/useSSE';
 import { useTitle } from '@/hooks/useTitle';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { applyEditModeToSrcDoc, buildEditModeScript } from '@/utils/editModeInjector';
-import { buildEditPrompt } from '@/utils/editPromptBuilder';
+import { buildBatchEditPrompt } from '@/utils/editPromptBuilder';
 import { getVueFilesListUrl } from '@/utils/vueProjectUrls';
 import {
   EDIT_MODE_SOURCE,
@@ -147,6 +147,19 @@ export default function AppChat() {
   // ── Edit mode (visual element selector) ───────────────────────────
   const [editMode, setEditMode] = useState(false);
   const [selectedElement, setSelectedElement] = useState<SelectedElement | null>(null);
+  // 批量编辑队列：编辑模式下点元素→输入指令→加入队列（不立即发送），
+  // 点"保存"后按顺序串行发送。上限 15 条。
+  const [pendingEdits, setPendingEdits] = useState<Array<{
+    id: string;
+    element: SelectedElement;
+    instruction: string;
+  }>>([]);
+  const pendingEditsRef = useRef(pendingEdits);
+  useEffect(() => {
+    pendingEditsRef.current = pendingEdits;
+  }, [pendingEdits]);
+  // 发送操作是否进行中（控制按钮 loading，一次发送耗时较长）
+  const [savingEdits, setSavingEdits] = useState(false);
   // Last selector the user picked, so we can re-highlight it after the
   // AI finishes rewriting the page.
   const [pendingHighlightSelector, setPendingHighlightSelector] = useState<string | null>(null);
@@ -501,7 +514,7 @@ export default function AppChat() {
     }
   }, []);
 
-  const { isStreaming, isStreamingRef, currentCode, error: sseError, start, cancel, reset } = useSSE(
+  const { isStreaming, isStreamingRef, preparing, currentCode, error: sseError, start, cancel, reset } = useSSE(
     handleStreamComplete,
     // Real-time file accumulator: each tool_executed SSE event adds/updates
     // a file in projectFiles so the code-tab file tree populates as the AI
@@ -770,6 +783,9 @@ export default function AppChat() {
             setHtmlPreviewFrameLoading(true);
             setHtmlPreviewUrl(`${baseUrl}?t=${Date.now()}`);
             setHtmlPreviewLoading(false);
+            // 预览已由应用详情加载：标记已处理，避免对话记录加载完成后
+            // 的 effect（依赖 messages）再次刷新预览，导致 iframe key 变化、页面闪一下。
+            previewHandledRef.current = true;
           }
         }
       })
@@ -938,6 +954,7 @@ export default function AppChat() {
 	    shouldAutoSendInit,
 	    navigate,
 	    location.pathname,
+	    cleanedCode,
 	  ]);
 
   // Cross-tab dedup: when another tab broadcasts that it's auto-sending
@@ -1077,46 +1094,79 @@ export default function AppChat() {
     previewHandledRef.current = false;
     setHtmlPreviewCode('');
     start(appId, text);
-  }, [appId, backgroundGeneration, canEdit, message, start, isStreamingRef]);
+  }, [appId, backgroundGeneration, canEdit, message, start, isStreamingRef, cleanedCode]);
 
-  // ── Edit-mode send (element + prompt) ─────────────────────────────
-  const handleEditSend = useCallback(
+  // 批量编辑：把一条编辑加入待保存队列（不立即发送），上限 15 条。
+  const handleAddEdit = useCallback(
     (instruction: string) => {
-      if (!instruction || isStreamingRef.current || backgroundGeneration || !appId || !selectedElement) return;
-      if (!canEdit) {
-        message.warning('只有应用创建者或管理员可以使用编辑模式');
-        return;
-      }
-      const composed = buildEditPrompt(instruction, selectedElement);
-      editModeRef.current = true;
-      setEditMode(true);
-      // Remember the selector so we can re-highlight the same element
-      // once the AI finishes rewriting the page.
-      setPendingHighlightSelector(selectedElement.selector);
-      setMessages((prev) => [
-        ...prev,
-        { id: newMsgId(), role: 'user', content: composed, createTime: new Date().toISOString() },
-      ]);
-      // 记录旧代码值：新流首个 chunk 到达前，用它跳过"旧代码预填进新气泡"。
-      streamStartCodeRef.current = cleanedCode;
-      setStreamingMessage({
-        id: newMsgId(),
-        role: 'ai',
-        content: '',
-        createTime: new Date().toISOString(),
-        isStreaming: true,
+      if (!instruction || !selectedElement) return;
+      setPendingEdits((prev) => {
+        if (prev.length >= 15) {
+          message.warning('最多只能添加 15 条编辑，请先保存');
+          return prev;
+        }
+        return [...prev, { id: newMsgId(), element: selectedElement, instruction: instruction.trim() }];
       });
-      // 同 handleSend：新流开始，重置 Vue 成功 / 预览已设 ref。
-      vueStreamSucceededRef.current = false;
-      previewHandledRef.current = false;
-      setHtmlPreviewCode('');
+      // 加入队列后清除选中与弹窗，方便继续点下一个元素
       postEditModeMessage({ type: 'unselect' });
       setSelectedElement(null);
       setPopoverPosition(null);
-      start(appId, composed);
     },
-    [appId, backgroundGeneration, canEdit, message, selectedElement, start, isStreamingRef, postEditModeMessage],
+    [selectedElement, postEditModeMessage, message],
   );
+
+  // 删除队列中的某条编辑
+  const handleRemoveEdit = useCallback((id: string) => {
+    setPendingEdits((prev) => prev.filter((e) => e.id !== id));
+  }, []);
+
+  // 批量发送：把队列中所有编辑合并为一个 prompt，一次性发给 AI 全部修改。
+  const handleSendAllEdits = useCallback(() => {
+    const queue = pendingEditsRef.current;
+    if (!queue.length || savingEdits) return;
+    if (!appId) return;
+    if (isStreamingRef.current || backgroundGeneration) {
+      message.warning('当前有生成任务进行中，请稍后发送');
+      return;
+    }
+    if (!canEdit) {
+      message.warning('只有应用创建者或管理员可以使用编辑模式');
+      return;
+    }
+    const composed = buildBatchEditPrompt(queue.map((e) => ({ element: e.element, instruction: e.instruction })));
+    if (!composed) return;
+
+    setSavingEdits(true);
+    setPendingEdits([]);
+    setPendingHighlightSelector(queue[queue.length - 1].element.selector);
+    setMessages((prev) => [
+      ...prev,
+      { id: newMsgId(), role: 'user', content: composed, createTime: new Date().toISOString() },
+    ]);
+    streamStartCodeRef.current = cleanedCode;
+    setStreamingMessage({
+      id: newMsgId(),
+      role: 'ai',
+      content: '',
+      createTime: new Date().toISOString(),
+      isStreaming: true,
+    });
+    vueStreamSucceededRef.current = false;
+    previewHandledRef.current = false;
+    setHtmlPreviewCode('');
+    postEditModeMessage({ type: 'unselect' });
+    start(appId, composed);
+  }, [appId, canEdit, message, cleanedCode, start, postEditModeMessage, savingEdits, backgroundGeneration]);
+
+  // 批量发送完成（流结束）后解除 saving 状态
+  const wasStreamingRef = useRef(false);
+  useEffect(() => {
+    const prev = wasStreamingRef.current;
+    wasStreamingRef.current = isStreaming;
+    if (prev && !isStreaming) {
+      setSavingEdits(false);
+    }
+  }, [isStreaming]);
 
   const handleEditCancel = useCallback(() => {
     postEditModeMessage({ type: 'unselect' });
@@ -1434,9 +1484,15 @@ export default function AppChat() {
           <ChatInput
             isStreaming={isStreaming}
             isBackgroundGenerating={backgroundGeneration}
+            preparing={preparing}
             disabled={isReadOnly}
             onSend={handleSend}
             onCancel={handleCancel}
+            editMode={editMode}
+            pendingEdits={pendingEdits}
+            savingEdits={savingEdits}
+            onRemoveEdit={handleRemoveEdit}
+            onSaveEdits={handleSendAllEdits}
           />
         </div>
 
@@ -1575,7 +1631,7 @@ export default function AppChat() {
                               element={selectedElement}
                               position={popoverPosition}
                               sending={isGenerationBusy}
-                              onSend={handleEditSend}
+                              onSend={handleAddEdit}
                               onCancel={handleEditCancel}
                             />
                           )}

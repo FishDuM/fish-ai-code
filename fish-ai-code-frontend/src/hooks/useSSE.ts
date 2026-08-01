@@ -11,9 +11,14 @@ export function useSSE(onComplete?: (finalCode: string) => void, onToolExecuted?
   const [isStreaming, setIsStreaming] = useState(false);
   const [currentCode, setCurrentCode] = useState('');
   const [error, setError] = useState<Error | null>(null);
+  // 准备中：请求已发出（后端在做敏感审查/图片收集/提示词增强），
+  // 但首个内容 chunk 尚未到达。首 chunk 到达后切 false，用于显示"正在校验并准备素材..."。
+  const [preparing, setPreparing] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const isStreamingRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // preparing 的 ref 镜像：onChunk 回调里同步读写，避免依赖 state 闭包
+  const preparingRef = useRef(false);
   // Epoch counter: each start() bumps it. Any pending timer/callback checks
   // the current epoch and bails out if it no longer matches — prevents stale
   // closures from old streams overwriting new state.
@@ -35,6 +40,8 @@ export function useSSE(onComplete?: (finalCode: string) => void, onToolExecuted?
     const myEpoch = epochRef.current;
     isStreamingRef.current = true;
     setIsStreaming(true);
+    preparingRef.current = true;
+    setPreparing(true);
     // 注意：不要在这里 `setCurrentCode('')`！那会让 iframe 立刻闪一下空白，
     // 等第一帧 chunk 到再覆盖。下方 onDone 之前，`currentCode` 保留为上一次
     // 流式结束时的值（或初始 ''），iframe 继续显示上一次预览，避免闪烁。
@@ -56,6 +63,10 @@ export function useSSE(onComplete?: (finalCode: string) => void, onToolExecuted?
     abortRef.current = startCodeGenSSE(appId, message, {
       onChunk: (chunk) => {
         if (epochRef.current !== myEpoch) return;
+        if (preparingRef.current) {
+          preparingRef.current = false;
+          setPreparing(false);
+        }
         accumulated += chunk;
         scheduleFlush();
       },
@@ -65,6 +76,7 @@ export function useSSE(onComplete?: (finalCode: string) => void, onToolExecuted?
         setCurrentCode(accumulated);
         isStreamingRef.current = false;
         setIsStreaming(false);
+        setPreparing(false);
         onCompleteRef.current?.(accumulated);
       },
       onError: (err) => {
@@ -72,6 +84,7 @@ export function useSSE(onComplete?: (finalCode: string) => void, onToolExecuted?
         if (timerRef.current) clearTimeout(timerRef.current);
         isStreamingRef.current = false;
         setIsStreaming(false);
+        setPreparing(false);
         setError(err);
       },
       onToolExecuted: (toolName, filePath, content) => {
@@ -93,6 +106,8 @@ export function useSSE(onComplete?: (finalCode: string) => void, onToolExecuted?
     if (timerRef.current) clearTimeout(timerRef.current);
     isStreamingRef.current = false;
     setIsStreaming(false);
+    preparingRef.current = false;
+    setPreparing(false);
   }, []);
 
   const reset = useCallback(() => {
@@ -101,6 +116,8 @@ export function useSSE(onComplete?: (finalCode: string) => void, onToolExecuted?
     if (timerRef.current) clearTimeout(timerRef.current);
     isStreamingRef.current = false;
     setIsStreaming(false);
+    preparingRef.current = false;
+    setPreparing(false);
     setCurrentCode('');
     setError(null);
   }, []);
@@ -113,5 +130,5 @@ export function useSSE(onComplete?: (finalCode: string) => void, onToolExecuted?
     };
   }, []);
 
-  return { isStreaming, isStreamingRef, currentCode, error, start, cancel, reset };
+  return { isStreaming, isStreamingRef, preparing, currentCode, error, start, cancel, reset };
 }
