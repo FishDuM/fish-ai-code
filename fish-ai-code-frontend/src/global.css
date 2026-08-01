@@ -1155,6 +1155,42 @@ iframe[srcdoc] {
   transform: scale(1.04);
 }
 
+/* 登录/注册验证码：输入框 + 可点击刷新的图片 */
+.auth-captcha-row {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.auth-captcha-row .auth-captcha-input {
+  flex: 1;
+}
+
+.auth-captcha-img {
+  flex: none;
+  width: 168px;
+  height: 56px;
+  border: 1px solid rgba(17, 25, 37, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.8);
+  object-fit: cover;
+  cursor: pointer;
+  transition: border-color var(--dm-transition-base), box-shadow var(--dm-transition-base);
+}
+
+.auth-captcha-img:hover {
+  border-color: rgba(54, 210, 190, 0.62);
+  box-shadow: 0 0 0 3px rgba(54, 210, 190, 0.12);
+}
+
+.auth-captcha-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: rgba(17, 25, 37, 0.45);
+}
+
 .admin-shell.ant-layout {
   position: relative;
   min-height: 100vh;

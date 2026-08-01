@@ -19,7 +19,9 @@ import hk.ljx.fishaicode.mapper.UserMapper;
 import hk.ljx.fishaicode.model.enums.UserRoleEnum;
 import hk.ljx.fishaicode.model.vo.LoginUserVO;
 import hk.ljx.fishaicode.model.vo.UserVO;
+import hk.ljx.fishaicode.service.CaptchaService;
 import hk.ljx.fishaicode.service.UserService;
+import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -41,12 +43,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
 
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
+    @Resource
+    private CaptchaService captchaService;
+
     private static final java.util.Set<String> ALLOWED_SORT_FIELDS = java.util.Set.of(
             "id", "userAccount", "userName", "userRole", "createTime", "updateTime", "editTime"
     );
 
     @Override
-    public long userRegister(String userAccount, String userPassword, String checkPassword) {
+    public long userRegister(String userAccount, String userPassword, String checkPassword, String captchaId, String captchaCode, HttpServletRequest request) {
         // 1. 校验
         if (StrUtil.hasBlank(userAccount, userPassword, checkPassword)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数为空");
@@ -60,6 +65,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
         if (!userPassword.equals(checkPassword)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "两次输入的密码不一致");
         }
+        // 1.1 校验验证码（5 分钟内可重复使用，过期前不失效）
+        captchaService.verifyCaptcha(captchaId, captchaCode);
         // 2. 检查是否重复
         QueryWrapper queryWrapper = new QueryWrapper();
         queryWrapper.eq("userAccount", userAccount);
@@ -133,7 +140,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
     }
 
     @Override
-    public LoginUserVO userLogin(String userAccount, String userPassword, HttpServletRequest request) {
+    public LoginUserVO userLogin(String userAccount, String userPassword, String captchaId, String captchaCode, HttpServletRequest request) {
         // 1. 校验
         if (StrUtil.hasBlank(userAccount, userPassword)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数为空");
@@ -144,6 +151,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
         if (userPassword.length() < 8) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "密码错误");
         }
+        // 1.1 校验验证码（5 分钟内可重复使用，过期前不失效）
+        captchaService.verifyCaptcha(captchaId, captchaCode);
         // 2. 查询用户
         QueryWrapper queryWrapper = new QueryWrapper();
         queryWrapper.eq("userAccount", userAccount);

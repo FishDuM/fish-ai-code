@@ -24,4 +24,16 @@ public class UserLoginRequest implements Serializable {
     @NotBlank(message = "密码不能为空")
     @Size(min = 8, max = 16, message = "密码长度需在 8-16 个字符之间")
     private String userPassword;
+
+    /**
+     * 验证码 id（对应验证码图片接口返回的 captchaId）
+     */
+    @NotBlank(message = "验证码不能为空")
+    private String captchaId;
+
+    /**
+     * 验证码
+     */
+    @NotBlank(message = "验证码不能为空")
+    private String captchaCode;
 }

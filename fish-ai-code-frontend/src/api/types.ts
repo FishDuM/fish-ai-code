@@ -46,12 +46,21 @@ export interface UserVO {
 export interface UserLoginRequest {
   userAccount: string;
   userPassword: string;
+  captchaId: string;
+  captchaCode: string;
 }
 
 export interface UserRegisterRequest {
   userAccount: string;
   userPassword: string;
   checkPassword: string;
+  captchaId: string;
+  captchaCode: string;
+}
+
+export interface CaptchaVO {
+  captchaId: string;
+  imgBase64: string;
 }
 
 export interface UserAddRequest {

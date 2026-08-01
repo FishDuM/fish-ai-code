@@ -25,9 +25,12 @@ public interface UserService extends IService<User> {
      * @param userAccount   用户账户
      * @param userPassword  用户密码
      * @param checkPassword 校验密码
+     * @param captchaId     验证码 id
+     * @param captchaCode   验证码
+     * @param request       http 请求
      * @return 新用户 id
      */
-    long userRegister(String userAccount, String userPassword, String checkPassword);
+    long userRegister(String userAccount, String userPassword, String checkPassword, String captchaId, String captchaCode, HttpServletRequest request);
 
     /**
      * 管理员创建用户（含账号查重、角色校验、默认密码设置）
@@ -42,10 +45,12 @@ public interface UserService extends IService<User> {
      *
      * @param userAccount  用户账户
      * @param userPassword 用户密码
-     * @param request
+     * @param captchaId    验证码 id
+     * @param captchaCode  验证码
+     * @param request      http 请求
      * @return 脱敏后的用户信息
      */
-    LoginUserVO userLogin(String userAccount, String userPassword, HttpServletRequest request);
+    LoginUserVO userLogin(String userAccount, String userPassword, String captchaId, String captchaCode, HttpServletRequest request);
 
     /**
      * 获取当前登录用户

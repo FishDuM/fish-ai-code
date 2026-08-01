@@ -7,6 +7,16 @@ public interface UserConstant {
      */
     String USER_LOGIN_STATE = "user_login";
 
+    /**
+     * 登录/注册验证码的 Redis key 前缀
+     */
+    String CAPTCHA_KEY_PREFIX = "captcha:";
+
+    /**
+     * 验证码有效期（秒），5 分钟
+     */
+    long CAPTCHA_EXPIRE_SECONDS = 5 * 60L;
+
     //  region 权限
 
     /**

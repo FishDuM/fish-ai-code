@@ -1,7 +1,11 @@
 package hk.ljx.fishaicode.controller;
 
 import hk.ljx.fishaicode.constant.AppConstant;
+import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
+import hk.ljx.fishaicode.model.entity.User;
+import hk.ljx.fishaicode.service.AppService;
+import hk.ljx.fishaicode.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -17,13 +21,22 @@ import org.springframework.web.servlet.HandlerMapping;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @RestController
 @RequestMapping("/static")
 public class StaticResourceController {
 
-    private static final Pattern PREVIEW_KEY_PATTERN = Pattern.compile("^(?:html|multi_file|vue_project)_[1-9]\\d*$");
+    private static final Pattern PREVIEW_KEY_PATTERN = Pattern.compile("^(html|multi_file|vue_project)_([1-9]\\d*)$");
+
+    private final AppService appService;
+    private final UserService userService;
+
+    public StaticResourceController(AppService appService, UserService userService) {
+        this.appService = appService;
+        this.userService = userService;
+    }
 
     /**
      * 提供生成代码的预览资源访问，支持目录重定向。
@@ -35,7 +48,20 @@ public class StaticResourceController {
             @PathVariable String previewKey,
             HttpServletRequest request) {
         try {
-            if (previewKey == null || !PREVIEW_KEY_PATTERN.matcher(previewKey).matches()) {
+            Matcher matcher = previewKey == null ? null : PREVIEW_KEY_PATTERN.matcher(previewKey);
+            if (matcher == null || !matcher.matches()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            // 权限校验：复用与详情页一致的 getPublicAppById 规则——
+            // 精选应用任何人（含未登录）可访问，非精选应用仅本人/管理员可访问。
+            // 这样即使 appId（雪花 id）可枚举，也无法拉取私有应用的生成源码。
+            // 应用不存在与无权限统一返回 404，避免向攻击者泄露应用是否存在。
+            Long appId = Long.parseLong(matcher.group(2));
+            User loginUser = userService.getLoginUserOrNull(request);
+            try {
+                appService.getPublicAppById(appId, loginUser);
+            } catch (BusinessException e) {
                 return ResponseEntity.notFound().build();
             }
 

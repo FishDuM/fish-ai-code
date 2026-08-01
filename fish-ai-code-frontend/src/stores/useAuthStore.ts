@@ -13,8 +13,8 @@ interface AuthState {
   authUnavailable: boolean;
 
   fetchLoginUser: () => Promise<void>;
-  login: (account: string, password: string) => Promise<void>;
-  register: (account: string, password: string, checkPassword: string) => Promise<void>;
+  login: (account: string, password: string, captchaId: string, captchaCode: string) => Promise<void>;
+  register: (account: string, password: string, checkPassword: string, captchaId: string, captchaCode: string) => Promise<void>;
   logout: () => Promise<void>;
   setLoginUser: (user: LoginUserVO | null) => void;
 }
@@ -54,10 +54,10 @@ export const useAuthStore = create<AuthState>()(
         return fetchPromise;
       },
 
-      login: async (account, password) => {
+      login: async (account, password, captchaId, captchaCode) => {
         set({ isLoading: true });
         try {
-          const user = await userApi.login({ userAccount: account, userPassword: password });
+          const user = await userApi.login({ userAccount: account, userPassword: password, captchaId, captchaCode });
           set({ loginUser: user, isLoading: false, authUnavailable: false });
         } catch (error) {
           set({ isLoading: false });
@@ -65,10 +65,10 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      register: async (account, password, checkPassword) => {
+      register: async (account, password, checkPassword, captchaId, captchaCode) => {
         set({ isLoading: true });
         try {
-          await userApi.register({ userAccount: account, userPassword: password, checkPassword });
+          await userApi.register({ userAccount: account, userPassword: password, checkPassword, captchaId, captchaCode });
           set({ isLoading: false });
         } catch (error) {
           set({ isLoading: false });

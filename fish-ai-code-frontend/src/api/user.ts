@@ -10,7 +10,17 @@ import type {
   UserQueryRequest,
   UserUpdateRequest,
   UserAddRequest,
+  CaptchaVO,
 } from './types';
+
+/**
+ * 获取登录/注册验证码图片（base64 data URI），
+ * 后端同时把验证码答案存入当前 session，登录/注册时携带 captchaCode 校验。
+ */
+export async function getCaptcha(): Promise<CaptchaVO> {
+  const res = await api.get<BaseResponse<CaptchaVO>>('/captcha');
+  return res.data.data;
+}
 
 export async function login(data: UserLoginRequest): Promise<LoginUserVO> {
   const res = await api.post<BaseResponse<LoginUserVO>>('/user/login', data);

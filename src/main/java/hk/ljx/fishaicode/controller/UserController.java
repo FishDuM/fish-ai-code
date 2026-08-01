@@ -45,11 +45,13 @@ public class UserController {
      * @return 注册结果
      */
     @PostMapping("register")
-    public BaseResponse<Long> userRegister(@Valid @RequestBody UserRegisterRequest userRegisterRequest) {
+    public BaseResponse<Long> userRegister(@Valid @RequestBody UserRegisterRequest userRegisterRequest, HttpServletRequest request) {
         String userAccount = userRegisterRequest.getUserAccount();
         String userPassword = userRegisterRequest.getUserPassword();
         String checkPassword = userRegisterRequest.getCheckPassword();
-        long result = userService.userRegister(userAccount, userPassword, checkPassword);
+        String captchaId = userRegisterRequest.getCaptchaId();
+        String captchaCode = userRegisterRequest.getCaptchaCode();
+        long result = userService.userRegister(userAccount, userPassword, checkPassword, captchaId, captchaCode, request);
         return ResultUtils.success(result);
     }
 
@@ -57,7 +59,9 @@ public class UserController {
     public BaseResponse<LoginUserVO> userLogin(@Valid @RequestBody UserLoginRequest userLoginRequest, HttpServletRequest request) {
         String userAccount = userLoginRequest.getUserAccount();
         String userPassword = userLoginRequest.getUserPassword();
-        LoginUserVO loginUserVO = userService.userLogin(userAccount, userPassword, request);
+        String captchaId = userLoginRequest.getCaptchaId();
+        String captchaCode = userLoginRequest.getCaptchaCode();
+        LoginUserVO loginUserVO = userService.userLogin(userAccount, userPassword, captchaId, captchaCode, request);
         return ResultUtils.success(loginUserVO);
     }
 
