@@ -4,10 +4,10 @@ import { EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { adminListApps, adminUpdateApp, adminDeleteApp } from '@/api/app';
 import { useTitle } from '@/hooks/useTitle';
+import { CODE_GEN_TYPES, FEATURED_PRIORITY } from '@/constants';
 import type { App as AppType, AdminAppQueryRequest } from '@/api/types';
 
 const { Title } = Typography;
-const FEATURED_PRIORITY = 99;
 const NORMAL_PRIORITY = 0;
 
 type FeaturedStatus = 'featured' | 'normal';
@@ -124,8 +124,8 @@ export default function AppManage() {
       dataIndex: 'codeGenType',
       width: 120,
       render: (type: string | null) => (
-        <Tag color={type === 'multi_file' ? 'default' : type === 'vue_project' ? 'lime' : 'green'}>
-          {type === 'multi_file' ? '多文件' : type === 'vue_project' ? 'Vue 工程' : 'HTML'}
+        <Tag color={type === CODE_GEN_TYPES.MULTI_FILE ? 'default' : type === CODE_GEN_TYPES.VUE_PROJECT ? 'lime' : 'green'}>
+          {type === CODE_GEN_TYPES.MULTI_FILE ? '多文件' : type === CODE_GEN_TYPES.VUE_PROJECT ? 'Vue 工程' : 'HTML'}
         </Tag>
       ),
     },

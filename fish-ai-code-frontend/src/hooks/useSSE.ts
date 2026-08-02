@@ -82,6 +82,10 @@ export function useSSE(onComplete?: (finalCode: string) => void, onToolExecuted?
       onError: (err) => {
         if (epochRef.current !== myEpoch) return;
         if (timerRef.current) clearTimeout(timerRef.current);
+        timerRef.current = null;
+        // 传输中断：flush 已累积内容避免尾部丢失；空内容（连接即失败）
+        // 不清空 currentCode，避免预览 iframe 闪白。
+        if (accumulated) setCurrentCode(accumulated);
         isStreamingRef.current = false;
         setIsStreaming(false);
         setPreparing(false);

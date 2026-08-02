@@ -3,6 +3,7 @@ import { EditOutlined, DeleteOutlined, CodeOutlined } from '@ant-design/icons';
 import { useState } from 'react';
 import dayjs from 'dayjs';
 import type { AppVO } from '@/api/types';
+import { CODE_GEN_TYPES, FEATURED_PRIORITY } from '@/constants';
 
 const { Text } = Typography;
 
@@ -31,7 +32,7 @@ function getGradient(id: string) {
 }
 
 export default function AppCard<T extends AppCardData>({ app, onEdit, onDelete, onOpen, showActions = true }: AppCardProps<T>) {
-  const codeGenLabel = app.codeGenType === 'multi_file' ? '多文件' : app.codeGenType === 'vue_project' ? 'Vue 工程' : 'HTML';
+  const codeGenLabel = app.codeGenType === CODE_GEN_TYPES.MULTI_FILE ? '多文件' : app.codeGenType === CODE_GEN_TYPES.VUE_PROJECT ? 'Vue 工程' : 'HTML';
   const [imageError, setImageError] = useState(false);
   const showGradient = !app.cover || imageError;
 
@@ -101,10 +102,10 @@ export default function AppCard<T extends AppCardData>({ app, onEdit, onDelete, 
         description={
           <Space orientation="vertical" size={4} style={{ width: '100%' }}>
             <Space>
-              <Tag color={app.codeGenType === 'multi_file' ? 'default' : app.codeGenType === 'vue_project' ? 'lime' : 'green'}>
+              <Tag color={app.codeGenType === CODE_GEN_TYPES.MULTI_FILE ? 'default' : app.codeGenType === CODE_GEN_TYPES.VUE_PROJECT ? 'lime' : 'green'}>
                 {codeGenLabel}
               </Tag>
-              {app.priority === 99 && <Tag color="gold">精选</Tag>}
+              {app.priority === FEATURED_PRIORITY && <Tag color="gold">精选</Tag>}
             </Space>
             <Text type="secondary" style={{ fontSize: 12, color: 'rgba(17,25,37,0.45)' }}>
               {dayjs(app.createTime).format('YYYY-MM-DD HH:mm')}

@@ -15,7 +15,13 @@ export const ERROR_CODES = {
 export const CODE_GEN_TYPES = {
   HTML: 'html',
   MULTI_FILE: 'multi_file',
+  VUE_PROJECT: 'vue_project',
 } as const;
+
+export const FEATURED_PRIORITY = 99;
+
+// 新增用户的默认密码（与后端 UserConstant.DEFAULT_PASSWORD 保持一致）
+export const DEFAULT_PASSWORD = '12345678';
 
 export const USER_ROLES = {
   USER: 'user',

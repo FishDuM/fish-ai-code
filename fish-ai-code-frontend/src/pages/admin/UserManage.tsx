@@ -4,6 +4,7 @@ import { EditOutlined, DeleteOutlined, PlusOutlined, UserOutlined } from '@ant-d
 import dayjs from 'dayjs';
 import { listUsers, updateUser, deleteUser, addUser } from '@/api/user';
 import { useTitle } from '@/hooks/useTitle';
+import { DEFAULT_PASSWORD } from '@/constants';
 import type { UserVO, UserQueryRequest } from '@/api/types';
 
 const { Title } = Typography;
@@ -76,7 +77,7 @@ export default function UserManage() {
     try {
       const values = await addForm.validateFields();
       await addUser(values);
-      message.success('新增用户成功（默认密码：12345678）');
+      message.success(`新增用户成功（默认密码：${DEFAULT_PASSWORD}）`);
       setAddModalOpen(false);
       addForm.resetFields();
       fetchUsers();

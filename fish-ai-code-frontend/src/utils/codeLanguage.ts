@@ -13,6 +13,7 @@ const EXT_TO_LANGUAGE: Record<string, string> = {
   svg: 'xml',
   vue: 'markup',
   js: 'javascript',
+  javascript: 'javascript',
   mjs: 'javascript',
   cjs: 'javascript',
   jsx: 'jsx',

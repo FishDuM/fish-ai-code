@@ -7,9 +7,10 @@ interface SearchInputProps {
   placeholder?: string;
   debounceMs?: number;
   style?: React.CSSProperties;
+  className?: string;
 }
 
-export default function SearchInput({ onSearch, placeholder = '搜索...', debounceMs = 300, style }: SearchInputProps) {
+export default function SearchInput({ onSearch, placeholder = '搜索...', debounceMs = 300, style, className }: SearchInputProps) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const callbackRef = useRef(onSearch);
   // Keep callbackRef pointing at the latest onSearch without writing during render.
@@ -39,6 +40,7 @@ export default function SearchInput({ onSearch, placeholder = '搜索...', debou
       onChange={handleChange}
       allowClear
       style={style}
+      className={className}
     />
   );
 }

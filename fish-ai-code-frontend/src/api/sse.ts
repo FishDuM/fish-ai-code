@@ -1,22 +1,16 @@
 import { API_BASE_URL } from '@/constants';
 
 /**
- * Strip SSE protocol prefixes from every line in the event body.
- * Spring WebFlux wraps Flux<String> as SSE, adding "data:" prefix per line.
- * A multi-line value is sent as multiple consecutive "data:" lines within one event:
- *   data:line1
- *   data:line2
- *   data:line3
- * This must be handled by stripping "data:" from EVERY line, not just the first.
+ * SSE 事件块可能跨多行（一个事件多个 data: 行），每行剥一次前缀即可。
+ * 不能 while 循环反复剥：AI 生成的代码里 `data: [...]`、`event: click` 会被误改写。
  */
 function stripSSEPrefix(line: string): string {
   return line
     .split('\n')
     .map((l) => {
       let s = l.trim();
-      while (s.startsWith('data:') || s.startsWith('event:') || s.startsWith('id:') || s.startsWith('retry:')) {
+      if (s.startsWith('data:') || s.startsWith('event:') || s.startsWith('id:') || s.startsWith('retry:')) {
         const colon = s.indexOf(':');
-        if (colon === -1) break;
         s = s.slice(colon + 1).trim();
       }
       return s;
@@ -161,7 +155,14 @@ export function startCodeGenSSE(
         const { done, value } = await reader.read();
         if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
+        let chunk = decoder.decode(value, { stream: true });
+        // 跨 chunk 边界处理：若上一个 chunk 以 \r 结尾而本 chunk 以 \n 开头，
+        // 先拼上再归一化，避免漏掉边界处的 CRLF。
+        if (buffer.endsWith('\r') && chunk.startsWith('\n')) {
+          buffer = buffer.slice(0, -1) + '\n';
+          chunk = chunk.slice(1);
+        }
+        buffer += chunk.replace(/\r\n/g, '\n');
 
         // Scan for complete SSE events (separated by \n\n)
         while (searchStart < buffer.length) {

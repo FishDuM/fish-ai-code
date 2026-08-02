@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.HandlerMapping;
+import lombok.extern.slf4j.Slf4j;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -37,6 +38,7 @@ import java.util.stream.Stream;
  * 提供生成代码的预览资源访问（含 Vue 项目源码文件清单）。
  * 鉴权支持 previewToken（无 cookie 的 iframe 场景）或 session cookie 两种方式。
  */
+@Slf4j
 @RestController
 @RequestMapping("/static")
 public class StaticResourceController {
@@ -216,6 +218,7 @@ public class StaticResourceController {
             // 预览目录或文件不存在（应用未生成/已删除/未构建）：语义是 404，不是服务错误
             return ResponseEntity.notFound().build();
         } catch (Exception e) {
+            log.error("预览静态资源服务异常 previewKey={}", previewKey, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }

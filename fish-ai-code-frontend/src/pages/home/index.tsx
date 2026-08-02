@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Row, Col, Typography, Button, Pagination, Empty, App, Input } from 'antd';
-import { ArrowRightOutlined, SearchOutlined } from '@ant-design/icons';
+import { ArrowRightOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router';
 import AppCard from '@/components/AppCard';
+import SearchInput from '@/components/SearchInput';
 import { createApp, listFeaturedApps } from '@/api/app';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useTitle } from '@/hooks/useTitle';
@@ -198,12 +199,10 @@ export default function Home() {
           <Button shape="round" type="primary" className="home-filter-active">
             全部
           </Button>
-          <Input
-            prefix={<SearchOutlined />}
+          <SearchInput
             placeholder="搜索应用..."
-            allowClear
             className="home-gallery-search"
-            onChange={(e) => handleSearch(e.target.value)}
+            onSearch={handleSearch}
           />
         </div>
 

@@ -26,7 +26,7 @@ interface ChatInputProps {
   onSaveEdits?: () => void;
 }
 
-const MAX_EDITS = 15;
+export const MAX_EDITS = 15;
 
 function ChatInputInner({
   isStreaming,
@@ -44,7 +44,8 @@ function ChatInputInner({
   const [value, setValue] = useState('');
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // 输入法选词回车（composition 中）不触发发送
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       const text = value.trim();
       if (text) {

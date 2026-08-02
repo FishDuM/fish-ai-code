@@ -12,6 +12,11 @@ const FORMATTABLE_LANGS = new Set([
   'tsx',
 ]);
 
+// 按格式化方式分组：HTML 类按标签拆行（formatHtmlLike），花括号类按 {}; 拆行（formatBraces）。
+// 分组用于引号检测与长单行跳过，避免每处各写一份语言名单。
+const HTML_LIKE_LANGS = new Set(['html', 'markup', 'xml', 'svg']);
+const BRACE_LANGS = new Set(['css', 'js', 'javascript', 'jsx', 'ts', 'typescript', 'tsx']);
+
 const VOID_HTML_TAGS = new Set([
   'area',
   'base',
@@ -79,6 +84,29 @@ function formatHtmlLike(code: string): string {
   return lines.join('\n');
 }
 
+/**
+ * 检测代码里是否有引号包裹的 { } ;（如 const s = "a;b";、key: "x;y"）。
+ * 简单的引号感知扫描：处理单引号、双引号、模板字符串与转义。
+ */
+function containsPunctuationInQuotes(code: string): boolean {
+  let quote: "'" | '"' | '`' | null = null;
+  for (let i = 0; i < code.length; i++) {
+    const ch = code[i];
+    if (quote) {
+      if (ch === '\\') {
+        i++; // 跳过转义字符
+      } else if (ch === quote) {
+        quote = null;
+      } else if (ch === ';' || ch === '{' || ch === '}') {
+        return true;
+      }
+    } else if (ch === "'" || ch === '"' || ch === '`') {
+      quote = ch;
+    }
+  }
+  return false;
+}
+
 function formatBraces(code: string): string {
   return code
     .replace(/\s*([{};])\s*/g, '$1\n')
@@ -103,10 +131,16 @@ export function formatCodeForDisplay(code: string, language: string): string {
   const lang = language.toLowerCase();
   if (!FORMATTABLE_LANGS.has(lang)) return code;
   if (code.includes('\n') && code.split('\n').length > 4) return code;
-  // 流式未闭合的代码块是长单行，跳过格式化防压扁
-  if (!code.includes('\n') && code.length > 200) return code;
+  // 流式未闭合的代码块是长单行；对 js/ts 跳过格式化防拆坏字符串字面量。
+  // html/css 的格式化是按标签/花括号拆行，长单行（多文件模式模型输出偶尔
+  // 压扁成一行）反而需要它来恢复可读性，不能一并跳过。
+  if (!code.includes('\n') && code.length > 200 && BRACE_LANGS.has(lang) && lang !== 'css') return code;
+  // 引号内出现 { } ; 时（如 const s = "a;b";、css 的 content: "a;b"），
+  // formatBraces 拆行会破坏字符串字面量，跳过格式化。HTML 类按标签拆行，
+  // 属性引号内容不受影响，无需此检查。
+  if (BRACE_LANGS.has(lang) && containsPunctuationInQuotes(code)) return code;
 
-  if (lang === 'html' || lang === 'markup' || lang === 'xml' || lang === 'svg') {
+  if (HTML_LIKE_LANGS.has(lang)) {
     return formatHtmlLike(code);
   }
   return formatBraces(code);

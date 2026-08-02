@@ -11,7 +11,7 @@ import {
 } from '@ant-design/icons';
 import ChatHeader from '@/components/ChatHeader';
 import ChatMessageList from '@/components/ChatMessageList';
-import ChatInput from '@/components/ChatInput';
+import ChatInput, { MAX_EDITS } from '@/components/ChatInput';
 import CodePreview from '@/components/CodePreview';
 import VueProjectViewer from '@/components/VueProjectViewer';
 import EditPromptPopover from '@/components/EditPromptPopover';
@@ -26,7 +26,7 @@ import {
   type SelectedElement,
   type EditModeControlMessage,
 } from '@/types/editMode';
-import { API_BASE_URL, ERROR_CODES } from '@/constants';
+import { API_BASE_URL, ERROR_CODES, CODE_GEN_TYPES } from '@/constants';
 import { ApiError } from '@/api/error';
 
 import {
@@ -88,17 +88,28 @@ function buildHtmlPreviewBaseUrl(
   return `${API_BASE_URL}/static/${codeGenType}_${targetAppId}/`;
 }
 
-// 预览 token 缓存（15 分钟有效，提前 30s 过期复用）
-const previewTokenCache = new Map<string, { token: string; expiresAt: number }>();
+// 预览 token 缓存（15 分钟有效，按 80% TTL 提前重签）
+const previewTokenCache = new Map<string, { token: string; bornAt: number; ttlMs: number }>();
 
 async function getPreviewTokenCached(previewKey: string): Promise<string> {
   const cached = previewTokenCache.get(previewKey);
-  if (cached && cached.expiresAt - 30_000 > Date.now()) {
+  // 用"签发后经过的墙钟时长"判断，不依赖本地时钟与后端时钟一致；
+  // TTL 取后端 expiresIn 的 80%，提前重签避免用到临近过期的 token。
+  if (cached && Date.now() - cached.bornAt < cached.ttlMs * 0.8) {
     return cached.token;
   }
   const { token, expiresIn } = await getPreviewToken(previewKey);
-  previewTokenCache.set(previewKey, { token, expiresAt: Date.now() + expiresIn * 1000 });
+  previewTokenCache.set(previewKey, {
+    token,
+    bornAt: Date.now(),
+    ttlMs: expiresIn * 1000,
+  });
   return token;
+}
+
+/** 强制重签 token（预览 404 时调用）：清掉缓存，下一次 buildPreviewUrlWithToken 会重新签发 */
+function invalidatePreviewToken(previewKey: string): void {
+  previewTokenCache.delete(previewKey);
 }
 
 /** 拼出带预览 token 的完整预览 URL（token 用于 iframe 无 cookie 场景的静态资源鉴权） */
@@ -152,6 +163,9 @@ export default function AppChat() {
   // backend-saved index.html by URL so it matches the real generated files.
   const [previewCode, setPreviewCode] = useState('');
   const [htmlPreviewUrl, setHtmlPreviewUrl] = useState('');
+  // 标记预览是否已成功加载过（用于 generationStatus 轮询的"首次空闲"判断，
+  // 避免每 10s 重复刷新已加载的预览）。
+  const previewLoadedRef = useRef(false);
   const [htmlPreviewCode, setHtmlPreviewCode] = useState('');
   // 历史会话不会重放 SSE，因此 currentCode 为空。多文件代码栏要直接读取
   // 后端已保存的 index.html / style.css / script.js，不能只依赖流式文本。
@@ -175,6 +189,7 @@ export default function AppChat() {
   // continues the model flow until it reaches a safe terminal point, so keep
   // the UI blocked while that application-level lock is still held.
   const [backgroundGeneration, setBackgroundGeneration] = useState(false);
+  const backgroundGenerationRef = useRef(false);
 
   // ── Edit mode (visual element selector) ───────────────────────────
   const [editMode, setEditMode] = useState(false);
@@ -253,6 +268,50 @@ export default function AppChat() {
     }
   }, []);
 
+  // 预览 iframe 加载后的健康检查：token 可能已过期（15 分钟），iframe 加载
+  // 404 页时 onLoad 照样触发。fetch 探测同一 URL，404 则重签 token 重载。
+  // 按 previewKey 计次防止"404 → 重签 → 重载 → 404"无限循环。
+  const previewRetryCountRef = useRef(new Map<string, number>());
+  const handlePreviewFrameLoad = useCallback((iframe: HTMLIFrameElement) => {
+    setHtmlPreviewFrameLoading(false);
+    const url = iframe.src;
+    if (!url || !url.includes('/static/') || !url.includes('/')) return;
+    const match = url.match(/\/static\/([^/]+)\//);
+    if (!match) return;
+    const previewKey = match[1];
+    // 生成中文件未落盘，404 是预期状态，不探测也不重签。
+    if (backgroundGenerationRef.current) return;
+    const retried = previewRetryCountRef.current.get(previewKey) ?? 0;
+    // 连续 2 次重签仍失败：大概率不是 token 过期，停止自动重试。
+    if (retried >= 2) return;
+    fetch(url, { credentials: 'include', cache: 'no-store' })
+      .then((res) => {
+        if (res.ok || res.status === 304) return;
+        // 资源 404：token 可能过期。清掉缓存重签，换新 URL 重载 iframe。
+        previewRetryCountRef.current.set(previewKey, retried + 1);
+        invalidatePreviewToken(previewKey);
+        const codeGenType = codeGenTypeRef.current;
+        const targetAppId = appIdRef.current;
+        if (codeGenType && targetAppId) {
+          buildPreviewUrlWithToken(targetAppId, codeGenType)
+            .then((newUrl) => {
+              if (newUrl && targetAppId === appIdRef.current) {
+                // 重签成功：清掉计数，下次 token 过期仍可再次自愈（计数只用于
+                // 拦截"连续 404 → 无限重签"，不应让一次成功的重签永久失效）。
+                previewRetryCountRef.current.delete(previewKey);
+                setHtmlPreviewUrl(newUrl);
+              }
+            })
+            .catch(() => {
+              // 重签失败（如权限变化）：保留当前 URL，不再重试
+            });
+        }
+      })
+      .catch(() => {
+        // 网络错误等：不重试，避免干扰正常预览
+      });
+  }, []);
+
   // Vue 项目：iframe 加载同源 URL（经 Vite/nginx 代理，浏览器视角同源），
   // 在 onLoad 后把编辑脚本直接注入 iframe 文档（同源可访问 contentDocument）。
   // 不用 srcDoc 是因为 Vue Router（history 模式）依赖真实 URL，srcDoc 的
@@ -295,20 +354,44 @@ export default function AppChat() {
   useEffect(() => {
     if (!appId) return;
     let disposed = false;
+    // effect 只在 appId 变化时重建；busy 翻转通过 ref 传递，不触发 effect
+    // 重跑（否则每次翻转都会重置 ref、立即重查一次，打乱轮询节奏）。
+    backgroundGenerationRef.current = false;
 
     const pollStatus = async () => {
       try {
         const busy = await getGenerationStatus(appId);
         if (disposed) return;
+        const prevBusy = backgroundGenerationRef.current;
+        backgroundGenerationRef.current = busy;
         setBackgroundGeneration(busy);
-        if (busy) {
-          generationStatusTimerRef.current = setTimeout(pollStatus, 1500);
+        if (prevBusy && !busy) {
+          // 生成刚结束（busy → 非 busy）：比 SSE onDone 更可靠的完成信号。
+          // SSE 连接可能因代理/超时中断导致 handleStreamComplete 不触发，
+          // 此时文件已落盘，主动刷新预览，避免一直停在"正在加载可编辑预览..."。
+          const refresh = refreshHtmlPreviewRef.current;
+          const type = codeGenTypeRef.current;
+          if (refresh && type) {
+            refresh(appId, type);
+          }
+        } else if (!prevBusy && !busy && !previewLoadedRef.current) {
+          // 首次进入且无生成任务：老应用加载已落盘的产物；刚创建的应用
+          // 此时还没有文件，refreshHtmlPreviewFromFile 内部会轮询重试，
+          // 文件落盘后自然加载成功。
+          const refresh = refreshHtmlPreviewRef.current;
+          const type = codeGenTypeRef.current;
+          if (refresh && type) {
+            refresh(appId, type);
+          }
         }
+        // 持续轮询：生成中高频（1.5s）捕捉 busy→空闲 完成信号；空闲低频
+        // （10s）用于首次加载与老应用刷新。不能只在 busy 时继续——初始
+        // busy=false 时轮询会停，之后生成开始/结束都感知不到。
+        generationStatusTimerRef.current = setTimeout(pollStatus, busy ? 1500 : 10000);
       } catch {
-        // A status-check failure must not unlock the UI optimistically after
-        // the user stopped SSE. Retry while we already know a task is active.
-        if (!disposed && backgroundGeneration) {
-          generationStatusTimerRef.current = setTimeout(pollStatus, 3000);
+        // 状态查询失败：低频重试，避免停摆。
+        if (!disposed) {
+          generationStatusTimerRef.current = setTimeout(pollStatus, 5000);
         }
       }
     };
@@ -321,7 +404,7 @@ export default function AppChat() {
         generationStatusTimerRef.current = null;
       }
     };
-  }, [appId, backgroundGeneration]);
+  }, [appId]);
 
   const refreshHtmlPreviewFromFile = useCallback((
     targetAppId: string | undefined = appId,
@@ -350,6 +433,8 @@ export default function AppChat() {
           if (!response.ok) throw new Error('preview file not ready');
           const text = await response.text();
           if (!text || text.length < 20) throw new Error('preview file empty');
+          // 内容已读到：预览资源就绪，标记避免 generationStatus 轮询重复刷新
+          previewLoadedRef.current = true;
           if (codeGenType === 'multi_file') {
             const readCodeFile = async (fileName: string): Promise<string> => {
               try {
@@ -387,6 +472,9 @@ export default function AppChat() {
         .catch((error: unknown) => {
           if ((error as { name?: string })?.name === 'AbortError') return;
           if (targetAppId !== appIdRef.current) return;
+          // 生成中文件未落盘是预期状态：暂停重试，等生成完成的
+          // busy→空闲 信号触发新的 refresh（避免生成期 500ms×60 的重试风暴）。
+          if (backgroundGenerationRef.current) return;
           if (++retries < maxRetries) {
             htmlPreviewPollTimerRef.current = setTimeout(poll, 500);
             return;
@@ -519,7 +607,7 @@ export default function AppChat() {
     const myAppId = appIdRef.current;
 
     // Apply same cleaning as cleanedCode so stored message looks like the streaming display
-    const cleaned = codeGenType === 'vue_project' ? cleanVueOutput(finalCode) : finalCode;
+    const cleaned = codeGenType === CODE_GEN_TYPES.VUE_PROJECT ? cleanVueOutput(finalCode) : finalCode;
 
     if (!cleaned) {
       setStreamingMessage(null);
@@ -550,7 +638,7 @@ export default function AppChat() {
       previewHandledRef.current = true;
     }
 
-    if (codeGenType === 'vue_project' && myAppId) {
+    if (codeGenType === CODE_GEN_TYPES.VUE_PROJECT && myAppId) {
       vueStreamSucceededRef.current = true;
     }
   }, []);
@@ -577,7 +665,7 @@ export default function AppChat() {
     // Handle business-error events from the backend (rate limiting, auth failures, etc.)
     // Commits the error as a non-streaming AI message before onDone clears the bubble.
     // 若 AI 已流出部分内容则保留并追加错误，避免整段生成内容被一条报错覆盖。
-    useCallback((code: number, errorMessage: string) => {
+    useCallback((_code: number, errorMessage: string) => {
       setStreamingMessage((current) => {
         if (!current || !current.isStreaming) return current;
         setMessages((prev) => {
@@ -598,7 +686,7 @@ export default function AppChat() {
   // useMemo：cleanVueOutput 每次都做正则 + 字符串拼接，不 memo 会在每 tick 重跑；
   // currentCode 在流式期 5Hz 变化，没 memo 会让所有依赖 cleanedCode 的 memo 都失效。
   const cleanedCode = useMemo(
-    () => (app?.codeGenType === 'vue_project' ? cleanVueOutput(currentCode) : currentCode),
+    () => (app?.codeGenType === CODE_GEN_TYPES.VUE_PROJECT ? cleanVueOutput(currentCode) : currentCode),
     [currentCode, app?.codeGenType],
   );
 
@@ -714,7 +802,7 @@ export default function AppChat() {
 
   // Fetch once on app load + whenever we leave a streaming window
   useEffect(() => {
-    if (app?.codeGenType !== 'vue_project' || !appId) return;
+    if (app?.codeGenType !== CODE_GEN_TYPES.VUE_PROJECT || !appId) return;
     fetchVueProjectFiles();
   }, [app?.codeGenType, appId, fetchVueProjectFiles]);
 
@@ -727,7 +815,7 @@ export default function AppChat() {
   //    满足 cleaned 非空时才置 true，onError 路径不会触发）
   // 3) 不能在流式中（流式期间只 stop，不 start —— 否则会和流式期 1.5s 轮询重叠）
   useEffect(() => {
-    if (app?.codeGenType !== 'vue_project') {
+    if (app?.codeGenType !== CODE_GEN_TYPES.VUE_PROJECT) {
       stopVueFilesPolling();
       return;
     }
@@ -744,7 +832,7 @@ export default function AppChat() {
   // Stream-text fallback: while we wait for the first API response, try
   // to scrape files out of currentCode. Harmless if it returns nothing.
   useEffect(() => {
-    if (app?.codeGenType !== 'vue_project' || !currentCode) return;
+    if (app?.codeGenType !== CODE_GEN_TYPES.VUE_PROJECT || !currentCode) return;
     if (projectFiles.length > 0) return; // API already populated — don't churn
     const files = extractVueProjectFiles(currentCode);
     if (files.length > 0) {
@@ -779,7 +867,7 @@ export default function AppChat() {
   }, [currentCode, messages, savedMultiFileCode, app?.codeGenType]);
 
   const htmlCodeForCodeTab = useMemo(() => {
-    if (app?.codeGenType === 'vue_project') return '';
+    if (app?.codeGenType === CODE_GEN_TYPES.VUE_PROJECT) return '';
     return !isStreaming && htmlPreviewCode ? htmlPreviewCode : currentCode;
   }, [app?.codeGenType, currentCode, htmlPreviewCode, isStreaming]);
 
@@ -822,27 +910,18 @@ export default function AppChat() {
         if (myAppId !== appIdRef.current) return; // user navigated away
         setApp(appData);
 
-        // Existing apps already have a saved index.html once generated.
-        // Point the iframe at it as soon as we know the app type; the chat
-        // history request can finish independently, so the preview does not
-        // need to wait behind it.
+        // 预览加载统一交给 generationStatus 轮询的"首次空闲"分支：
+        // 老应用已有产物 → 立即加载；刚创建还在生成的应用 → 文件不存在，
+        // refreshHtmlPreviewFromFile 内部会重试，落盘后自然加载成功。
+        // 这里不主动设 iframe URL，避免"add 完成 → stream 开始"的锁空闲
+        // 窗口内误判非生成中、加载不存在的文件触发 404 循环。
+        previewLoadedRef.current = false;
+        // 即时触发一次预览刷新，避免首次进入/切 app 要等最长 10s 的轮询
+        // 周期才加载；文件不存在时 refreshHtmlPreviewFromFile 内部重试。
         if (appData.codeGenType) {
-          const baseUrl = buildHtmlPreviewBaseUrl(myAppId, appData.codeGenType);
-          if (baseUrl) {
-            setHtmlPreviewFrameLoading(true);
-            buildPreviewUrlWithToken(myAppId, appData.codeGenType)
-              .then((url) => {
-                if (myAppId === appIdRef.current) setHtmlPreviewUrl(url);
-              })
-              .catch(() => {
-                if (myAppId === appIdRef.current) {
-                  setHtmlPreviewUrl(`${baseUrl}?t=${Date.now()}`);
-                }
-              });
-            setHtmlPreviewLoading(false);
-            // 预览已由应用详情加载：标记已处理，避免对话记录加载完成后
-            // 的 effect（依赖 messages）再次刷新预览，导致 iframe key 变化、页面闪一下。
-            previewHandledRef.current = true;
+          const refresh = refreshHtmlPreviewRef.current;
+          if (refresh) {
+            refresh(myAppId, appData.codeGenType);
           }
         }
       })
@@ -1166,7 +1245,7 @@ export default function AppChat() {
     (instruction: string) => {
       if (!instruction || !selectedElement) return;
       setPendingEdits((prev) => {
-        if (prev.length >= 15) {
+        if (prev.length >= MAX_EDITS) {
           message.warning('最多只能添加 15 条编辑，请先保存');
           return prev;
         }
@@ -1255,14 +1334,13 @@ export default function AppChat() {
     };
   }, [selectedElement, computePopoverPosition]);
 
-  const htmlPreviewSrcUrl = htmlPreviewUrl;
   // Vue 项目：编辑模式无法用 srcDoc（module script 在 opaque origin 被 CORS 拦），
   // 改用同源 URL 加载 + 后端 ?edit=1 注入编辑脚本；HTML/MULTI_FILE 仍走 srcDoc 注入。
-  const isVuePreview = app?.codeGenType === 'vue_project';
+  const isVuePreview = app?.codeGenType === CODE_GEN_TYPES.VUE_PROJECT;
   // 编辑模式仅主人/管理员可用：只读访客不显示编辑工具栏
   const supportsEditMode = Boolean(app?.codeGenType) && canEdit;
-  const hasEditablePreview = Boolean(htmlPreviewSrcUrl);
-  const showPreviewToolbar = (showPreview || Boolean(htmlPreviewSrcUrl)) && hasEditablePreview;
+  const hasEditablePreview = Boolean(htmlPreviewUrl);
+  const showPreviewToolbar = (showPreview || Boolean(htmlPreviewUrl)) && hasEditablePreview;
   const editModeTooltip = supportsEditMode
     ? '开启后可点击预览页面中的任意元素进行修改'
     : '预览加载完成后可开启可视化编辑';
@@ -1307,30 +1385,44 @@ export default function AppChat() {
       setPreviewCode('');
       return;
     }
-    if (!editMode || !supportsEditMode || !htmlPreviewSrcUrl || !htmlPreviewBaseUrl) {
+    if (!editMode || !supportsEditMode || !htmlPreviewUrl || !htmlPreviewBaseUrl) {
       setPreviewCode('');
       return;
     }
 
     const controller = new AbortController();
-    fetch(htmlPreviewSrcUrl, {
-      cache: 'no-store',
-      credentials: 'include',
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        if (!response.ok) throw new Error('preview file not available');
-        const html = await response.text();
-        setPreviewCode(addBaseHrefForSrcDoc(html, previewBaseUrlWithToken || htmlPreviewBaseUrl));
+    let retries = 0;
+    const maxRetries = 10;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const fetchPreview = () => {
+      fetch(htmlPreviewUrl, {
+        cache: 'no-store',
+        credentials: 'include',
+        signal: controller.signal,
       })
-      .catch((error: unknown) => {
-        if ((error as { name?: string })?.name !== 'AbortError') {
+        .then(async (response) => {
+          if (!response.ok) throw new Error('preview file not available');
+          const html = await response.text();
+          setPreviewCode(addBaseHrefForSrcDoc(html, previewBaseUrlWithToken || htmlPreviewBaseUrl));
+        })
+        .catch((error: unknown) => {
+          if ((error as { name?: string })?.name === 'AbortError') return;
+          // 生成完成后文件/鉴权可能有瞬时窗口（落盘未完成、token 刚签发），
+          // 重试几次再放弃，避免预览一直停在"正在加载可编辑预览..."。
+          if (++retries < maxRetries) {
+            retryTimer = setTimeout(fetchPreview, 500);
+            return;
+          }
           setPreviewCode('');
-        }
-      });
+        });
+    };
+    fetchPreview();
 
-    return () => controller.abort();
-  }, [addBaseHrefForSrcDoc, editMode, previewBaseUrlWithToken, htmlPreviewBaseUrl, htmlPreviewSrcUrl, supportsEditMode, isVuePreview]);
+    return () => {
+      controller.abort();
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, [addBaseHrefForSrcDoc, editMode, previewBaseUrlWithToken, htmlPreviewBaseUrl, htmlPreviewUrl, supportsEditMode, isVuePreview]);
 
   // The actual srcDoc passed to the iframe — base preview + edit-mode
   // script injection when applicable.
@@ -1356,14 +1448,14 @@ export default function AppChat() {
 
   useEffect(() => {
     const iframe = htmlPreviewIframeRef.current;
-    if (!iframe || editMode || !htmlPreviewSrcUrl) return;
+    if (!iframe || editMode || !htmlPreviewUrl) return;
     if (iframe.getAttribute('srcdoc') != null) {
       iframe.removeAttribute('srcdoc');
     }
-    if (iframe.getAttribute('src') !== htmlPreviewSrcUrl) {
-      iframe.setAttribute('src', htmlPreviewSrcUrl);
+    if (iframe.getAttribute('src') !== htmlPreviewUrl) {
+      iframe.setAttribute('src', htmlPreviewUrl);
     }
-  }, [editMode, htmlPreviewSrcUrl]);
+  }, [editMode, htmlPreviewUrl]);
 
   // ── Delete / Rename ──────────────────────────────────────────────
   const handleDelete = () => {
@@ -1618,14 +1710,14 @@ export default function AppChat() {
                     className="chat-tab-fill"
                   >
                     <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
-                      {htmlPreviewSrcUrl ? (
+                      {htmlPreviewUrl ? (
                         <>
                           {editMode ? (
                             isVuePreview ? (
                               <iframe
                                 ref={htmlPreviewIframeRef}
-                                src={htmlPreviewSrcUrl}
-                                key={`vue-edit:${htmlPreviewSrcUrl}`}
+                                src={htmlPreviewUrl}
+                                key={`vue-edit:${htmlPreviewUrl}`}
                                 // Vue 编辑必须同源：编辑脚本经 contentDocument 注入，且 Vue Router history 需真实 origin
                                 sandbox="allow-scripts allow-same-origin"
                                 onLoad={(e) => {
@@ -1668,12 +1760,12 @@ export default function AppChat() {
                             <>
                               <iframe
                                 ref={htmlPreviewIframeRef}
-                                src={htmlPreviewSrcUrl}
-                                key={`url:${htmlPreviewSrcUrl}`}
+                                src={htmlPreviewUrl}
+                                key={`url:${htmlPreviewUrl}`}
                                 // 只读预览不加 allow-same-origin：AI 生成内容不应获得父页面同源权限，
                                 // 静态资源已改用 URL 签名 token 鉴权，无需 cookie
                                 sandbox="allow-scripts"
-                                onLoad={() => setHtmlPreviewFrameLoading(false)}
+                                onLoad={(e) => handlePreviewFrameLoad(e.currentTarget)}
                                 style={{
                                   width: '100%',
                                   height: '100%',
@@ -1682,7 +1774,7 @@ export default function AppChat() {
                                   opacity: htmlPreviewFrameLoading ? 0 : 1,
                                   transition: 'opacity 120ms ease',
                                 }}
-                                title={app?.codeGenType === 'vue_project' ? 'Vue 应用预览' : '应用预览'}
+                                title={app?.codeGenType === CODE_GEN_TYPES.VUE_PROJECT ? 'Vue 应用预览' : '应用预览'}
                               />
                               {htmlPreviewFrameLoading && (
                                 <div
@@ -1721,7 +1813,7 @@ export default function AppChat() {
                             />
                           )}
                         </>
-                      ) : app?.codeGenType === 'vue_project' ? (
+                      ) : app?.codeGenType === CODE_GEN_TYPES.VUE_PROJECT ? (
                         deploying ? (
                           <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
                             <Spin size="large" />
@@ -1807,7 +1899,7 @@ export default function AppChat() {
                 ),
                 children: (
                   <div className="chat-tab-fill">
-                    {app?.codeGenType === 'vue_project' ? (
+                    {app?.codeGenType === CODE_GEN_TYPES.VUE_PROJECT ? (
                       <VueProjectViewer files={projectFiles} deploying={deploying} isStreaming={isGenerationBusy} onDeploy={handleDeploy} />
                     ) : app?.codeGenType === 'multi_file' ? (
                       <Tabs

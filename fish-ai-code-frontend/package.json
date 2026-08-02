@@ -11,7 +11,6 @@
   },
   "dependencies": {
     "@ant-design/icons": "^6.2.5",
-    "@types/react-syntax-highlighter": "^15.5.13",
     "antd": "^6.4.4",
     "axios": "^1.18.0",
     "dayjs": "^1.11.21",
@@ -27,6 +26,7 @@
     "@types/node": "^24.12.3",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@types/react-syntax-highlighter": "^15.5.13",
     "@vitejs/plugin-react": "^6.0.1",
     "eslint": "^10.3.0",
     "eslint-plugin-react-hooks": "^7.1.1",

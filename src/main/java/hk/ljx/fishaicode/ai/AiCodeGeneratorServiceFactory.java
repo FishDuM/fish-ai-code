@@ -16,7 +16,6 @@ import hk.ljx.fishaicode.service.ChatHistoryService;
 import hk.ljx.fishaicode.utils.SpringContextUtil;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
@@ -34,11 +33,6 @@ public class AiCodeGeneratorServiceFactory {
 
     @Resource
     private ToolManager toolManager;
-
-    @Bean
-    public AiCodeGeneratorService aiCodeGeneratorService() {
-        return createAiCodeGeneratorService(0);
-    }
 
     /**
      * ai 记忆服务
@@ -81,12 +75,5 @@ public class AiCodeGeneratorServiceFactory {
             }
             default -> throw new BusinessException(ErrorCode.SYSTEM_ERROR, "不支持的代码生成类型" + type.getValue());
         };
-    }
-
-    /**
-     * 根据 appId 获取服务（默认 HTML 类型）
-     */
-    public AiCodeGeneratorService createAiCodeGeneratorService(long appId) {
-        return createAiCodeGeneratorService(appId, CodeGenTypeEnum.HTML);
     }
 }
