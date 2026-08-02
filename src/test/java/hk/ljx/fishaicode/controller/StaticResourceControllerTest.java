@@ -4,6 +4,7 @@ import hk.ljx.fishaicode.constant.AppConstant;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.model.entity.App;
+import hk.ljx.fishaicode.model.entity.User;
 import hk.ljx.fishaicode.service.AppService;
 import hk.ljx.fishaicode.service.UserService;
 import org.junit.jupiter.api.AfterEach;
@@ -297,12 +298,15 @@ class StaticResourceControllerTest {
         Files.writeString(src.resolve("dist").resolve("index.html"), "should be ignored");
         Files.writeString(src.resolve("logo.png"), "should be ignored");
         try {
-            String token = issueTokenForTest(vuePreviewKey, System.currentTimeMillis() + 60_000);
+            User loginUser = User.builder().id(Long.parseLong(testId)).build();
+            when(userService.getLoginUserOrNull(any())).thenReturn(loginUser);
+            when(appService.getAppWithPermission(Long.parseLong(testId), loginUser))
+                    .thenReturn(App.builder().id(Long.parseLong(testId)).userId(Long.parseLong(testId)).build());
             MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/static/" + vuePreviewKey + "/__list__");
             request.setAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE, "/static/" + vuePreviewKey + "/__list__");
 
             @SuppressWarnings("unchecked")
-            ResponseEntity<Object> response = controller.listProjectFiles(vuePreviewKey, token, request);
+            ResponseEntity<Object> response = controller.listProjectFiles(vuePreviewKey, request);
 
             assertEquals(HttpStatus.OK, response.getStatusCode());
             @SuppressWarnings("unchecked")
@@ -325,7 +329,7 @@ class StaticResourceControllerTest {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/static/" + vuePreviewKey + "/__list__");
         request.setAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE, "/static/" + vuePreviewKey + "/__list__");
 
-        ResponseEntity<Object> response = controller.listProjectFiles(vuePreviewKey, null, request);
+        ResponseEntity<Object> response = controller.listProjectFiles(vuePreviewKey, request);
 
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
     }

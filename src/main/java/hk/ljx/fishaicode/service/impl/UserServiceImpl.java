@@ -23,6 +23,7 @@ import hk.ljx.fishaicode.service.CaptchaService;
 import hk.ljx.fishaicode.service.UserService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -161,7 +162,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
         if (user == null || !passwordEncoder.matches(userPassword, user.getUserPassword())) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户不存在或密码错误");
         }
-        // 3. 记录登录态（仅存 userId）
+        // 3. 登录成功后轮换会话 ID，防止登录前的会话标识被固定利用
+        request.changeSessionId();
         request.getSession().setAttribute(USER_LOGIN_STATE, user.getId());
         // 4. 获得脱敏后的用户信息
         return this.getLoginUserVO(user);
@@ -198,12 +200,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
     @Override
     public boolean userLogout(HttpServletRequest request) {
         // 先判断是否已登录
-        Object userIdObj = request.getSession().getAttribute(USER_LOGIN_STATE);
+        HttpSession session = request.getSession(false);
+        Object userIdObj = session == null ? null : session.getAttribute(USER_LOGIN_STATE);
         if (userIdObj == null) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "未登录");
         }
-        // 移除登录态
-        request.getSession().removeAttribute(USER_LOGIN_STATE);
+        session.invalidate();
         return true;
     }
 

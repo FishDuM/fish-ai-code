@@ -83,9 +83,8 @@ public class StaticResourceController {
     @GetMapping("/{previewKey}/__list__")
     public ResponseEntity<Object> listProjectFiles(
             @PathVariable String previewKey,
-            @RequestParam(value = "previewToken", required = false) String previewToken,
             HttpServletRequest request) {
-        if (!isValidPreviewKey(previewKey) || !isAuthorized(previewKey, previewToken, request)) {
+        if (!isValidPreviewKey(previewKey) || !canReadProjectSource(previewKey, request)) {
             return ResponseEntity.notFound().build();
         }
         Path sourceRoot = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, previewKey)
@@ -270,6 +269,23 @@ public class StaticResourceController {
         User loginUser = userService.getLoginUserOrNull(request);
         try {
             appService.getPublicAppById(appId, loginUser);
+            return true;
+        } catch (BusinessException e) {
+            return false;
+        }
+    }
+
+    private boolean canReadProjectSource(String previewKey, HttpServletRequest request) {
+        Matcher matcher = PreviewTokenController.PREVIEW_KEY_PATTERN.matcher(previewKey);
+        if (!matcher.matches()) {
+            return false;
+        }
+        User loginUser = userService.getLoginUserOrNull(request);
+        if (loginUser == null) {
+            return false;
+        }
+        try {
+            appService.getAppWithPermission(Long.parseLong(matcher.group(2)), loginUser);
             return true;
         } catch (BusinessException e) {
             return false;

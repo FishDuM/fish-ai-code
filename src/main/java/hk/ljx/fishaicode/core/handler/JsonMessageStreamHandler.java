@@ -53,9 +53,13 @@ public class JsonMessageStreamHandler {
             Set<String> seenToolIds = new HashSet<>();
             originFlux.subscribe(
                     chunk -> {
-                        String output = handleJsonMessageChunk(chunk, chatHistoryStringBuilder, seenToolIds);
-                        if (StrUtil.isNotEmpty(output)) {
-                            sink.next(output);
+                        try {
+                            String output = handleJsonMessageChunk(chunk, chatHistoryStringBuilder, seenToolIds);
+                            if (StrUtil.isNotEmpty(output)) {
+                                sink.next(output);
+                            }
+                        } catch (Exception e) {
+                            log.warn("跳过无法解析的 Vue 流消息，appId: {}", appId, e);
                         }
                     },
                     error -> {

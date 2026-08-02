@@ -5,6 +5,7 @@ import hk.ljx.fishaicode.annotation.AuthCheck;
 import hk.ljx.fishaicode.common.BaseResponse;
 import hk.ljx.fishaicode.common.ResultUtils;
 import hk.ljx.fishaicode.constant.UserConstant;
+import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.model.dto.chathistory.AdminChatHistoryQueryRequest;
 import hk.ljx.fishaicode.model.entity.ChatHistory;
 import hk.ljx.fishaicode.model.entity.User;
@@ -55,9 +56,10 @@ public class ChatHistoryController {
             @NotNull(message = "应用 ID 不能为空") @Min(value = 1, message = "应用 ID 不合法") @RequestParam("appId") Long appId,
             @RequestParam(value = "limit", defaultValue = "10") @Min(value = 1, message = "limit 至少为 1") @Max(value = 20, message = "limit 最多为 20") int limit,
             HttpServletRequest request) {
-        // 精选应用公开可读历史（未登录/非主人也可查看）；非精选仅本人/管理员
         User loginUser = userService.getLoginUserOrNull(request);
-        appService.getPublicAppById(appId, loginUser);
+        if (!canReadChatHistory(appId, loginUser)) {
+            return ResultUtils.success(List.of());
+        }
         List<ChatHistory> list = chatHistoryService.listLatestChatHistory(appId, limit);
         return ResultUtils.success(list);
     }
@@ -79,11 +81,24 @@ public class ChatHistoryController {
             @RequestParam(value = "beforeId", required = false) @Min(value = 1, message = "游标消息 ID 不合法") Long beforeId,
             @RequestParam(value = "limit", defaultValue = "10") @Min(value = 1, message = "limit 至少为 1") @Max(value = 20, message = "limit 最多为 20") int limit,
             HttpServletRequest request) {
-        // 精选应用公开可读历史（未登录/非主人也可查看）；非精选仅本人/管理员
         User loginUser = userService.getLoginUserOrNull(request);
-        appService.getPublicAppById(appId, loginUser);
+        if (!canReadChatHistory(appId, loginUser)) {
+            return ResultUtils.success(List.of());
+        }
         List<ChatHistory> list = chatHistoryService.listChatHistoryBefore(appId, before, beforeId, limit);
         return ResultUtils.success(list);
+    }
+
+    private boolean canReadChatHistory(Long appId, User loginUser) {
+        if (loginUser == null) {
+            return false;
+        }
+        try {
+            appService.getAppWithPermission(appId, loginUser);
+            return true;
+        } catch (BusinessException e) {
+            return false;
+        }
     }
 
     // ===== 管理员接口 =====

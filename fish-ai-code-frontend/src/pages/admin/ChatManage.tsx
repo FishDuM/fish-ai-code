@@ -24,7 +24,7 @@ export default function ChatManage() {
       .then((res) => {
         if (fetchId !== fetchIdRef.current) return;
         setRecords(res.records);
-        setTotal(res.totalRow);
+        setTotal(Number(res.totalRow));
       })
       .catch(() => {
         if (fetchId !== fetchIdRef.current) return;

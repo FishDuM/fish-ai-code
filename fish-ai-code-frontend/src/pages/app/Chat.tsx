@@ -115,7 +115,6 @@ export default function AppChat() {
   // backend-saved index.html by URL so it matches the real generated files.
   const [previewCode, setPreviewCode] = useState('');
   const [htmlPreviewUrl, setHtmlPreviewUrl] = useState('');
-  const [htmlPreviewCode, setHtmlPreviewCode] = useState('');
   // 历史会话不会重放 SSE，因此 currentCode 为空。多文件代码栏要直接读取
   // 后端已保存的 index.html / style.css / script.js，不能只依赖流式文本。
   const [savedMultiFileCode, setSavedMultiFileCode] = useState<ParsedCode | null>(null);
@@ -580,7 +579,7 @@ export default function AppChat() {
   // 读落盘的完整项目树，不依赖 AI markdown 格式。SSE 流文本提取仅作接口返回前的过渡。
   const vueFilesAbortRef = useRef<AbortController | null>(null);
   const fetchVueProjectFiles = useCallback(async () => {
-    if (!appId) return;
+    if (!appId || !canEdit) return;
     const url = getVueFilesListUrl(appId);
     if (!url) return;
     vueFilesAbortRef.current?.abort();
@@ -600,7 +599,7 @@ export default function AppChat() {
     } catch {
       // AbortError or network error — silently skip; will retry next tick
     }
-  }, [appId]);
+  }, [appId, canEdit]);
 
   const stopVueFilesPolling = useCallback(() => {
     vueFilesAbortRef.current?.abort();
@@ -608,9 +607,9 @@ export default function AppChat() {
 
   // Fetch once on app load + whenever we leave a streaming window
   useEffect(() => {
-    if (app?.codeGenType !== CODE_GEN_TYPES.VUE_PROJECT || !appId) return;
+    if (app?.codeGenType !== CODE_GEN_TYPES.VUE_PROJECT || !appId || !canEdit) return;
     fetchVueProjectFiles();
-  }, [app?.codeGenType, appId, fetchVueProjectFiles]);
+  }, [app?.codeGenType, appId, canEdit, fetchVueProjectFiles]);
 
   useEffect(() => {
     if (!isStreaming && app?.codeGenType === CODE_GEN_TYPES.VUE_PROJECT && vueStreamSucceededRef.current) {
@@ -656,11 +655,6 @@ export default function AppChat() {
     return savedMultiFileCode;
   }, [currentCode, messages, savedMultiFileCode, app?.codeGenType]);
 
-  const htmlCodeForCodeTab = useMemo(() => {
-    if (app?.codeGenType === CODE_GEN_TYPES.VUE_PROJECT) return '';
-    return !isStreaming && htmlPreviewCode ? htmlPreviewCode : currentCode;
-  }, [app?.codeGenType, currentCode, htmlPreviewCode, isStreaming]);
-
   // ── Load app & history ───────────────────────────────────────────
   useEffect(() => {
     if (!appId) return;
@@ -673,7 +667,6 @@ export default function AppChat() {
     stopPreviewSessionRefresh();
     setPreviewCode('');
     setHtmlPreviewUrl('');
-    setHtmlPreviewCode('');
     setSavedMultiFileCode(null);
     setHtmlPreviewLoading(false);
     setHtmlPreviewFrameLoading(false);
@@ -858,7 +851,6 @@ export default function AppChat() {
     // 同 handleSend：新流开始，重置 Vue 成功 / 预览已设 ref。
     vueStreamSucceededRef.current = false;
     previewHandledRef.current = false;
-    setHtmlPreviewCode('');
     start(appId, app.initPrompt);
 	  }, [
 	    messages,
@@ -1006,7 +998,6 @@ export default function AppChat() {
     // 新一轮流开始：清掉 ref，等 handleStreamComplete 重新置。
     vueStreamSucceededRef.current = false;
     previewHandledRef.current = false;
-    setHtmlPreviewCode('');
     start(appId, text);
   }, [appId, backgroundGeneration, canEdit, message, start, isStreamingRef, cleanedCode]);
 
@@ -1067,7 +1058,6 @@ export default function AppChat() {
     });
     vueStreamSucceededRef.current = false;
     previewHandledRef.current = false;
-    setHtmlPreviewCode('');
     postEditModeMessage({ type: 'unselect' });
     start(appId, composed);
   }, [appId, canEdit, message, cleanedCode, start, postEditModeMessage, savingEdits, backgroundGeneration]);
@@ -1110,6 +1100,7 @@ export default function AppChat() {
   const isPreviewIsolated = htmlPreviewUrl
     ? new URL(htmlPreviewUrl, window.location.origin).origin !== window.location.origin
     : false;
+  const previewBlockedByOrigin = Boolean(htmlPreviewUrl) && !isPreviewIsolated;
   // 编辑模式仅主人/管理员可用：只读访客不显示编辑工具栏
   const supportsEditMode = Boolean(app?.codeGenType) && canEdit && (!isVuePreview || isPreviewIsolated);
   const hasEditablePreview = Boolean(htmlPreviewUrl);
@@ -1296,7 +1287,7 @@ export default function AppChat() {
     <div className="chat-workbench">
       <ChatHeader
         appName={app?.appName || '未命名应用'}
-        isOwner={canEdit}
+        isOwner={isOwner}
         showPreview={showPreview}
         isStreaming={isGenerationBusy}
         deploying={deploying}
@@ -1441,7 +1432,11 @@ export default function AppChat() {
                     className="chat-tab-fill"
                   >
                     <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
-                      {htmlPreviewUrl ? (
+                      {previewBlockedByOrigin ? (
+                        <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255, 77, 79, 0.06)', borderRadius: 8, color: '#cf1322', padding: 24, textAlign: 'center' }}>
+                          预览服务必须使用与主站不同的域名或端口，请检查 PREVIEW_ORIGIN 配置。
+                        </div>
+                      ) : htmlPreviewUrl ? (
                         <>
                           {editMode ? (
                             isVuePreview ? (
@@ -1693,7 +1688,7 @@ export default function AppChat() {
                       />
                     ) : (
                       <CodePreview
-                        code={htmlCodeForCodeTab}
+                        code={currentCode}
                         language="html"
                         isStreaming={isStreaming}
                       />

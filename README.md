@@ -45,7 +45,7 @@ AI 自动生成完整代码，支持三种模式：
 生成的代码打包为 ZIP 下载，或一键部署到内置服务器。
 
 ### 用户与安全
-注册登录、Redis 会话管理、角色权限控制（用户/管理员）、敏感词过滤；精选应用公开可见（未登录可浏览），对话/编辑仅创建者与管理员。AI 生成代码在独立预览域运行，通过短时签名 token 鉴权（HMAC + 15 分钟过期），不会获得主站同源权限。Vue 编辑模式使用受控消息桥与预览页通信；预览 CSP 默认仅允许同源联网和图片、字体等必要资源，外部 API 必须显式配置白名单。
+注册登录、Redis 会话管理、角色权限控制（用户/管理员）、敏感词过滤；精选应用公开可见（未登录可浏览），对话记录、Vue 源码、编辑、下载与部署仅创建者和管理员。AI 生成代码在独立预览域运行，通过短时签名 token 鉴权（HMAC + 15 分钟过期），不会获得主站同源权限。Vue 编辑模式使用受控消息桥与预览页通信；预览 CSP 默认仅允许同源联网和图片、字体等必要资源，外部 API 必须显式配置白名单。
 
 ### 性能优化
 - Redis 旁路缓存
@@ -246,6 +246,7 @@ server {
 
 - `application-local.yaml` 的 `server.address: 0.0.0.0` 允许外部访问，请确保防火墙 / 安全组只开放必要端口
 - `PREVIEW_TOKEN_SECRET` 必须使用强随机值；预览 token 默认有效 15 分钟，前端会在约 12 分钟时自动续签并刷新预览 iframe，避免 Vue 懒加载资源因签名过期而失败
+- HTTPS 部署时设置 `SESSION_COOKIE_SECURE=true`，使登录 Cookie 只通过 HTTPS 发送；本地 HTTP 调试保持默认 `false`
 - 代码生成目录 `tmp/code_output/` 与部署目录 `tmp/code_deploy/` 在启动目录下生成，建议给足磁盘空间
 - 部署访问域名可在 `application.yaml` 的 `app.deploy.host` 配置（默认 `http://localhost`），Docker 方式在 `.env` 里配 `APP_DEPLOY_HOST`；部署链接格式为 `{host}/deploy/{deployKey}`，由 nginx 的 `location /deploy/` 服务
 

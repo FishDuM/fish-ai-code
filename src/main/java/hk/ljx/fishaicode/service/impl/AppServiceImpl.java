@@ -134,7 +134,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
         // 先等敏感审查：失败立即抛（此时其余两个仍在后台跑，但不会再被使用）
         String checkResult = checkFuture.join();
-        if (!"PASS".equals(checkResult.trim())) {
+        if (!"PASS".equals(StrUtil.trim(checkResult))) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "输入内容包含不符合本网站提供的范围或违规信息");
         }
 
@@ -591,7 +591,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
         // 先等敏感审查：失败立即抛（此时图片收集仍在后台跑，但不会再被使用）
         String checkResult = checkFuture.join();
-        if (!"PASS".equals(checkResult.trim())) {
+        if (!"PASS".equals(StrUtil.trim(checkResult))) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "输入内容包含不符合本网站提供的范围或违规信息");
         }
         // 审查通过，等提示词增强（图片收集）完成

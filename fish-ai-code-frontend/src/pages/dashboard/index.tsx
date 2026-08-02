@@ -38,7 +38,7 @@ export default function Dashboard() {
       .then((res) => {
         if (myId !== fetchIdRef.current) return;
         setApps(res.records);
-        setTotal(res.totalRow);
+        setTotal(Number(res.totalRow));
       })
       .catch(() => {
         if (controller.signal.aborted || myId !== fetchIdRef.current) return;

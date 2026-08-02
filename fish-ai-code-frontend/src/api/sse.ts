@@ -137,6 +137,9 @@ export function startCodeGenSSE(
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          window.dispatchEvent(new Event('auth:logout'));
+        }
         throw new Error(`SSE 请求失败: ${response.status}`);
       }
 

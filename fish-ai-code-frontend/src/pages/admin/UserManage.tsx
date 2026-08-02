@@ -31,7 +31,7 @@ export default function UserManage() {
       .then((res) => {
         if (fetchId !== fetchIdRef.current) return;
         setUsers(res.records);
-        setTotal(res.totalRow);
+        setTotal(Number(res.totalRow));
       })
       .catch(() => {
         if (fetchId !== fetchIdRef.current) return;

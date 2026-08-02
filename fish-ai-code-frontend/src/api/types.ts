@@ -8,7 +8,7 @@ export interface BaseResponse<T> {
 
 export interface PageResult<T> {
   records: T[];
-  totalRow: number;
+  totalRow: string;
   pageSize: number;
   pageNum: number;
 }
