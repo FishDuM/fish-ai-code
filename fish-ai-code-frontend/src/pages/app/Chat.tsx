@@ -1623,7 +1623,7 @@ export default function AppChat() {
                 children: (
                   <div className="chat-tab-fill">
                     {app?.codeGenType === CODE_GEN_TYPES.VUE_PROJECT ? (
-                      <VueProjectViewer files={projectFiles} deploying={deploying} isStreaming={isGenerationBusy} onDeploy={handleDeploy} />
+                      <VueProjectViewer files={projectFiles} />
                     ) : app?.codeGenType === 'multi_file' ? (
                       <Tabs
                         defaultActiveKey="html"

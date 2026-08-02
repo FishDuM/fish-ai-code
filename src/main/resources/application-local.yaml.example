@@ -93,6 +93,7 @@ undraw:
 # 生产部署由 docker-compose 的 PREVIEW_TOKEN_SECRET 注入强随机值
 # ------------------------------------------------------------
 app:
+  cors-allowed-origins: http://localhost:3000
   preview-token-secret: fish-ai-code-preview-secret-dev
   preview-origin: http://preview.localhost:3000
   preview-frame-ancestor: http://localhost:3000

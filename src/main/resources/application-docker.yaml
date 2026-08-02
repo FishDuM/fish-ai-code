@@ -75,6 +75,7 @@ undraw:
 
 # 部署配置：域名由 APP_DEPLOY_HOST 注入（nginx 通过 /deploy/ 服务部署产物目录）
 app:
+  cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:${APP_ORIGIN:}}
   deploy:
     host: ${APP_DEPLOY_HOST:http://localhost}
     path: ${APP_DEPLOY_PATH:/deploy}

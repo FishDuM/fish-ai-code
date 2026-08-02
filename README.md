@@ -133,6 +133,8 @@ npm run dev
 
 前端默认 `http://localhost:3000`，Vite 已配置 `/api` 代理到后端 8911，开发期无需处理跨域。
 
+后端只允许配置中的主站 Origin 携带 Cookie 跨域访问。Docker 部署默认使用 `APP_ORIGIN`；如需允许多个管理端地址，可设置 `CORS_ALLOWED_ORIGINS`，用逗号分隔完整 Origin。
+
 本地预览使用 `http://preview.localhost:3000`。`*.localhost` 会自动解析到本机，Vite 也会响应该地址；不要把预览域改为主站地址，否则不可信代码将失去独立域隔离。
 
 ### 访问

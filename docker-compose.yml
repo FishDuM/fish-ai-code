@@ -97,6 +97,7 @@ services:
       PREVIEW_TOKEN_SECRET: ${PREVIEW_TOKEN_SECRET:?请设置 PREVIEW_TOKEN_SECRET}
       PREVIEW_ORIGIN: ${PREVIEW_ORIGIN:-}
       APP_ORIGIN: ${APP_ORIGIN:-}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
       PREVIEW_CONNECT_SRC: ${PREVIEW_CONNECT_SRC:-'self'}
     volumes:
       # 挂载宿主 Docker，供后端调用 docker run 做 Vue 隔离构建
