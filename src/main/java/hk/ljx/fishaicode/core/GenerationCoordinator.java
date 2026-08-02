@@ -12,12 +12,7 @@ import reactor.core.publisher.FluxSink;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
-/**
- * 串行化同一应用的代码生成任务。
- *
- * <p>模型流没有取消 API。客户端断开 SSE 后，模型和工具调用仍可能继续写入项目目录，
- * 因此锁只能在模型流真正结束后释放，不能绑定在 HTTP 连接的 cancel 信号上。</p>
- */
+/** 同一应用的生成任务串行执行，锁在模型流结束后释放。 */
 @Slf4j
 @Component
 public class GenerationCoordinator {
@@ -39,7 +34,6 @@ public class GenerationCoordinator {
             long ownerThreadId = Thread.currentThread().threadId();
             final boolean locked;
             try {
-                // 不指定 leaseTime，使用 Redisson watchdog 为长时间的模型调用自动续期。
                 locked = lock.tryLock();
             } catch (Exception e) {
                 log.error("获取应用生成锁失败，appId: {}", appId, e);
@@ -62,11 +56,8 @@ public class GenerationCoordinator {
                 return;
             }
 
-            // 独立订阅生成流。客户端取消订阅只会停止 SSE 转发，不能中止后台模型任务或提前释放锁。
+            // 客户端断开后仍等待生成流自行结束，避免后台继续写入时提前解锁。
             generationFlux
-                    // 兜底：无论流以 complete/error/cancel 哪种方式终结，都确保锁被释放。
-                    // 防止上游回调（如保存聊天历史、构建检查）抛异常导致 complete/error 永远不来，
-                    // 锁被 Redisson watchdog 无限续期、该应用永久锁死。
                     .doFinally(signalType -> releaseLock.run())
                     .subscribe(
                             clientSink::next,
@@ -82,15 +73,11 @@ public class GenerationCoordinator {
         }, FluxSink.OverflowStrategy.BUFFER);
     }
 
-    /**
-     * 为部署、下载等需要读取稳定项目目录的操作获取同一把互斥锁。
-     * 与生成任务一样使用 watchdog，避免慢磁盘、大文件下载等操作尚未结束时锁提前过期。
-     */
+    /** 执行需要读取稳定项目目录的操作。 */
     public <T> T executeExclusively(long appId, Supplier<T> action) {
         RLock lock = redissonClient.getLock(LOCK_KEY_PREFIX + appId);
         final boolean locked;
         try {
-            // waitTime=0 保持"正在生成则立即失败"语义；watchdog 会在持锁进程正常运行时续期。
             locked = lock.tryLock();
         } catch (Exception e) {
             log.error("获取应用任务锁失败，appId: {}", appId, e);
@@ -110,10 +97,7 @@ public class GenerationCoordinator {
         }
     }
 
-    /**
-     * 查询应用是否仍有生成或读取项目目录的互斥任务在执行。
-     * 用于客户端在断开 SSE 后继续等待后台生成真正结束，避免误发下一次请求。
-     */
+    /** 查询应用是否仍有生成或读取项目目录的任务在执行。 */
     public boolean isBusy(long appId) {
         try {
             return redissonClient.getLock(LOCK_KEY_PREFIX + appId).isLocked();
@@ -128,12 +112,9 @@ public class GenerationCoordinator {
             return;
         }
         try {
-            // 模型回调可能在与加锁线程不同的线程执行，显式传递持锁线程 ID。
+            // 回调线程可能与加锁线程不同。
             lock.unlockAsync(ownerThreadId).whenComplete((unused, error) -> {
                 if (error != null) {
-                    // IllegalMonitorStateException 说明锁已被释放/过期（如 watchdog 停止续期后
-                    // 锁过期、或部署等其他路径已解锁），此时锁已不在，无需再处理，按正常释放对待。
-                    // 其余异常才需要关注，避免"锁已释放但误报失败"。
                     if (error.getCause() instanceof IllegalMonitorStateException) {
                         log.warn("释放应用生成锁时锁已不存在（可能已过期或已被释放），appId: {}，按已释放处理", appId);
                     } else {

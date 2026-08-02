@@ -134,9 +134,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
         // 先等敏感审查：失败立即抛（此时其余两个仍在后台跑，但不会再被使用）
         String checkResult = checkFuture.join();
-        if (!"PASS".equals(StrUtil.trim(checkResult))) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "输入内容包含不符合本网站提供的范围或违规信息");
-        }
+        validateSensitiveCheckResult(checkResult);
 
         // 审查通过，取应用名与类型（生成应用名失败已降级为截断，不会抛）
         String appName = nameFuture.join();
@@ -591,9 +589,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
         // 先等敏感审查：失败立即抛（此时图片收集仍在后台跑，但不会再被使用）
         String checkResult = checkFuture.join();
-        if (!"PASS".equals(StrUtil.trim(checkResult))) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "输入内容包含不符合本网站提供的范围或违规信息");
-        }
+        validateSensitiveCheckResult(checkResult);
         // 审查通过，等提示词增强（图片收集）完成
         String enhancedMessage = enhanceFuture.join();
         log.info("提示词增强完成（增强前长度:{} → 增强后长度:{}）", message.length(), enhancedMessage.length());
@@ -617,6 +613,16 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
                         }
                     });
         });
+    }
+
+    private void validateSensitiveCheckResult(String checkResult) {
+        String result = StrUtil.trim(checkResult);
+        if (StrUtil.isBlank(result)) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "内容审查服务暂时不可用，请稍后重试");
+        }
+        if (!"PASS".equals(result)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "输入内容包含不符合本网站提供的范围或违规信息");
+        }
     }
 
     /**

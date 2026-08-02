@@ -37,6 +37,7 @@ langchain4j:
       base-url: ${AI_BASE_URL:https://api.deepseek.com}
       api-key: ${DEEPSEEK_API_KEY:}
       model-name: ${AI_CHAT_MODEL:deepseek-chat}
+      request-timeout: ${AI_STREAM_REQUEST_TIMEOUT:120s}
       log-requests: ${AI_LOG_REQUESTS:false}
       log-responses: ${AI_LOG_RESPONSES:false}
       max-retries: 3
@@ -44,6 +45,7 @@ langchain4j:
       base-url: ${AI_BASE_URL:https://api.deepseek.com}
       api-key: ${DEEPSEEK_API_KEY:}
       model-name: ${AI_REASONING_MODEL:deepseek-reasoner}
+      request-timeout: ${AI_STREAM_REQUEST_TIMEOUT:120s}
       max-tokens: 32768
       temperature: 0.1
       log-requests: ${AI_LOG_REQUESTS:false}

@@ -8,6 +8,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Scope;
 
+import java.time.Duration;
+
 @Configuration
 @ConfigurationProperties(prefix = "langchain4j.open-ai.reasoning-streaming-chat-model")
 @Data
@@ -27,6 +29,9 @@ public class ReasoningStreamingChatModelConfig {
 
     private Boolean logResponses = false;
 
+    /** 单次流式请求在没有收到响应时的最长等待时间。 */
+    private Duration requestTimeout = Duration.ofSeconds(120);
+
     @Bean
     @Scope("prototype")
     public StreamingChatModel reasoningStreamingChatModelPrototype() {
@@ -36,6 +41,7 @@ public class ReasoningStreamingChatModelConfig {
                 .modelName(modelName)
                 .maxTokens(maxTokens)
                 .temperature(temperature)
+                .timeout(requestTimeout)
                 .logRequests(logRequests)
                 .logResponses(logResponses)
                 .build();

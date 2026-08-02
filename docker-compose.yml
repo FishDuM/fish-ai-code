@@ -80,6 +80,7 @@ services:
       AI_BASE_URL: ${AI_BASE_URL:-https://api.deepseek.com}
       AI_CHAT_MODEL: ${AI_CHAT_MODEL:-deepseek-chat}
       AI_REASONING_MODEL: ${AI_REASONING_MODEL:-deepseek-reasoner}
+      AI_STREAM_REQUEST_TIMEOUT: ${AI_STREAM_REQUEST_TIMEOUT:-120s}
       # 可选：图片搜索
       PEXELS_API_KEY: ${PEXELS_API_KEY:-}
       UNDRAW_TOKEN: ${UNDRAW_TOKEN:-}

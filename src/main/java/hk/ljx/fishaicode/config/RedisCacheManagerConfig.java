@@ -29,6 +29,7 @@ public class RedisCacheManagerConfig {
         objectMapper.registerModule(new JavaTimeModule());
         BasicPolymorphicTypeValidator typeValidator = BasicPolymorphicTypeValidator.builder()
                 .allowIfSubType("hk.ljx.fishaicode.")
+                .allowIfSubType("com.mybatisflex.")
                 .allowIfSubType("java.util.")
                 .allowIfSubType("java.time.")
                 .build();

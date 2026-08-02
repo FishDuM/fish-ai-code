@@ -8,6 +8,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Scope;
 
+import java.time.Duration;
+
 /**
  * 流式对话模型配置
  */
@@ -30,6 +32,9 @@ public class StreamingChatModelConfig {
 
     private boolean logResponses;
 
+    /** 单次流式请求在没有收到响应时的最长等待时间。 */
+    private Duration requestTimeout = Duration.ofSeconds(120);
+
     @Bean
     @Scope("prototype")
     public StreamingChatModel streamingChatModelPrototype() {
@@ -39,6 +44,7 @@ public class StreamingChatModelConfig {
                 .modelName(modelName)
                 .maxTokens(maxTokens)
                 .temperature(temperature)
+                .timeout(requestTimeout)
                 .logRequests(logRequests)
                 .logResponses(logResponses)
                 .build();

@@ -64,13 +64,10 @@ public class JsonMessageStreamHandler {
                     },
                     error -> {
                         try {
-                            // 写入固定文案，避免把内部异常文本暴露进对话历史；原始异常只记日志
                             log.error("AI 回复失败，appId: {}", appId, error);
                             chatHistoryService.addChatHistory(appId, loginUser.getId(),
                                     "AI回复失败，请重试", MessageTypeEnum.AI.getValue());
                         } catch (Exception e) {
-                            // 历史记录失败不能吞掉原始错误：记日志并继续上报原始异常，
-                            // 否则外层 GenerationCoordinator 收不到 complete/error，锁会永久泄漏。
                             log.error("保存 AI 失败消息到对话历史出错，appId: {}", appId, e);
                         }
                         sink.error(error);
@@ -80,11 +77,9 @@ public class JsonMessageStreamHandler {
                         try {
                             chatHistoryService.addChatHistory(appId, loginUser.getId(), aiResponse, MessageTypeEnum.AI.getValue());
                         } catch (Exception e) {
-                            // 与 error 回调同理：保存历史失败不能阻止 onComplete，
-                            // 否则外层锁永远不释放、该应用永久锁死。
                             log.error("保存 AI 消息到对话历史出错，appId: {}", appId, e);
                         }
-                        // 必须等构建成功，才允许向客户端结束生成流。
+                        // 构建成功后再结束生成流。
                         Thread.ofVirtual().name("vue-build-result-" + appId).start(() -> {
                             String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/vue_project_" + appId;
                             try {
@@ -95,8 +90,6 @@ public class JsonMessageStreamHandler {
                                             "Vue 项目构建失败，请检查生成代码后重试"));
                                 }
                             } catch (Exception e) {
-                                // 构建检查本身抛异常（目录损坏等）也必须终结流，
-                                // 否则锁永远不释放、该应用永久锁死。
                                 log.error("Vue 项目构建检查异常，appId: {}", appId, e);
                                 sink.error(e);
                             }
@@ -110,10 +103,8 @@ public class JsonMessageStreamHandler {
      * 解析并收集 TokenStream 数据
      */
     private String handleJsonMessageChunk(String chunk, StringBuilder chatHistoryStringBuilder, Set<String> seenToolIds) {
-        // 解析 JSON
         StreamMessage streamMessage = JSONUtil.toBean(chunk, StreamMessage.class);
         StreamMessageTypeEnum typeEnum = StreamMessageTypeEnum.getEnumByValue(streamMessage.getType());
-        // type/工具名/参数均来自 AI 输出，不可信，容错处理避免 NPE 打断整个 SSE 流
         if (typeEnum == null) {
             log.warn("收到未知消息类型: {}", streamMessage.getType());
             return "";

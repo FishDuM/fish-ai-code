@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.TimeUnit;
+import java.util.UUID;
 
 /**
  * 在受限 Docker 容器中构建 AI 生成的 Vue 项目。
@@ -35,6 +36,7 @@ public class VueProjectBuilder {
     private static final String PROJECT_DIR_PREFIX = "vue_project_";
     private static final int MAX_BUILD_LOG_CHARS = 20_000;
     private static final int PROJECT_READY_MAX_ATTEMPTS = 5;
+    private static final int PROCESS_STOP_TIMEOUT_SECONDS = 10;
 
     private final VueBuildProperties properties;
 
@@ -145,7 +147,8 @@ public class VueProjectBuilder {
     }
 
     private boolean executeDockerBuild(Path sourceDir, Path workspaceDir, Path outputDir) throws IOException, InterruptedException {
-        ProcessBuilder processBuilder = new ProcessBuilder(createDockerCommand(sourceDir, workspaceDir, outputDir));
+        String containerName = "fish-ai-vue-build-" + UUID.randomUUID().toString().replace("-", "");
+        ProcessBuilder processBuilder = new ProcessBuilder(createDockerCommand(sourceDir, workspaceDir, outputDir, containerName));
         processBuilder.redirectErrorStream(true);
         Process process;
         try {
@@ -160,27 +163,35 @@ public class VueProjectBuilder {
         AtomicBoolean workspaceLimitExceeded = new AtomicBoolean(false);
         Thread workspaceMonitor = Thread.ofVirtual().start(
                 () -> monitorWorkspaceSize(process, workspaceDir, workspaceLimitExceeded));
-        boolean finished = process.waitFor(properties.getTimeoutSeconds(), TimeUnit.SECONDS);
-        workspaceMonitor.interrupt();
-        workspaceMonitor.join(Duration.ofSeconds(2));
-        if (!finished) {
-            process.destroyForcibly();
-            log.error("Vue Docker 构建超时（{} 秒）", properties.getTimeoutSeconds());
-            logBuildOutput(buildLog);
-            return false;
+        boolean buildSucceeded = false;
+        try {
+            boolean finished = process.waitFor(properties.getTimeoutSeconds(), TimeUnit.SECONDS);
+            if (!finished) {
+                log.error("Vue Docker 构建超时（{} 秒）", properties.getTimeoutSeconds());
+                logBuildOutput(buildLog);
+                return false;
+            }
+            if (workspaceLimitExceeded.get()) {
+                log.error("Vue Docker 构建工作目录超过 {} MB 限制", properties.getMaxWorkspaceMb());
+                logBuildOutput(buildLog);
+                return false;
+            }
+            if (process.exitValue() != 0) {
+                log.error("Vue Docker 构建失败，退出码: {}", process.exitValue());
+                logBuildOutput(buildLog);
+                return false;
+            }
+            buildSucceeded = true;
+            return true;
+        } finally {
+            workspaceMonitor.interrupt();
+            try {
+                workspaceMonitor.join(Duration.ofSeconds(2));
+            } finally {
+                stopDockerBuild(process, containerName, !buildSucceeded);
+                logReader.join(Duration.ofSeconds(5));
+            }
         }
-        logReader.join(Duration.ofSeconds(5));
-        if (workspaceLimitExceeded.get()) {
-            log.error("Vue Docker 构建工作目录超过 {} MB 限制", properties.getMaxWorkspaceMb());
-            logBuildOutput(buildLog);
-            return false;
-        }
-        if (process.exitValue() != 0) {
-            log.error("Vue Docker 构建失败，退出码: {}", process.exitValue());
-            logBuildOutput(buildLog);
-            return false;
-        }
-        return true;
     }
 
     private void readBuildLog(Process process, StringBuilder buildLog) {
@@ -210,10 +221,14 @@ public class VueProjectBuilder {
      * 构建命令独立出来，以便测试安全限制不会被后续修改移除。
      */
     List<String> createDockerCommand(Path sourceDir, Path workspaceDir, Path outputDir) {
+        return createDockerCommand(sourceDir, workspaceDir, outputDir, "fish-ai-vue-build-test");
+    }
+
+    private List<String> createDockerCommand(Path sourceDir, Path workspaceDir, Path outputDir, String containerName) {
         String containerRoot = getOutputRoot().toString();
         String hostRoot = properties.getHostCodeOutputDir();
         List<String> command = new ArrayList<>(List.of(
-                "docker", "run", "--rm",
+                "docker", "run", "--rm", "--name", containerName,
                 "--network", "none",
                 "--read-only",
                 "--user", "node",
@@ -236,6 +251,30 @@ public class VueProjectBuilder {
                         + "npm run build && test -d dist && cp -a dist/. /output/"
         ));
         return command;
+    }
+
+    private void stopDockerBuild(Process process, String containerName, boolean forceContainerCleanup) throws InterruptedException {
+        boolean needsContainerCleanup = forceContainerCleanup || process.isAlive();
+        if (process.isAlive()) {
+            process.destroyForcibly();
+            if (!process.waitFor(PROCESS_STOP_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                log.error("Docker 构建进程未在 {} 秒内退出，容器: {}", PROCESS_STOP_TIMEOUT_SECONDS, containerName);
+            }
+        }
+        if (!needsContainerCleanup) {
+            return;
+        }
+        try {
+            Process cleanupProcess = new ProcessBuilder("docker", "rm", "-f", containerName)
+                    .redirectErrorStream(true)
+                    .start();
+            if (!cleanupProcess.waitFor(PROCESS_STOP_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                cleanupProcess.destroyForcibly();
+                log.error("Docker 构建容器未在 {} 秒内删除，容器: {}", PROCESS_STOP_TIMEOUT_SECONDS, containerName);
+            }
+        } catch (IOException e) {
+            log.warn("清理 Docker 构建容器失败，容器: {}，原因: {}", containerName, e.getMessage());
+        }
     }
 
     /**

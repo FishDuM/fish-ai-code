@@ -22,6 +22,7 @@ class VueProjectBuilderTest {
                 Path.of("/tmp/code_output/vue-build-1/dist"));
 
         assertTrue(command.contains("--read-only"));
+        assertTrue(command.contains("--name"));
         assertTrue(command.contains("none"));
         assertTrue(command.contains("--user"));
         assertTrue(command.contains("node"));
