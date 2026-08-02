@@ -9,6 +9,8 @@ import hk.ljx.fishaicode.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -32,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
@@ -49,10 +52,20 @@ public class StaticResourceController {
     private static final Set<String> SOURCE_FILE_EXTS = Set.of(
             ".vue", ".js", ".ts", ".jsx", ".tsx", ".json", ".html", ".css",
             ".scss", ".less", ".md", ".txt", ".env", ".gitignore");
+    private static final int MAX_SOURCE_FILE_COUNT = 200;
+    private static final long MAX_SOURCE_TOTAL_BYTES = 5L * 1024 * 1024;
+    private static final Pattern PREVIEW_CONNECT_SOURCE_PATTERN = Pattern.compile(
+            "https://[a-zA-Z0-9.-]+(?::\\d{1,5})?|http://(?:localhost|127\\.0\\.0\\.1)(?::\\d{1,5})?");
 
     private final AppService appService;
     private final UserService userService;
     private final PreviewTokenController previewTokenController;
+
+    @Value("${app.preview-frame-ancestor:}")
+    private String previewFrameAncestor;
+
+    @Value("${app.preview-connect-src:'self'}")
+    private String previewConnectSrc;
 
     public StaticResourceController(AppService appService, UserService userService,
                                     PreviewTokenController previewTokenController) {
@@ -85,19 +98,21 @@ public class StaticResourceController {
         }
         try {
             List<Map<String, String>> files = new ArrayList<>();
-            walkSourceTree(sourceRoot, sourceRoot, files);
+            walkSourceTree(sourceRoot, sourceRoot, files, new SourceListStats());
             files.sort(Comparator
                     .comparingInt((Map<String, String> f) -> f.get("path").split("/").length)
                     .thenComparing(f -> f.get("path")));
             return ResponseEntity.ok()
                     .header("Cache-Control", "no-store")
                     .body(files);
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).build();
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
-    private void walkSourceTree(Path sourceRoot, Path dir, List<Map<String, String>> out) throws Exception {
+    private void walkSourceTree(Path sourceRoot, Path dir, List<Map<String, String>> out, SourceListStats stats) throws Exception {
         try (Stream<Path> stream = Files.list(dir)) {
             for (Path entry : (Iterable<Path>) stream::iterator) {
                 String name = entry.getFileName().toString();
@@ -105,7 +120,7 @@ public class StaticResourceController {
                     continue;
                 }
                 if (Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)) {
-                    walkSourceTree(sourceRoot, entry, out);
+                    walkSourceTree(sourceRoot, entry, out, stats);
                 } else if (Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)) {
                     String fileName = entry.getFileName().toString();
                     // 排除 .env* 等敏感配置文件：源码清单会向有预览权限的人返回完整内容
@@ -117,6 +132,10 @@ public class StaticResourceController {
                             : "";
                     if (!SOURCE_FILE_EXTS.contains(ext) && !fileName.startsWith(".")) {
                         continue;
+                    }
+                    long size = Files.size(entry);
+                    if (++stats.fileCount > MAX_SOURCE_FILE_COUNT || (stats.totalBytes += size) > MAX_SOURCE_TOTAL_BYTES) {
+                        throw new IllegalStateException("源码文件过多或过大");
                     }
                     String rel = sourceRoot.relativize(entry).toString().replace('\\', '/');
                     Map<String, String> item = new HashMap<>();
@@ -139,6 +158,7 @@ public class StaticResourceController {
     public ResponseEntity<Resource> serveStaticResource(
             @PathVariable String previewKey,
             @RequestParam(value = "previewToken", required = false) String previewToken,
+            @RequestParam(value = "edit", defaultValue = "false") boolean edit,
             HttpServletRequest request) {
         try {
             if (!isValidPreviewKey(previewKey)) {
@@ -192,6 +212,12 @@ public class StaticResourceController {
                 previewRoot = previewRoot.resolve("dist").normalize();
             }
 
+            if (previewKey.startsWith(CodeGenTypeEnum.VUE_PROJECT.getValue() + "_")
+                    && resourcePath.equals("/__fish_edit__.js")) {
+                return buildResponse(new ByteArrayResource(PreviewEditScript.content().getBytes(StandardCharsets.UTF_8)),
+                        "application/javascript; charset=UTF-8", previewKey);
+            }
+
             String relativeResourcePath = resourcePath.replaceFirst("^/+", "");
             Path targetPath = previewRoot.resolve(relativeResourcePath).normalize();
             if (!targetPath.startsWith(previewRoot) || !Files.isRegularFile(targetPath)) {
@@ -206,14 +232,18 @@ public class StaticResourceController {
             }
 
             Resource resource = new FileSystemResource(realTargetPath);
-            return ResponseEntity.ok()
-                    .header("Content-Type", getContentTypeWithCharset(realTargetPath.toString()))
-                    .header("Content-Security-Policy",
-                            "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https:; "
-                                    + "img-src 'self' https: data: blob:; font-src 'self' data: https:; connect-src 'none'; "
-                                    + "media-src 'none'; object-src 'none'; worker-src 'none'; base-uri 'none'; "
-                                    + "form-action 'none'; frame-ancestors 'self'")
-                    .body(resource);
+            if (edit && previewKey.startsWith(CodeGenTypeEnum.VUE_PROJECT.getValue() + "_")
+                    && resourcePath.equals("/index.html")) {
+                String html = Files.readString(realTargetPath, StandardCharsets.UTF_8);
+                String script = "<script src=\"./__fish_edit__.js\"></script>";
+                String editedHtml = html.replaceFirst("(?i)</body\\s*>", script + "</body>");
+                if (editedHtml.equals(html)) {
+                    editedHtml = html + script;
+                }
+                return buildResponse(new ByteArrayResource(editedHtml.getBytes(StandardCharsets.UTF_8)),
+                        "text/html; charset=UTF-8", previewKey);
+            }
+            return buildResponse(resource, getContentTypeWithCharset(realTargetPath.toString()), previewKey);
         } catch (java.nio.file.NoSuchFileException e) {
             // 预览目录或文件不存在（应用未生成/已删除/未构建）：语义是 404，不是服务错误
             return ResponseEntity.notFound().build();
@@ -255,6 +285,46 @@ public class StaticResourceController {
         if (filePath.endsWith(".js")) return "application/javascript; charset=UTF-8";
         if (filePath.endsWith(".png")) return "image/png";
         if (filePath.endsWith(".jpg")) return "image/jpeg";
+        if (filePath.endsWith(".svg")) return "image/svg+xml";
+        if (filePath.endsWith(".webp")) return "image/webp";
+        if (filePath.endsWith(".woff2")) return "font/woff2";
         return "application/octet-stream";
+    }
+
+    private ResponseEntity<Resource> buildResponse(Resource resource, String contentType, String previewKey) {
+        boolean vueProject = previewKey.startsWith(CodeGenTypeEnum.VUE_PROJECT.getValue() + "_");
+        String frameAncestors = "'self'";
+        if (previewFrameAncestor != null && !previewFrameAncestor.isBlank()) {
+            frameAncestors += " " + previewFrameAncestor.trim();
+        }
+        return ResponseEntity.ok()
+                .header("Content-Type", contentType)
+                .header("Referrer-Policy", "no-referrer")
+                .header("Content-Security-Policy",
+                        "default-src 'none'; script-src 'self'" + (vueProject ? "" : " 'unsafe-inline'")
+                                + "; style-src 'self' 'unsafe-inline' https:; img-src 'self' https: data: blob:; "
+                                + "font-src 'self' data: https:; connect-src " + getPreviewConnectSrc()
+                                + "; media-src 'self'; object-src 'none'; worker-src 'none'; base-uri 'none'; "
+                                + "form-action 'none'; frame-ancestors " + frameAncestors)
+                .body(resource);
+    }
+
+    private String getPreviewConnectSrc() {
+        if (previewConnectSrc == null || previewConnectSrc.isBlank()) {
+            return "'self'";
+        }
+        String[] sources = previewConnectSrc.trim().split("\\s+");
+        for (String source : sources) {
+            if (!"'self'".equals(source) && !PREVIEW_CONNECT_SOURCE_PATTERN.matcher(source).matches()) {
+                log.warn("预览联网白名单配置无效，已使用仅同源策略");
+                return "'self'";
+            }
+        }
+        return String.join(" ", sources);
+    }
+
+    private static class SourceListStats {
+        private int fileCount;
+        private long totalBytes;
     }
 }

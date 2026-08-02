@@ -32,6 +32,11 @@ server:
       cookie:
         max-age: 604800
 
+app:
+  preview-origin: ${PREVIEW_ORIGIN:http://preview.localhost:3000}
+  preview-frame-ancestor: ${APP_ORIGIN:http://localhost:3000}
+  preview-connect-src: "${PREVIEW_CONNECT_SRC:'self'}"
+
 # 应用部署配置（默认值见 AppDeployProperties，可不配置）
 # app:
 #   deploy:

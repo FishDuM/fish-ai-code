@@ -1,7 +1,6 @@
 package hk.ljx.fishaicode.core.saver;
 
 import cn.hutool.core.io.FileUtil;
-import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import hk.ljx.fishaicode.constant.AppConstant;
 import hk.ljx.fishaicode.exception.BusinessException;
@@ -10,6 +9,10 @@ import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 
 /**
  * 抽象代码文件保存器 - 模板方法模式
@@ -25,14 +28,38 @@ public abstract class CodeFileSaverTemplate<T> {
      * @return 保存的目录
      */
     public final File saveCode(T result, Long appId) {
-        // 1. 验证输入
         validateInput(result);
-        // 2. 构建唯一目录
-        String baseDirPath = buildUniqueDir(appId);
-        // 3. 保存文件（具体实现由子类提供）
-        saveFiles(result, baseDirPath);
-        // 4. 返回目录文件对象
-        return new File(baseDirPath);
+        Path targetDir = buildTargetDir(appId);
+        Path tempDir = null;
+        Path backupDir = null;
+        try {
+            Files.createDirectories(targetDir.getParent());
+            tempDir = Files.createTempDirectory(targetDir.getParent(), "." + targetDir.getFileName() + "-");
+            saveFiles(result, tempDir.toString());
+            if (Files.exists(targetDir)) {
+                backupDir = targetDir.resolveSibling("." + targetDir.getFileName() + "-backup-" + System.nanoTime());
+                move(targetDir, backupDir);
+            }
+            move(tempDir, targetDir);
+            tempDir = null;
+            if (backupDir != null) {
+                FileUtil.del(backupDir.toFile());
+            }
+            return targetDir.toFile();
+        } catch (Exception e) {
+            if (backupDir != null && !Files.exists(targetDir) && Files.exists(backupDir)) {
+                try {
+                    move(backupDir, targetDir);
+                } catch (Exception restoreError) {
+                    e.addSuppressed(restoreError);
+                }
+            }
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "保存代码文件失败");
+        } finally {
+            if (tempDir != null) {
+                FileUtil.del(tempDir.toFile());
+            }
+        }
     }
 
     /**
@@ -52,15 +79,13 @@ public abstract class CodeFileSaverTemplate<T> {
      * @param appId 应用ID
      * @return 目录路径
      */
-    protected final String buildUniqueDir(Long appId) {
+    protected final Path buildTargetDir(Long appId) {
         if (appId == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "应用ID不能为空");
         }
         String codeType = getCodeType().getValue();
         String uniqueDirName = StrUtil.format("{}_{}", codeType, appId);
-        String dirPath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + uniqueDirName;
-        FileUtil.mkdir(dirPath);
-        return dirPath;
+        return Path.of(AppConstant.CODE_OUTPUT_ROOT_DIR, uniqueDirName).toAbsolutePath().normalize();
     }
 
     /**
@@ -71,9 +96,15 @@ public abstract class CodeFileSaverTemplate<T> {
      * @param content  文件内容
      */
     protected final void writeToFile(String dirPath, String filename, String content) {
-        if (StrUtil.isNotBlank(content)) {
-            String filePath = dirPath + File.separator + filename;
-            FileUtil.writeString(content, filePath, StandardCharsets.UTF_8);
+        String filePath = dirPath + File.separator + filename;
+        FileUtil.writeString(content == null ? "" : content, filePath, StandardCharsets.UTF_8);
+    }
+
+    private void move(Path source, Path target) throws java.io.IOException {
+        try {
+            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(source, target);
         }
     }
 

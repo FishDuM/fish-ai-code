@@ -59,6 +59,16 @@ export async function getGenerationStatus(appId: string): Promise<boolean> {
   return res.data.data;
 }
 
+export async function getPreviewSession(appId: string): Promise<{ previewUrl: string; expiresIn: number }> {
+  const res = await api.get<BaseResponse<{ previewUrl: string; expiresIn: number }>>(`/app/preview-session/${appId}`);
+  return res.data.data;
+}
+
+export async function getPreviewSource(appId: string): Promise<{ html: string; css: string; javascript: string }> {
+  const res = await api.get<BaseResponse<{ html: string; css: string; javascript: string }>>(`/app/preview-source/${appId}`);
+  return res.data.data;
+}
+
 export async function listMyApps(
   params: AppQueryRequest,
   signal?: AbortSignal,
@@ -132,20 +142,4 @@ export async function downloadAppCode(appId: string): Promise<void> {
   anchor.remove();
   // 延时释放：立即 revoke 在部分浏览器（Safari/旧 Firefox）会取消尚未开始的下载
   window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
-}
-
-/**
- * 签发预览访问 token：预览 iframe（sandbox 无 allow-same-origin）无法带 cookie，
- * 静态资源改用 URL 携带的短时签名 token 鉴权。
- * @param previewKey 如 html_441056231631798272
- */
-export async function getPreviewToken(previewKey: string): Promise<{ token: string; expiresIn: number }> {
-  const response = await fetch(`${API_BASE_URL}/static/preview-token/${previewKey}`, {
-    credentials: 'include',
-  });
-  if (!response.ok) {
-    throw new Error('获取预览权限失败');
-  }
-  const data = await response.json();
-  return data?.data ?? data;
 }

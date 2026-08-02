@@ -19,6 +19,8 @@ import hk.ljx.fishaicode.model.entity.App;
 import hk.ljx.fishaicode.model.entity.User;
 import hk.ljx.fishaicode.model.vo.AppVO;
 import hk.ljx.fishaicode.model.vo.PublicAppVO;
+import hk.ljx.fishaicode.model.vo.PreviewSessionVO;
+import hk.ljx.fishaicode.model.vo.PreviewSourceVO;
 import hk.ljx.fishaicode.ratelimit.annotation.RateLimit;
 import hk.ljx.fishaicode.ratelimit.enums.RateLimitType;
 import hk.ljx.fishaicode.service.AppService;
@@ -41,6 +43,8 @@ import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Map;
 
 /**
@@ -64,6 +68,9 @@ public class AppController {
 
     @Resource
     private GenerationCoordinator generationCoordinator;
+
+    @Resource
+    private PreviewTokenController previewTokenController;
 
     /**
      * 创建应用
@@ -166,20 +173,17 @@ public class AppController {
 
     /**
      * 聊天生成应用
-     * @param appId 应用id
-     * @param message 消息
      * @param request http请求
      * @return sse流
      */
-    @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @PostMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @RateLimit(key = "chat", rate = 10, rateInterval = 60, limitType = RateLimitType.USER, message = "当前还在内测阶段，AI服务一分钟内请求次数过多，请稍后重试")
     public Flux<ServerSentEvent<String>> chatToGenCode(
-            @NotNull(message = "应用 ID 不能为空") @Min(value = 1, message = "应用 ID 不合法") @RequestParam("appId") Long appId,
-            @NotBlank(message = "消息内容不能为空") @Size(max = 20000, message = "消息内容过长（最多 20000 字）") @RequestParam("message") String message,
+            @Valid @RequestBody AppChatRequest appChatRequest,
             HttpServletRequest request) {
         try {
             User loginUser = userService.getLoginUser(request);
-            return appService.chatToGenCode(appId, message, loginUser)
+            return appService.chatToGenCode(appChatRequest.getAppId(), appChatRequest.getMessage(), loginUser)
                     .map(content -> ServerSentEvent.builder(content).build())
                     .onErrorResume(error -> Flux.just(toSseError(error)));
         } catch (Exception e) {
@@ -220,6 +224,45 @@ public class AppController {
         User loginUser = userService.getLoginUserOrNull(request);
         appService.getPublicAppById(appId, loginUser);
         return ResultUtils.success(generationCoordinator.isBusy(appId));
+    }
+
+    @GetMapping("/preview-session/{appId}")
+    public BaseResponse<PreviewSessionVO> getPreviewSession(
+            @PathVariable @Min(value = 1, message = "应用 ID 不合法") Long appId,
+            HttpServletRequest request) {
+        User loginUser = userService.getLoginUserOrNull(request);
+        App app = appService.getPublicAppById(appId, loginUser);
+        return ResultUtils.success(previewTokenController.createPreviewSession(app.getCodeGenType() + "_" + appId));
+    }
+
+    @GetMapping("/preview-source/{appId}")
+    public BaseResponse<PreviewSourceVO> getPreviewSource(
+            @PathVariable @Min(value = 1, message = "应用 ID 不合法") Long appId,
+            HttpServletRequest request) {
+        User loginUser = userService.getLoginUser(request);
+        App app = appService.getAppWithPermission(appId, loginUser);
+        ThrowUtils.throwIf("vue_project".equals(app.getCodeGenType()), ErrorCode.PARAMS_ERROR, "Vue 项目不支持源码预览");
+        String sourceDirName = app.getCodeGenType() + "_" + appId;
+        PreviewSourceVO source = generationCoordinator.executeExclusively(appId, () -> {
+            try {
+                File sourceDir = new File(AppConstant.CODE_OUTPUT_ROOT_DIR, sourceDirName);
+                File htmlFile = new File(sourceDir, "index.html");
+                ThrowUtils.throwIf(!htmlFile.isFile(), ErrorCode.NOT_FOUND_ERROR, "应用代码不存在，请先生成代码");
+                String html = Files.readString(htmlFile.toPath(), StandardCharsets.UTF_8);
+                String css = readOptionalFile(new File(sourceDir, "style.css"));
+                String javascript = readOptionalFile(new File(sourceDir, "script.js"));
+                return new PreviewSourceVO(html, css, javascript);
+            } catch (BusinessException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "读取预览源码失败");
+            }
+        });
+        return ResultUtils.success(source);
+    }
+
+    private String readOptionalFile(File file) throws Exception {
+        return file.isFile() ? Files.readString(file.toPath(), StandardCharsets.UTF_8) : "";
     }
 
     /**

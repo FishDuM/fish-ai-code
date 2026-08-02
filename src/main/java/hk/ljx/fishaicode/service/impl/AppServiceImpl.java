@@ -45,6 +45,8 @@ import reactor.core.publisher.Flux;
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -669,9 +671,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             log.info("Vue 项目构建成功，将部署 dist 目录: {}", distDir.getAbsolutePath());
         }
         // 8. 复制文件到部署目录
-        String deployDirPath = AppConstant.CODE_DEPLOY_ROOT_DIR + File.separator + deployKey;
         try {
-            FileUtil.copyContent(sourceDir, new File(deployDirPath), true);
+            publishDeployFiles(sourceDir, deployKey);
         } catch (Exception e) {
             log.error("部署失败，{}", e.getMessage());
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "部署失败，请稍后重试");
@@ -690,5 +691,49 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         // 必须以尾斜杠结尾：部署产物是相对路径引用（./assets/...），
         // 无尾斜杠时浏览器会把 ./assets 解析到上一级（/deploy/assets），导致资源 404、页面空白。
         return String.format("%s/%s/", deployBase, deployKey);
+    }
+
+    private void publishDeployFiles(File sourceDir, String deployKey) throws java.io.IOException {
+        Path deployRoot = Paths.get(AppConstant.CODE_DEPLOY_ROOT_DIR).toAbsolutePath().normalize();
+        Files.createDirectories(deployRoot);
+        Path targetDir = deployRoot.resolve(deployKey).normalize();
+        Path tempDir = Files.createTempDirectory(deployRoot, "." + deployKey + "-");
+        Path backupDir = null;
+        try {
+            FileUtil.copyContent(sourceDir, tempDir.toFile(), true);
+            if (Files.exists(targetDir)) {
+                backupDir = deployRoot.resolve("." + deployKey + "-backup-" + System.nanoTime());
+                moveDirectory(targetDir, backupDir);
+            }
+            moveDirectory(tempDir, targetDir);
+            tempDir = null;
+            if (backupDir != null) {
+                FileUtil.del(backupDir.toFile());
+            }
+        } catch (Exception e) {
+            if (backupDir != null && !Files.exists(targetDir) && Files.exists(backupDir)) {
+                try {
+                    moveDirectory(backupDir, targetDir);
+                } catch (Exception restoreError) {
+                    e.addSuppressed(restoreError);
+                }
+            }
+            if (e instanceof java.io.IOException ioException) {
+                throw ioException;
+            }
+            throw new java.io.IOException("发布部署文件失败", e);
+        } finally {
+            if (tempDir != null) {
+                FileUtil.del(tempDir.toFile());
+            }
+        }
+    }
+
+    private void moveDirectory(Path source, Path target) throws java.io.IOException {
+        try {
+            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
+        } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+            Files.move(source, target);
+        }
     }
 }

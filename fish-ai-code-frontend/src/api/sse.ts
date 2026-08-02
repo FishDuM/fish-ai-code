@@ -124,14 +124,16 @@ export function startCodeGenSSE(
   (async () => {
     try {
       let receivedBusinessError = false;
-      const url = `${API_BASE_URL}/app/chat/gen/code?appId=${encodeURIComponent(appId)}&message=${encodeURIComponent(message)}`;
+      const url = `${API_BASE_URL}/app/chat/gen/code`;
       const response = await fetch(url, {
-        method: 'GET',
+        method: 'POST',
         credentials: 'include',
         signal: controller.signal,
         headers: {
           'Accept': 'text/event-stream',
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ appId, message }),
       });
 
       if (!response.ok) {

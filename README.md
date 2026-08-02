@@ -45,7 +45,7 @@ AI 自动生成完整代码，支持三种模式：
 生成的代码打包为 ZIP 下载，或一键部署到内置服务器。
 
 ### 用户与安全
-注册登录、Redis 会话管理、角色权限控制（用户/管理员）、敏感词过滤；精选应用公开可见（未登录可浏览），对话/编辑仅创建者与管理员。预览静态资源（AI 生成的代码）使用短时签名 token 鉴权（HMAC + 15 分钟过期），iframe 沙箱隔离不可信内容，不授予父页面同源权限。
+注册登录、Redis 会话管理、角色权限控制（用户/管理员）、敏感词过滤；精选应用公开可见（未登录可浏览），对话/编辑仅创建者与管理员。AI 生成代码在独立预览域运行，通过短时签名 token 鉴权（HMAC + 15 分钟过期），不会获得主站同源权限。Vue 编辑模式使用受控消息桥与预览页通信；预览 CSP 默认仅允许同源联网和图片、字体等必要资源，外部 API 必须显式配置白名单。
 
 ### 性能优化
 - Redis 旁路缓存
@@ -98,6 +98,8 @@ cp src/main/resources/application-local.yaml.example src/main/resources/applicat
 #   - langchain4j.open-ai.*.api-key  DeepSeek API Key（4 处，可填同一把）
 #   - （可选）pexels.api-key / undraw.token  图片搜索，不填则跳过图片收集
 #   - app.preview-token-secret 预览签名密钥（模板已带本地开发默认值，生产用环境变量覆盖）
+#   - app.preview-origin / app.preview-frame-ancestor 预览域与主站地址（本地模板已配置）
+#   - app.preview-connect-src 生成应用可访问的 API 白名单（默认仅预览域自身）
 ```
 
 > DeepSeek API Key 在 [https://platform.deepseek.com](https://platform.deepseek.com) 申请。
@@ -131,12 +133,22 @@ npm run dev
 
 前端默认 `http://localhost:3000`，Vite 已配置 `/api` 代理到后端 8911，开发期无需处理跨域。
 
+本地预览使用 `http://preview.localhost:3000`。`*.localhost` 会自动解析到本机，Vite 也会响应该地址；不要把预览域改为主站地址，否则不可信代码将失去独立域隔离。
+
 ### 访问
 
 | 地址 | 用途 |
 |------|------|
 | `http://localhost:3000` | 前端页面 |
 | `http://localhost:8911/api/doc.html` | 接口文档（Knife4j，可在线调试） |
+
+### 运行测试
+
+```bash
+mvn test
+```
+
+当前集成测试会连接 `application-test.yaml` 配置的本机 MySQL 和 Redis，运行前需确保两者已启动并已执行建表脚本。纯前端构建可在 `fish-ai-code-frontend` 目录执行 `npm run build`。
 
 ---
 
@@ -151,6 +163,8 @@ npm run dev
 cp .env.example .env
 #    必填：DEEPSEEK_API_KEY（https://platform.deepseek.com 申请）
 #          PREVIEW_TOKEN_SECRET（预览静态资源签名密钥，用 `openssl rand -base64 32` 生成）
+#          PREVIEW_ORIGIN（独立预览域，例如 https://preview.example.com）
+#          APP_ORIGIN（主站域，例如 https://app.example.com）
 #    可选：DB_PASSWORD / REDIS_PASSWORD / PEXELS_API_KEY / UNDRAW_TOKEN / 端口等
 
 # 2. 构建 Vue 隔离构建镜像（仅使用 Vue 项目生成需要，HTML/多文件模式可跳过）
@@ -183,6 +197,7 @@ docker compose up -d       # 重新启动（不重新构建）
 
 > **Vue 构建说明**：后端容器通过挂载 `/var/run/docker.sock` 调用宿主机 Docker 运行隔离构建（`--network none`、只读、无内核能力），构建镜像需先在宿主机执行第 2 步的 `docker build`。由于 docker.sock 模式下 `--mount` 的 bind 源由宿主机 daemon 按宿主机文件系统解析，compose 已通过 `CODE_OUTPUT_HOST_DIR`（即 `${PWD}/data/code_output`）把宿主机代码输出根目录传给后端（`vue-build.host-code-output-dir`），后端会把构建命令的挂载源映射为宿主机绝对路径。
 > **数据目录**：生成的代码在 `data/code_output/`，部署产物在 `data/code_deploy/`（已加入 .gitignore）。部署产物由 nginx 通过 `http://<主机>/deploy/{deployKey}` 提供访问（后端返回的部署链接即此格式）。
+> **预览域配置**：为 `PREVIEW_ORIGIN` 配置独立域名并解析到与主站相同的入口，例如主站为 `https://app.example.com`、预览域为 `https://preview.example.com`。`APP_ORIGIN` 必须填写主站完整 Origin，供 CSP 的 `frame-ancestors` 精确允许嵌入；不要填写通配符。若生成应用需要访问第三方 API，在 `PREVIEW_CONNECT_SRC` 中填写精确地址，例如 `'self' https://api.example.com`，多个地址以空格分隔。默认仅允许预览域自身联网。
 
 ### 方式二：传统部署（手动）
 
@@ -230,6 +245,7 @@ server {
 #### 生产环境注意
 
 - `application-local.yaml` 的 `server.address: 0.0.0.0` 允许外部访问，请确保防火墙 / 安全组只开放必要端口
+- `PREVIEW_TOKEN_SECRET` 必须使用强随机值；预览 token 默认有效 15 分钟，前端会在约 12 分钟时自动续签并刷新预览 iframe，避免 Vue 懒加载资源因签名过期而失败
 - 代码生成目录 `tmp/code_output/` 与部署目录 `tmp/code_deploy/` 在启动目录下生成，建议给足磁盘空间
 - 部署访问域名可在 `application.yaml` 的 `app.deploy.host` 配置（默认 `http://localhost`），Docker 方式在 `.env` 里配 `APP_DEPLOY_HOST`；部署链接格式为 `{host}/deploy/{deployKey}`，由 nginx 的 `location /deploy/` 服务
 
@@ -244,6 +260,8 @@ server {
 | `docker compose up` 报 `DEEPSEEK_API_KEY is missing` | 未复制 .env 或未填 key；`cp .env.example .env` 后填写 |
 | `docker compose up` 报 502 / backend 未就绪 | 后端启动需约 10 秒（等 MySQL/Redis 健康检查），稍等重试；`docker compose logs -f backend` 查看 |
 | 服务器访问不了前端 | 确认 `FRONTEND_PORT`（默认 80）已在防火墙 / 安全组放行 |
+| 预览页空白或浏览器提示拒绝嵌入 | 检查 `PREVIEW_ORIGIN` 是否为独立预览域、DNS / HTTPS 是否指向入口，以及 `APP_ORIGIN` 是否为主站完整 Origin |
+| 生成应用请求 API 失败 | 默认 CSP 只允许同源联网；在 `PREVIEW_CONNECT_SRC` 中加入精确 API 地址后重启后端 |
 | 生成时提示"一分钟内请求次数过多" | 接口限流（默认 10 次/分钟），稍等再试或调大 `@RateLimit` |
 | 生成的页面没有图片 | Pexels / Undraw key 未配置或无效，图片收集失败不影响代码生成 |
 | 端口被占用 | 传统方式后端 8911 / 前端 3000；Docker 方式在 .env 中改 `BACKEND_PORT` / `FRONTEND_PORT` |

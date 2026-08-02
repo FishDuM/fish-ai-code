@@ -21,6 +21,7 @@ import java.util.concurrent.ThreadLocalRandom;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -82,8 +83,8 @@ class StaticResourceControllerTest {
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals("console.log('preview');", response.getBody().getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
         assertEquals("default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https:; "
-                        + "img-src 'self' https: data: blob:; font-src 'self' data: https:; connect-src 'none'; "
-                        + "media-src 'none'; object-src 'none'; worker-src 'none'; base-uri 'none'; "
+                        + "img-src 'self' https: data: blob:; font-src 'self' data: https:; connect-src 'self'; "
+                        + "media-src 'self'; object-src 'none'; worker-src 'none'; base-uri 'none'; "
                         + "form-action 'none'; frame-ancestors 'self'",
                 response.getHeaders().getFirst("Content-Security-Policy"));
     }
@@ -94,6 +95,35 @@ class StaticResourceControllerTest {
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals("<h1>vue preview</h1>", response.getBody().getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
+        assertEquals("default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https:; "
+                        + "img-src 'self' https: data: blob:; font-src 'self' data: https:; connect-src 'self'; "
+                        + "media-src 'self'; object-src 'none'; worker-src 'none'; base-uri 'none'; "
+                        + "form-action 'none'; frame-ancestors 'self'",
+                response.getHeaders().getFirst("Content-Security-Policy"));
+    }
+
+    @Test
+    void usesConfiguredPreviewConnectWhitelist() throws Exception {
+        java.lang.reflect.Field connectSrcField = StaticResourceController.class.getDeclaredField("previewConnectSrc");
+        connectSrcField.setAccessible(true);
+        connectSrcField.set(controller, "'self' https://api.example.com http://localhost:3001");
+
+        ResponseEntity<Resource> response = serve(htmlPreviewKey, "/index.html");
+
+        String policy = response.getHeaders().getFirst("Content-Security-Policy");
+        assertTrue(policy.contains("connect-src 'self' https://api.example.com http://localhost:3001"));
+    }
+
+    @Test
+    void rejectsBroadPreviewConnectWhitelist() throws Exception {
+        java.lang.reflect.Field connectSrcField = StaticResourceController.class.getDeclaredField("previewConnectSrc");
+        connectSrcField.setAccessible(true);
+        connectSrcField.set(controller, "'self' https:");
+
+        ResponseEntity<Resource> response = serve(htmlPreviewKey, "/index.html");
+
+        String policy = response.getHeaders().getFirst("Content-Security-Policy");
+        assertTrue(policy.contains("connect-src 'self';"));
     }
 
     @Test
@@ -199,7 +229,7 @@ class StaticResourceControllerTest {
             MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/static/" + vuePreviewKey + "/" + token + "/assets/app.js");
             request.setAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE, "/static/" + vuePreviewKey + "/" + token + "/assets/app.js");
 
-            ResponseEntity<Resource> response = controller.serveStaticResource(vuePreviewKey, null, request);
+            ResponseEntity<Resource> response = controller.serveStaticResource(vuePreviewKey, null, false, request);
 
             assertEquals(HttpStatus.OK, response.getStatusCode());
             assertEquals("console.log('vue app')",
@@ -219,7 +249,7 @@ class StaticResourceControllerTest {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/static/" + vuePreviewKey + "/" + token + "/");
         request.setAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE, "/static/" + vuePreviewKey + "/" + token + "/");
 
-        ResponseEntity<Resource> response = controller.serveStaticResource(vuePreviewKey, null, request);
+        ResponseEntity<Resource> response = controller.serveStaticResource(vuePreviewKey, null, false, request);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals("<h1>vue preview</h1>",
@@ -240,7 +270,7 @@ class StaticResourceControllerTest {
             MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/static/" + htmlPreviewKey + "/index.html");
             request.setAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE, "/static/" + htmlPreviewKey + "/index.html");
 
-            ResponseEntity<Resource> response = controller.serveStaticResource(htmlPreviewKey, "fake.token.abc", request);
+            ResponseEntity<Resource> response = controller.serveStaticResource(htmlPreviewKey, "fake.token.abc", false, request);
 
             assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
         } finally {
@@ -319,6 +349,6 @@ class StaticResourceControllerTest {
     private ResponseEntity<Resource> serve(String previewKey, String resourcePath, String previewToken) {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/static/" + previewKey + resourcePath);
         request.setAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE, "/static/" + previewKey + resourcePath);
-        return controller.serveStaticResource(previewKey, previewToken, request);
+        return controller.serveStaticResource(previewKey, previewToken, false, request);
     }
 }

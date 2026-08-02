@@ -5,6 +5,7 @@ import cn.hutool.crypto.digest.HmacAlgorithm;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.model.entity.User;
+import hk.ljx.fishaicode.model.vo.PreviewSessionVO;
 import hk.ljx.fishaicode.service.AppService;
 import hk.ljx.fishaicode.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -45,6 +46,9 @@ public class PreviewTokenController {
     @Value("${app.preview-token-secret:}")
     private String previewTokenSecret;
 
+    @Value("${app.preview-origin:http://preview.localhost:3000}")
+    private String previewOrigin;
+
     public PreviewTokenController(AppService appService, UserService userService) {
         this.appService = appService;
         this.userService = userService;
@@ -76,6 +80,19 @@ public class PreviewTokenController {
         result.put("token", token);
         result.put("expiresIn", TOKEN_TTL_MS / 1000);
         return result;
+    }
+
+    public PreviewSessionVO createPreviewSession(String previewKey) {
+        if (previewTokenSecret == null || previewTokenSecret.isBlank()) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "预览服务未配置签名密钥");
+        }
+        String origin = previewOrigin == null ? "" : previewOrigin.replaceAll("/+$", "");
+        if (origin.isBlank()) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "预览服务未配置访问域名");
+        }
+        long expiresAt = System.currentTimeMillis() + TOKEN_TTL_MS;
+        String token = signPreviewToken(previewKey, expiresAt);
+        return new PreviewSessionVO(origin + "/api/static/" + previewKey + "/" + token + "/", TOKEN_TTL_MS / 1000);
     }
 
     String signPreviewTokenForTest(String previewKey, long expiresAt) {

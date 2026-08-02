@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
  */
 public class HtmlCodeParser implements CodeParser<HtmlCodeResult> {
 
-    private static final Pattern HTML_CODE_PATTERN = Pattern.compile("```html\\s*\\n([\\s\\S]*?)```", Pattern.CASE_INSENSITIVE);
+    private static final Pattern HTML_CODE_PATTERN = Pattern.compile("```html\\s*([\\s\\S]*?)```", Pattern.CASE_INSENSITIVE);
 
     @Override
     public HtmlCodeResult parseCode(String codeContent) {
@@ -21,8 +21,7 @@ public class HtmlCodeParser implements CodeParser<HtmlCodeResult> {
         if (htmlCode != null && !htmlCode.trim().isEmpty()) {
             result.setHtmlCode(htmlCode.trim());
         } else {
-            // 如果没有找到代码块，将整个内容作为HTML
-            result.setHtmlCode(codeContent.trim());
+            result.setHtmlCode(extractRawHtml(codeContent));
         }
         return result;
     }
@@ -39,5 +38,21 @@ public class HtmlCodeParser implements CodeParser<HtmlCodeResult> {
             return matcher.group(1);
         }
         return null;
+    }
+
+    private String extractRawHtml(String content) {
+        String trimmed = content == null ? "" : content.trim();
+        int start = indexOfHtmlStart(trimmed);
+        if (start < 0) {
+            return trimmed;
+        }
+        String html = trimmed.substring(start);
+        Matcher endMatcher = Pattern.compile("</html\\s*>", Pattern.CASE_INSENSITIVE).matcher(html);
+        return endMatcher.find() ? html.substring(0, endMatcher.end()).trim() : html.trim();
+    }
+
+    private int indexOfHtmlStart(String content) {
+        Matcher matcher = Pattern.compile("<!doctype\\s+html\\b|<html\\b", Pattern.CASE_INSENSITIVE).matcher(content);
+        return matcher.find() ? matcher.start() : -1;
     }
 }

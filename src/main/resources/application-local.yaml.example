@@ -92,3 +92,7 @@ undraw:
 # ------------------------------------------------------------
 app:
   preview-token-secret: fish-ai-code-preview-secret-dev
+  preview-origin: http://preview.localhost:3000
+  preview-frame-ancestor: http://localhost:3000
+  # 生成应用默认仅能请求预览域；需要接入 API 时填写精确地址，例如 https://api.example.com
+  preview-connect-src: "'self'"

@@ -71,4 +71,28 @@ class CodeParserTest {
         assertNotNull(result.getCssCode());
         assertNotNull(result.getJsCode());
     }
+
+    @Test
+    void parseCodeFenceWithoutLineBreakAndMergeRepeatedBlocks() {
+        String codeContent = """
+                ```html<!doctype html><html><body>页面</body></html>```
+                ```cssbody { color: red; }```
+                ```cssh1 { font-size: 20px; }```
+                ```jsconsole.log('第一段');```
+                ```javascriptconsole.log('第二段');```
+                """;
+
+        MultiFileCodeResult result = multiFileCodeParser.parseCode(codeContent);
+
+        assertEquals("<!doctype html><html><body>页面</body></html>", result.getHtmlCode());
+        assertEquals("body { color: red; }\n\nh1 { font-size: 20px; }", result.getCssCode());
+        assertEquals("console.log('第一段');\n\nconsole.log('第二段');", result.getJsCode());
+    }
+
+    @Test
+    void discardProseAroundRawHtmlDocument() {
+        HtmlCodeResult result = htmlCodeParser.parseCode("说明\n<!doctype html><html><body>页面</body></html>\n结束说明");
+
+        assertEquals("<!doctype html><html><body>页面</body></html>", result.getHtmlCode());
+    }
 }
