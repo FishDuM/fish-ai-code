@@ -595,7 +595,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         log.info("提示词增强完成（增强前长度:{} → 增强后长度:{}）", message.length(), enhancedMessage.length());
 
         return generationCoordinator.execute(appId, () -> {
-            Flux<String> stringFlux = aiCodeGeneratorFacade.generateAndSaveCodeStream(enhancedMessage, genType, appId);
+            Flux<String> stringFlux = aiCodeGeneratorFacade.generateAndSaveCodeStream(
+                    enhancedMessage, genType, appId, app.getInitPrompt());
             // 锁获取成功且流创建就绪后才持久化用户消息，避免流初始化异常导致写入了用户消息但没有 AI 回复。
             chatHistoryService.addChatHistory(appId, loginUser.getId(), message, MessageTypeEnum.USER.getValue());
             return streamHandlerExecutor.doExecute(stringFlux, chatHistoryService, appId, loginUser, genType)

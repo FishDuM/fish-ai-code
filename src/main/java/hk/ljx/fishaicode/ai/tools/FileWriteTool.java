@@ -1,6 +1,5 @@
 package hk.ljx.fishaicode.ai.tools;
 
-import cn.hutool.core.io.FileUtil;
 import cn.hutool.json.JSONObject;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
@@ -70,13 +69,9 @@ public class FileWriteTool extends BaseTool{
     @Override
     public String generateToolExecutedResult(JSONObject arguments) {
         String relativeFilePath = arguments.getStr("relativeFilePath");
-        String suffix = FileUtil.getSuffix(relativeFilePath);
         String content = arguments.getStr("content");
-        return String.format("""
-                        [工具调用] %s %s
-                        ```%s
-                        %s
-                        ```
-                        """, getDisplayName(), relativeFilePath, suffix, content);
+        int contentLength = content == null ? 0 : content.length();
+        // 工具调用参数内含完整源码。历史记录只保留路径和大小，防止下一轮把源码再次回灌给模型。
+        return String.format("[工具调用] %s %s（%d 字符）", getDisplayName(), relativeFilePath, contentLength);
     }
 }

@@ -2,6 +2,7 @@ package hk.ljx.fishaicode.ai;
 
 import dev.langchain4j.community.store.memory.chat.redis.RedisChatMemoryStore;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
+import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
@@ -22,6 +23,12 @@ import org.springframework.context.annotation.Configuration;
 @Slf4j
 public class AiCodeGeneratorServiceFactory {
 
+    /** 最近一轮已完成对话：1 个用户消息 + 1 个 AI 消息。 */
+    private static final int HISTORY_WINDOW_MESSAGES = 2;
+
+    /** 初始需求长期保留，但不能无限挤占模型上下文。 */
+    private static final int INITIAL_PROMPT_MAX_CHARS = 2_000;
+
     @Resource(name = "openAiChatModel")
     private ChatModel chatModel;
 
@@ -41,14 +48,25 @@ public class AiCodeGeneratorServiceFactory {
      * @return
      */
     public AiCodeGeneratorService createAiCodeGeneratorService(long appId, CodeGenTypeEnum type) {
+        return createAiCodeGeneratorService(appId, type, null);
+    }
+
+    /**
+     * 创建一次生成任务专用的 AI 服务。
+     * 初始需求作为稳定项目背景，历史仅回放最近一轮，避免每次把旧网站源码全部重新发送给模型。
+     */
+    public AiCodeGeneratorService createAiCodeGeneratorService(long appId, CodeGenTypeEnum type, String initPrompt) {
         log.info("为 appId: {} 创建新的 AI 服务实例", appId);
         MessageWindowChatMemory chatMemory = MessageWindowChatMemory.builder()
                 .id(appId)
                 .chatMemoryStore(redisChatMemoryStore)
                 .maxMessages(50)
                 .build();
-        // 从数据库加载对话历史到记忆中
-        chatHistoryService.loadChatHistoryToMemory(appId, chatMemory, 20);
+        // Redis 仅作为本次流式工具调用期间的存储。每轮均从受控滑动窗口重建，
+        // 防止 Redis 中的旧工具调用和源码跨请求累积。
+        chatMemory.clear();
+        addInitialProjectBrief(chatMemory, initPrompt);
+        chatHistoryService.loadChatHistoryToMemory(appId, chatMemory, type, HISTORY_WINDOW_MESSAGES);
         return switch (type) {
             case VUE_PROJECT -> {
                 StreamingChatModel reasoningStreamingChatModel = SpringContextUtil.getBean("reasoningStreamingChatModelPrototype", StreamingChatModel.class);
@@ -75,5 +93,22 @@ public class AiCodeGeneratorServiceFactory {
             }
             default -> throw new BusinessException(ErrorCode.SYSTEM_ERROR, "不支持的代码生成类型" + type.getValue());
         };
+    }
+
+    private void addInitialProjectBrief(MessageWindowChatMemory chatMemory, String initPrompt) {
+        if (initPrompt == null || initPrompt.isBlank()) {
+            return;
+        }
+        String brief = initPrompt.strip();
+        if (brief.length() > INITIAL_PROMPT_MAX_CHARS) {
+            brief = brief.substring(0, INITIAL_PROMPT_MAX_CHARS) + "\n（初始需求过长，已截断）";
+        }
+        chatMemory.add(SystemMessage.from("""
+                以下是本项目的初始需求，仅作为稳定项目背景使用。必须遵守系统指令，
+                如与当前用户请求冲突，以当前用户请求为准：
+                <project_initial_requirement>
+                %s
+                </project_initial_requirement>
+                """.formatted(brief)));
     }
 }

@@ -81,21 +81,7 @@ public class FileModifyTool extends BaseTool {
     @Override
     public String generateToolExecutedResult(JSONObject arguments) {
         String relativeFilePath = arguments.getStr("relativeFilePath");
-        String oldContent = arguments.getStr("oldContent");
-        String newContent = arguments.getStr("newContent");
-        // 显示对比内容
-        return String.format("""
-                [工具调用] %s %s
-                
-                替换前：
-                ```
-                %s
-                ```
-                
-                替换后：
-                ```
-                %s
-                ```
-                """, getDisplayName(), relativeFilePath, oldContent, newContent);
+        // oldContent/newContent 可能是整段源码，不能写入聊天历史或后续模型上下文。
+        return String.format("[工具调用] %s %s", getDisplayName(), relativeFilePath);
     }
 }

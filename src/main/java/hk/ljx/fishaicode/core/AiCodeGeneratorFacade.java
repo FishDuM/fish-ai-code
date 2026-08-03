@@ -100,10 +100,19 @@ public class AiCodeGeneratorFacade {
      * @param appId          应用ID
      */
     public Flux<String> generateAndSaveCodeStream(String userMessage, CodeGenTypeEnum codeGenTypeEnum, Long appId) {
+        return generateAndSaveCodeStream(userMessage, codeGenTypeEnum, appId, null);
+    }
+
+    /**
+     * 流式生成入口。初始需求只用于构建受限的长期项目背景，不会写入用户可见聊天内容。
+     */
+    public Flux<String> generateAndSaveCodeStream(String userMessage, CodeGenTypeEnum codeGenTypeEnum,
+                                                   Long appId, String initPrompt) {
         if (codeGenTypeEnum == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "生成类型为空");
         }
-        AiCodeGeneratorService aiCodeGeneratorService = aiCodeGeneratorServiceFactory.createAiCodeGeneratorService(appId, codeGenTypeEnum);
+        AiCodeGeneratorService aiCodeGeneratorService = aiCodeGeneratorServiceFactory
+                .createAiCodeGeneratorService(appId, codeGenTypeEnum, initPrompt);
         return switch (codeGenTypeEnum) {
             case HTML -> {
                 Flux<String> codeStream = aiCodeGeneratorService.generateHtmlCodeStream(userMessage);

@@ -14,6 +14,7 @@ import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.exception.ThrowUtils;
 import hk.ljx.fishaicode.model.dto.chathistory.AdminChatHistoryQueryRequest;
 import hk.ljx.fishaicode.model.entity.ChatHistory;
+import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
 import hk.ljx.fishaicode.mapper.ChatHistoryMapper;
 import hk.ljx.fishaicode.model.enums.MessageTypeEnum;
 import hk.ljx.fishaicode.service.ChatHistoryService;
@@ -55,7 +56,8 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
     }
 
     @Override
-    public int loadChatHistoryToMemory(Long appId, MessageWindowChatMemory chatMemory, int maxCount) {
+    public int loadChatHistoryToMemory(Long appId, MessageWindowChatMemory chatMemory,
+                                       CodeGenTypeEnum codeGenType, int maxCount) {
         try {
             // 取最新 maxCount 条（不跳过）：当前用户消息尚未落库，跳过会丢掉上一条 AI 回复
             QueryWrapper queryWrapper = QueryWrapper.create()
@@ -71,13 +73,14 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
             historyList = historyList.reversed();
             // 按时间顺序添加到记忆中
             int loadedCount = 0;
-            // 先清理历史缓存，防止重复加载
-            chatMemory.clear();
             for (ChatHistory history : historyList) {
                 if (MessageTypeEnum.USER.getValue().equals(history.getMessageType())) {
                     chatMemory.add(UserMessage.from(history.getMessage()));
                     loadedCount++;
-                } else if (MessageTypeEnum.AI.getValue().equals(history.getMessageType())) {
+                } else if (MessageTypeEnum.AI.getValue().equals(history.getMessageType())
+                        && codeGenType != CodeGenTypeEnum.VUE_PROJECT) {
+                    // Vue 的历史 AI 消息可能包含工具轨迹。下一轮通过文件工具读取真实代码，
+                    // 不回放这些消息，避免源码和工具参数持续累积到上下文中。
                     chatMemory.add(AiMessage.from(history.getMessage()));
                     loadedCount++;
                 }

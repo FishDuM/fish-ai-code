@@ -1,6 +1,7 @@
 package hk.ljx.fishaicode.ai.tools;
 
 import hk.ljx.fishaicode.constant.AppConstant;
+import cn.hutool.json.JSONUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -72,5 +73,26 @@ class FileToolsSecurityTest {
         assertTrue(fileDeleteTool.deleteFile(traversalPath, appId).contains("路径不合法"));
         assertTrue(fileDirReadTool.readDir("..", appId).contains("路径不合法"));
         assertEquals("outside", Files.readString(outsideFile));
+    }
+
+    @Test
+    void toolHistorySummariesDoNotContainSourceCode() {
+        String source = "<template><main>secret source</main></template>";
+        String writeSummary = fileWriteTool.generateToolExecutedResult(JSONUtil.parseObj(java.util.Map.of(
+                "relativeFilePath", "src/App.vue",
+                "content", source
+        )));
+        String modifySummary = fileModifyTool.generateToolExecutedResult(JSONUtil.parseObj(java.util.Map.of(
+                "relativeFilePath", "src/App.vue",
+                "oldContent", source,
+                "newContent", "<template>updated</template>"
+        )));
+
+        assertTrue(writeSummary.contains("src/App.vue"));
+        assertTrue(writeSummary.contains("字符"));
+        assertFalse(writeSummary.contains(source));
+        assertTrue(modifySummary.contains("src/App.vue"));
+        assertFalse(modifySummary.contains(source));
+        assertFalse(modifySummary.contains("updated"));
     }
 }

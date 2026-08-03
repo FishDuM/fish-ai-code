@@ -73,30 +73,41 @@ public class JsonMessageStreamHandler {
                         sink.error(error);
                     },
                     () -> {
-                        String aiResponse = chatHistoryStringBuilder.toString();
-                        try {
-                            chatHistoryService.addChatHistory(appId, loginUser.getId(), aiResponse, MessageTypeEnum.AI.getValue());
-                        } catch (Exception e) {
-                            log.error("保存 AI 消息到对话历史出错，appId: {}", appId, e);
-                        }
                         // 构建成功后再结束生成流。
                         Thread.ofVirtual().name("vue-build-result-" + appId).start(() -> {
                             String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/vue_project_" + appId;
                             try {
                                 if (vueProjectBuilder.buildProjectWhenReady(projectPath)) {
+                                    saveCompletionSummary(chatHistoryService, appId, loginUser,
+                                            "已完成 Vue 项目生成，项目文件已更新。");
                                     sink.complete();
                                 } else {
+                                    saveCompletionSummary(chatHistoryService, appId, loginUser,
+                                            "Vue 项目构建失败，请检查生成代码后重试。");
                                     sink.error(new BusinessException(ErrorCode.OPERATION_ERROR,
                                             "Vue 项目构建失败，请检查生成代码后重试"));
                                 }
                             } catch (Exception e) {
                                 log.error("Vue 项目构建检查异常，appId: {}", appId, e);
+                                saveCompletionSummary(chatHistoryService, appId, loginUser,
+                                        "Vue 项目构建失败，请重试。");
                                 sink.error(e);
                             }
                         });
                     }
             );
         });
+    }
+
+    private void saveCompletionSummary(ChatHistoryService chatHistoryService, long appId, User loginUser,
+                                       String summary) {
+        try {
+            // Vue 模式的真实代码和工具参数都已经落在项目目录；聊天历史只保留结果摘要。
+            // 这样下一轮可通过 readDir/readFile 获取当前代码，而不会回放整站源码。
+            chatHistoryService.addChatHistory(appId, loginUser.getId(), summary, MessageTypeEnum.AI.getValue());
+        } catch (Exception e) {
+            log.error("保存 Vue 生成结果到对话历史出错，appId: {}", appId, e);
+        }
     }
 
     /**

@@ -5,6 +5,7 @@ import com.mybatisflex.core.service.IService;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import hk.ljx.fishaicode.model.dto.chathistory.AdminChatHistoryQueryRequest;
 import hk.ljx.fishaicode.model.entity.ChatHistory;
+import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -27,7 +28,12 @@ public interface ChatHistoryService extends IService<ChatHistory> {
      */
     boolean addChatHistory(Long appId, Long userId, String message, String messageType);
 
-    int loadChatHistoryToMemory(Long appId, MessageWindowChatMemory chatMemory, int maxCount);
+    /**
+     * 将有限的滑动窗口历史装入本次模型调用的临时记忆。
+     * Vue 项目只回放用户意图，代码由模型通过文件工具按需读取，避免工具写入的源码再次进入上下文。
+     */
+    int loadChatHistoryToMemory(Long appId, MessageWindowChatMemory chatMemory,
+                                CodeGenTypeEnum codeGenType, int maxCount);
 
     /**
      * 游标分页：获取某个应用在指定时间之前的消息（按时间正序返回）
