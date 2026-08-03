@@ -133,7 +133,7 @@ npm run dev
 
 前端默认 `http://localhost:3000`，Vite 已配置 `/api` 代理到后端 8911，开发期无需处理跨域。
 
-后端只允许配置中的主站 Origin 携带 Cookie 跨域访问。Docker 部署默认使用 `APP_ORIGIN`；如需允许多个管理端地址，可设置 `CORS_ALLOWED_ORIGINS`，用逗号分隔完整 Origin。
+后端只允许配置中的 Origin 携带 Cookie 跨域访问（`CORS_ALLOWED_ORIGINS`，逗号分隔）。**注意：`CORS_ALLOWED_ORIGINS` 必须同时包含主站与预览域**——预览 iframe 内的 Vue 静态资源（`<script type="module" crossorigin>`）是带 `Origin` 头的跨域请求，若预览域不在白名单，后端会对这些资源返回 `403`，表现为预览只剩 CSS 背景（纯色页面）、JS 组件全部不渲染。本地开发默认已同时包含 `http://localhost:3000` 与 `http://preview.localhost:3000`；Docker 部署未设置 `CORS_ALLOWED_ORIGINS` 时默认回退 `APP_ORIGIN`（主站），**配置了独立预览域时必须显式把预览域加进 `CORS_ALLOWED_ORIGINS`**。
 
 本地预览使用 `http://preview.localhost:3000`。`*.localhost` 会自动解析到本机，Vite 也会响应该地址；不要把预览域改为主站地址，否则不可信代码将失去独立域隔离。
 
@@ -199,7 +199,7 @@ docker compose up -d       # 重新启动（不重新构建）
 
 > **Vue 构建说明**：后端容器通过挂载 `/var/run/docker.sock` 调用宿主机 Docker 运行隔离构建（`--network none`、只读、无内核能力），构建镜像需先在宿主机执行第 2 步的 `docker build`。由于 docker.sock 模式下 `--mount` 的 bind 源由宿主机 daemon 按宿主机文件系统解析，compose 已通过 `CODE_OUTPUT_HOST_DIR`（即 `${PWD}/data/code_output`）把宿主机代码输出根目录传给后端（`vue-build.host-code-output-dir`），后端会把构建命令的挂载源映射为宿主机绝对路径。
 > **数据目录**：生成的代码在 `data/code_output/`，部署产物在 `data/code_deploy/`（已加入 .gitignore）。部署产物由 nginx 通过 `http://<主机>/deploy/{deployKey}` 提供访问（后端返回的部署链接即此格式）。
-> **预览域配置**：为 `PREVIEW_ORIGIN` 配置独立域名并解析到与主站相同的入口，例如主站为 `https://app.example.com`、预览域为 `https://preview.example.com`。`APP_ORIGIN` 必须填写主站完整 Origin，供 CSP 的 `frame-ancestors` 精确允许嵌入；不要填写通配符。若生成应用需要访问第三方 API，在 `PREVIEW_CONNECT_SRC` 中填写精确地址，例如 `'self' https://api.example.com`，多个地址以空格分隔。默认仅允许预览域自身联网。
+> **预览域配置**：为 `PREVIEW_ORIGIN` 配置独立域名并解析到与主站相同的入口，例如主站为 `https://app.example.com`、预览域为 `https://preview.example.com`。`APP_ORIGIN` 必须填写主站完整 Origin，供 CSP 的 `frame-ancestors` 精确允许嵌入；不要填写通配符。**同时必须把预览域加进 `CORS_ALLOWED_ORIGINS`**（与主站逗号分隔，如 `CORS_ALLOWED_ORIGINS=https://app.example.com,https://preview.example.com`），否则预览 iframe 内的 Vue 静态资源跨域请求会被 403 拒绝（见"常见问题"）。若生成应用需要访问第三方 API，在 `PREVIEW_CONNECT_SRC` 中填写精确地址，例如 `'self' https://api.example.com`，多个地址以空格分隔。默认仅允许预览域自身联网。
 
 ### 方式二：传统部署（手动）
 
@@ -264,6 +264,7 @@ server {
 | `docker compose up` 报 502 / backend 未就绪 | 后端启动需约 10 秒（等 MySQL/Redis 健康检查），稍等重试；`docker compose logs -f backend` 查看 |
 | 服务器访问不了前端 | 确认 `FRONTEND_PORT`（默认 80）已在防火墙 / 安全组放行 |
 | 预览页空白或浏览器提示拒绝嵌入 | 检查 `PREVIEW_ORIGIN` 是否为独立预览域、DNS / HTTPS 是否指向入口，以及 `APP_ORIGIN` 是否为主站完整 Origin |
+| 预览只剩纯色背景、JS 组件不渲染（控制台报 `403 Forbidden`，资源 URL 形如 `/api/static/.../assets/index-xxx.js`） | 预览域不在 CORS 白名单：`<script type="module" crossorigin>` 跨域加载带 `Origin` 头，后端对不在 `CORS_ALLOWED_ORIGINS` 的 Origin 返回 403。把预览域加入 `CORS_ALLOWED_ORIGINS`（本地开发须包含 `http://preview.localhost:3000`，生产须与主站一起显式配置）后重启后端 |
 | 生成应用请求 API 失败 | 默认 CSP 只允许同源联网；在 `PREVIEW_CONNECT_SRC` 中加入精确 API 地址后重启后端 |
 | 生成时提示"一分钟内请求次数过多" | 接口限流（默认 10 次/分钟），稍等再试或调大 `@RateLimit` |
 | 生成的页面没有图片 | Pexels / Undraw key 未配置或无效，图片收集失败不影响代码生成 |

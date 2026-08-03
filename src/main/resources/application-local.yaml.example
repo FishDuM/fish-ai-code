@@ -93,7 +93,10 @@ undraw:
 # 生产部署由 docker-compose 的 PREVIEW_TOKEN_SECRET 注入强随机值
 # ------------------------------------------------------------
 app:
-  cors-allowed-origins: http://localhost:3000
+  # CORS 白名单：必须同时包含主站与预览域（逗号分隔）。
+  # 预览 iframe 内的 Vue 静态资源（<script type="module" crossorigin>）是跨域请求，
+  # 若预览域不在白名单，Spring 会对带 Origin 的请求返回 403，预览 JS 加载失败、页面只剩 CSS 背景。
+  cors-allowed-origins: http://localhost:3000,http://preview.localhost:3000
   preview-token-secret: fish-ai-code-preview-secret-dev
   preview-origin: http://preview.localhost:3000
   preview-frame-ancestor: http://localhost:3000

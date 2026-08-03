@@ -36,7 +36,10 @@ server:
         secure: ${SESSION_COOKIE_SECURE:false}
 
 app:
-  cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+  # CORS 白名单（逗号分隔）。必须同时包含主站与预览域：
+  # 预览 iframe 内的 Vue 静态资源（<script type="module" crossorigin>）是带 Origin 的跨域请求，
+  # 预览域不在白名单时 Spring 会返回 403，预览 JS 加载失败、只剩 CSS 背景。生产由环境变量覆盖。
+  cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://preview.localhost:3000}
   preview-origin: ${PREVIEW_ORIGIN:http://preview.localhost:3000}
   preview-frame-ancestor: ${APP_ORIGIN:http://localhost:3000}
   preview-connect-src: "${PREVIEW_CONNECT_SRC:'self'}"
