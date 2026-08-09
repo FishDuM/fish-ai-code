@@ -5,61 +5,16 @@
 }
 
 :root {
-  /* ===== Color Palette (inspired by nocode.cn) ===== */
+  /* 仅保留实际被引用的变量；组件样式走内联 style + 硬编码色值 */
   --dm-bg-primary: #fff;
-  --dm-bg-secondary: rgba(17, 25, 37, 0.05);
-  --dm-bg-hover: rgba(17, 25, 37, 0.03);
-  --dm-bg-press: rgba(17, 25, 37, 0.05);
-  --dm-bg-stroke: rgba(17, 25, 37, 0.15);
-  --dm-bg-divider: rgba(17, 25, 37, 0.1);
-  --dm-bg-card: #fff;
-
   --dm-text-primary: #111925;
-  --dm-text-secondary: rgba(17, 25, 37, 0.65);
-  --dm-text-tertiary: rgba(17, 25, 37, 0.3);
-  --dm-text-quaternary: rgba(17, 25, 37, 0.45);
-  --dm-text-inverse: #fff;
-
-  --dm-brand-primary: #111925;
   --dm-brand-accent: #36D2BE;
-  --dm-brand-accent-dark: #2BA898;
-  --dm-brand-light: #e9f2fe;
   --dm-action-bg: #E6F7FE;
-
-  /* Brand action color */
   --gradient-accent: #E6F7FE;
   --gradient-accent-hover: #E6F7FE;
-
-  /* ===== Shadows ===== */
-  --shadow-card: 0px 4px 20px rgba(17, 25, 37, 0.08);
-  --shadow-dropdown: 0 2px 8px rgba(0, 0, 0, 0.08);
-  --shadow-large: 0px 8px 24px rgba(17, 25, 37, 0.10);
-  --shadow-accent: 0px 4px 16px rgba(11, 204, 179, 0.15);
-
-  /* ===== Border Radius ===== */
-  --dm-radius-xs: 4px;
-  --dm-radius-sm: 6px;
-  --dm-radius-md: 8px;
-  --dm-radius-lg: 12px;
-  --dm-radius-full: 999px;
-
-  /* ===== Spacing ===== */
-  --dm-spacing-xs: 2px;
-  --dm-spacing-sm: 4px;
-  --dm-spacing-md: 8px;
-  --dm-spacing-lg: 12px;
-  --dm-spacing-xl: 16px;
-  --dm-spacing-2xl: 20px;
-  --dm-spacing-3xl: 24px;
-
-  /* ===== Typography ===== */
   --dm-font-family: "Alibaba PuHuiTi 2.0", -apple-system, BlinkMacSystemFont,
     "PingFang SC", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-
-  /* ===== Transitions ===== */
-  --dm-transition-fast: 0.15s ease;
   --dm-transition-base: 0.2s ease;
-  --dm-transition-slow: 0.3s ease;
 }
 
 body {
@@ -314,7 +269,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: var(--text-dim, #8b95a1);
+  color: #8b95a1;
   font-size: 13px;
 }
 

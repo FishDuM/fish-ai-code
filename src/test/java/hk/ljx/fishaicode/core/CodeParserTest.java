@@ -90,6 +90,37 @@ class CodeParserTest {
     }
 
     @Test
+    void parseMultiFileCodeWithWindowsLineBreaks() {
+        // Windows（\r\n）输入：解析结果必须统一为 LF，与 Linux/macOS 一致
+        String codeContent = "```html\r\n<!doctype html><html><body>页面</body></html>\r\n```\r\n"
+                + "```css\r\nbody { color: red; }\r\n```\r\n"
+                + "```css\r\nh1 { font-size: 20px; }\r\n```\r\n"
+                + "```js\r\nconsole.log('第一段');\r\n```\r\n"
+                + "```javascript\r\nconsole.log('第二段');\r\n```";
+
+        MultiFileCodeResult result = multiFileCodeParser.parseCode(codeContent);
+
+        assertEquals("<!doctype html><html><body>页面</body></html>", result.getHtmlCode());
+        assertEquals("body { color: red; }\n\nh1 { font-size: 20px; }", result.getCssCode());
+        assertEquals("console.log('第一段');\n\nconsole.log('第二段');", result.getJsCode());
+    }
+
+    @Test
+    void parseMultiFileCodeWithMixedLineBreaks() {
+        // 混合换行（\r\n 与 \n 混用）：统一归一为 LF
+        String codeContent = "```html\n<!doctype html><html><body>页面</body></html>\n```\n"
+                + "```css\r\nbody { color: red; }\r\n```\n"
+                + "```css\nh1 { font-size: 20px; }\n```\n"
+                + "```js\r\nconsole.log('第一段');\r\n```\r\n"
+                + "```javascript\nconsole.log('第二段');\n```";
+
+        MultiFileCodeResult result = multiFileCodeParser.parseCode(codeContent);
+
+        assertEquals("body { color: red; }\n\nh1 { font-size: 20px; }", result.getCssCode());
+        assertEquals("console.log('第一段');\n\nconsole.log('第二段');", result.getJsCode());
+    }
+
+    @Test
     void discardProseAroundRawHtmlDocument() {
         HtmlCodeResult result = htmlCodeParser.parseCode("说明\n<!doctype html><html><body>页面</body></html>\n结束说明");
 

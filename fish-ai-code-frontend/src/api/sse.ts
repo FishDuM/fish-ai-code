@@ -1,4 +1,5 @@
-import { API_BASE_URL } from '@/constants';
+import { API_BASE_URL, ERROR_CODES } from '@/constants';
+import { handleAuthExpired } from './authExpired';
 
 /**
  * SSE 事件块可能跨多行（一个事件多个 data: 行），每行剥一次前缀即可。
@@ -77,6 +78,29 @@ export function startCodeGenSSE(
 ): AbortController {
   const controller = new AbortController();
 
+  /** 统一处理 business-error 事件：40100 视为会话过期，走统一登出 */
+  const handleBusinessError = (raw: string) => {
+    let code: number;
+    let errorMessage = '生成过程中出现错误';
+    try {
+      const errData = JSON.parse(raw);
+      code = errData.code ?? 0;
+      errorMessage = errData.message || errorMessage;
+    } catch {
+      // Malformed payload — fall through to the raw-data handler
+      handleRawData(raw);
+      return;
+    }
+    if (code === ERROR_CODES.NOT_LOGIN_ERROR) {
+      handleAuthExpired();
+      // 会话过期同样回调业务错误，让上层收尾流状态（isStreaming 置 false），
+      // 否则跳转被延迟/拦截时输入框会一直处于生成中状态
+      callbacks.onBusinessError?.(code, errorMessage);
+      return;
+    }
+    callbacks.onBusinessError?.(code, errorMessage);
+  };
+
   const handleRawData = (rawData: string) => {
     if (!rawData) return;
 
@@ -138,7 +162,7 @@ export function startCodeGenSSE(
 
       if (!response.ok) {
         if (response.status === 401) {
-          window.dispatchEvent(new Event('auth:logout'));
+          handleAuthExpired();
         }
         throw new Error(`SSE 请求失败: ${response.status}`);
       }
@@ -186,13 +210,7 @@ export function startCodeGenSSE(
 
           if (parsed.event === 'business-error') {
             receivedBusinessError = true;
-            try {
-              const errData = JSON.parse(parsed.data);
-              callbacks.onBusinessError?.(errData.code ?? 0, errData.message || '生成过程中出现错误');
-            } catch {
-              // Malformed payload — fall through to the raw-data handler
-              handleRawData(parsed.data);
-            }
+            handleBusinessError(parsed.data);
             continue;
           }
 
@@ -229,12 +247,7 @@ export function startCodeGenSSE(
         const parsed = parseSSEEventBlock(block);
         if (parsed.event === 'business-error') {
           receivedBusinessError = true;
-          try {
-            const errData = JSON.parse(parsed.data);
-            callbacks.onBusinessError?.(errData.code ?? 0, errData.message || '生成过程中出现错误');
-          } catch {
-            handleRawData(parsed.data);
-          }
+          handleBusinessError(parsed.data);
           continue;
         }
         const rawData = stripSSEPrefix(block);
@@ -247,12 +260,7 @@ export function startCodeGenSSE(
           const parsed = parseSSEEventBlock(tailBlock);
           if (parsed.event === 'business-error') {
             receivedBusinessError = true;
-            try {
-              const errData = JSON.parse(parsed.data);
-              callbacks.onBusinessError?.(errData.code ?? 0, errData.message || '生成过程中出现错误');
-            } catch {
-              handleRawData(parsed.data);
-            }
+            handleBusinessError(parsed.data);
           } else {
             const rawData = stripSSEPrefix(tailBlock);
             handleRawData(rawData);

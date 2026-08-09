@@ -15,15 +15,24 @@ public class HtmlCodeParser implements CodeParser<HtmlCodeResult> {
 
     @Override
     public HtmlCodeResult parseCode(String codeContent) {
+        String normalized = normalizeLineBreaks(codeContent);
         HtmlCodeResult result = new HtmlCodeResult();
         // 提取 HTML 代码
-        String htmlCode = extractHtmlCode(codeContent);
+        String htmlCode = extractHtmlCode(normalized);
         if (htmlCode != null && !htmlCode.trim().isEmpty()) {
             result.setHtmlCode(htmlCode.trim());
         } else {
-            result.setHtmlCode(extractRawHtml(codeContent));
+            result.setHtmlCode(extractRawHtml(normalized));
         }
         return result;
+    }
+
+    /** 统一换行符为 LF：\r\n 与 \r 都归一为 \n，保证跨平台解析结果一致 */
+    private String normalizeLineBreaks(String content) {
+        if (content == null) {
+            return "";
+        }
+        return content.replace("\r\n", "\n").replace('\r', '\n');
     }
 
     /**

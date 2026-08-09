@@ -134,7 +134,7 @@ export default function Dashboard() {
                   app={app}
                   onEdit={handleEdit}
                   onDelete={handleDelete}
-                  onOpen={(a) => navigate(`/app/${a.id}/chat`)}
+                  onOpen={(a) => navigate(`/app/${a.id}/chat`, { state: { from: '/dashboard' } })}
                 />
               </Col>
             ))}

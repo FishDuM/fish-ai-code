@@ -55,7 +55,7 @@ function formatHtmlLike(code: string): string {
     .map((part) => part.trim())
     .filter(Boolean);
 
-  if (tokens.length <= 1) return code;
+  if (tokens.length <= 1) return compact;
 
   const lines: string[] = [];
   let indent = 0;

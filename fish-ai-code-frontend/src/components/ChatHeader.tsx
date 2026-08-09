@@ -16,6 +16,10 @@ interface ChatHeaderProps {
   isOwner: boolean;
   showPreview: boolean;
   isStreaming: boolean;
+  /** 应用详情加载中：禁用依赖应用对象的操作，防止误操作上一个应用 */
+  appLoading?: boolean;
+  /** 返回按钮目标路径（未传时回 /dashboard） */
+  backTo?: string;
   deploying: boolean;
   onDeploy: () => void;
   onDownload: () => void;
@@ -23,14 +27,14 @@ interface ChatHeaderProps {
   onDelete: () => void;
 }
 
-function ChatHeader({ appName, isOwner, showPreview, isStreaming, deploying, onDeploy, onDownload, onRename, onDelete }: ChatHeaderProps) {
+function ChatHeader({ appName, isOwner, showPreview, isStreaming, appLoading = false, backTo = '/dashboard', deploying, onDeploy, onDownload, onRename, onDelete }: ChatHeaderProps) {
   const navigate = useNavigate();
   const displayAppName = appName || '未命名应用';
 
   return (
     <div className="chat-header">
       <Space className="chat-header-left">
-        <Button className="chat-back-button" type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate('/dashboard')} />
+        <Button className="chat-back-button" type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate(backTo)} />
         <span className="chat-app-icon">
           <img src={logoUrl} alt="" />
         </span>
@@ -42,10 +46,10 @@ function ChatHeader({ appName, isOwner, showPreview, isStreaming, deploying, onD
       <Space className="chat-header-actions">
         {isOwner && (
           <>
-            <Button type="text" icon={<EditOutlined />} onClick={onRename}>
+            <Button type="text" icon={<EditOutlined />} onClick={onRename} disabled={appLoading}>
               重命名
             </Button>
-            <Button type="text" danger icon={<DeleteOutlined />} onClick={onDelete}>
+            <Button type="text" danger icon={<DeleteOutlined />} onClick={onDelete} disabled={appLoading}>
               删除
             </Button>
             <Button
@@ -53,14 +57,14 @@ function ChatHeader({ appName, isOwner, showPreview, isStreaming, deploying, onD
               icon={<CloudUploadOutlined />}
               onClick={onDeploy}
               loading={deploying}
-              disabled={!showPreview || isStreaming}
+              disabled={appLoading || !showPreview || isStreaming}
             >
               部署
             </Button>
             <Button
               icon={<DownloadOutlined />}
               onClick={onDownload}
-              disabled={!showPreview || isStreaming}
+              disabled={appLoading || !showPreview || isStreaming}
             >
               下载代码
             </Button>

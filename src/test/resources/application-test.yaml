@@ -5,14 +5,16 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/fish_ai_code
     username: root
-    password: ${MYSQL_PASSWORD:123456}
+    # 默认值跟随本机 MySQL（与 application-local.yaml 一致）；其他环境用 MYSQL_PASSWORD 覆盖
+    password: ${MYSQL_PASSWORD:3057433102}
   data:
     redis:
       host: localhost
       port: 6379
       ttl: 3600
       database: 0
-      password: ${REDIS_PASSWORD:}
+      # 默认值跟随本机 Redis（与 application-local.yaml 一致）；其他环境用 REDIS_PASSWORD 覆盖
+      password: ${REDIS_PASSWORD:3057433102}
 
 langchain4j:
   open-ai:

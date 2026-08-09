@@ -217,8 +217,9 @@ export default function Home() {
                     app={app}
                     showActions={false}
                     onOpen={(featuredApp) => {
-                      // 精选应用公开可见：任何人可点进查看（未登录/非主人只读）
-                      navigate(`/app/${featuredApp.id}/chat`);
+                      // 精选应用公开可见：任何人可点进查看（未登录/非主人只读）；
+                      // 记录来源，聊天页返回按钮据此回首页
+                      navigate(`/app/${featuredApp.id}/chat`, { state: { from: '/' } });
                     }}
                   />
                 </Col>

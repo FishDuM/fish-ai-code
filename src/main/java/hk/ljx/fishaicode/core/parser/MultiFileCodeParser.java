@@ -47,11 +47,20 @@ public class MultiFileCodeParser implements CodeParser<MultiFileCodeResult> {
                 continue;
             }
             if (!contentBuilder.isEmpty()) {
-                contentBuilder.append(System.lineSeparator()).append(System.lineSeparator());
+                // 跨平台统一使用 LF：代码内容来自 AI/数据库/前端展示，不应随运行环境换行
+                contentBuilder.append("\n\n");
             }
-            contentBuilder.append(block.trim());
+            contentBuilder.append(normalizeLineBreaks(block).trim());
         }
         return contentBuilder.isEmpty() ? null : contentBuilder.toString();
+    }
+
+    /**
+     * 统一换行符为 LF：\r\n 与 \r 都归一为 \n，
+     * 保证 Windows/Linux/macOS 解析结果一致。
+     */
+    private String normalizeLineBreaks(String content) {
+        return content.replace("\r\n", "\n").replace('\r', '\n');
     }
 
     private String trimToEmpty(String content) {
