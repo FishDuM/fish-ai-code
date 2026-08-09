@@ -163,8 +163,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户不存在或密码错误");
         }
         // 3. 登录成功后轮换会话 ID，防止登录前的会话标识被固定利用
+        // 先取到 session 再轮换，直接 changeSessionId 会因无 session 而报错
+        HttpSession session = request.getSession(true);
         request.changeSessionId();
-        request.getSession().setAttribute(USER_LOGIN_STATE, user.getId());
+        session.setAttribute(USER_LOGIN_STATE, user.getId());
         // 4. 获得脱敏后的用户信息
         return this.getLoginUserVO(user);
     }

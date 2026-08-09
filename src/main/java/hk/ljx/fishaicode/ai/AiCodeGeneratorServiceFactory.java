@@ -85,7 +85,8 @@ public class AiCodeGeneratorServiceFactory {
                 StreamingChatModel openAiStreamingChatModel = SpringContextUtil.getBean("streamingChatModelPrototype", StreamingChatModel.class);
                 yield AiServices.builder(AiCodeGeneratorService.class)
                         .chatMemory(chatMemory)
-                        .chatModel(chatModel)
+                        // 不要加 .chatModel()：它配了 response-format=json_object，
+                        // 会让流式输出被强转成 JSON，CSS/JS 就丢了
                         .streamingChatModel(openAiStreamingChatModel)
                         .maxSequentialToolsInvocations(30) // 最多调用 30 次工具
                         .inputGuardrails(new PromptSafetyInputGuardrail()) // 添加输入护轨

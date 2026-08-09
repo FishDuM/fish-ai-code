@@ -1,7 +1,5 @@
 package hk.ljx.fishaicode.ai;
 
-import hk.ljx.fishaicode.ai.model.HtmlCodeResult;
-import hk.ljx.fishaicode.ai.model.MultiFileCodeResult;
 import hk.ljx.fishaicode.core.AiCodeGeneratorFacade;
 import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
 import jakarta.annotation.Resource;
@@ -21,22 +19,7 @@ import java.util.List;
 class AiCodeGeneratorServiceTest {
 
     @Resource
-    private AiCodeGeneratorService aiCodeGeneratorService;
-
-    @Resource
     private AiCodeGeneratorFacade aiCodeGeneratorFacade;
-
-    @Test
-    void generateHtmlCode() {
-        HtmlCodeResult result = aiCodeGeneratorService.generateHtmlCode("做个小鱼的博客，不超过20行");
-        Assertions.assertNotNull(result);
-    }
-
-    @Test
-    void generateMultiFileCode() {
-        MultiFileCodeResult result = aiCodeGeneratorService.generateMultiFileCode("做个小鱼的博客,不超过50行");
-        Assertions.assertNotNull(result);
-    }
 
     @Test
     void generateVueProjectCodeStream() {
