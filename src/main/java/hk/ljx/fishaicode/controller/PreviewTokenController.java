@@ -2,9 +2,11 @@ package hk.ljx.fishaicode.controller;
 
 import cn.hutool.crypto.digest.HMac;
 import cn.hutool.crypto.digest.HmacAlgorithm;
+import hk.ljx.fishaicode.constant.AppConstant;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.model.entity.User;
+import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
 import hk.ljx.fishaicode.model.vo.PreviewSessionVO;
 import hk.ljx.fishaicode.service.AppService;
 import hk.ljx.fishaicode.service.UserService;
@@ -16,12 +18,16 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 /**
  * 预览访问 token 签发：预览 iframe 无法带 cookie（sandbox 无 allow-same-origin），
@@ -90,9 +96,35 @@ public class PreviewTokenController {
         if (origin.isBlank()) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "预览服务未配置访问域名");
         }
+        Matcher matcher = previewKey == null ? null : PREVIEW_KEY_PATTERN.matcher(previewKey);
+        if (matcher == null || !matcher.matches()) {
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "预览资源不存在");
+        }
+        // 未生成过代码不签发预览会话：静态资源必然 404，避免前端渲染 404 iframe
+        if (!hasGeneratedCode(matcher.group(1), Long.parseLong(matcher.group(2)))) {
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "尚未生成代码");
+        }
         long expiresAt = System.currentTimeMillis() + TOKEN_TTL_MS;
         String token = signPreviewToken(previewKey, expiresAt);
         return new PreviewSessionVO(origin + "/api/static/" + previewKey + "/" + token + "/", TOKEN_TTL_MS / 1000);
+    }
+
+    /** 预览根目录与 StaticResourceController 同源规则：html/multi_file 指向项目目录，vue_project 指向构建产物 dist */
+    private boolean hasGeneratedCode(String codeGenType, long appId) {
+        Path previewRoot = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, codeGenType + "_" + appId)
+                .toAbsolutePath()
+                .normalize();
+        if (CodeGenTypeEnum.VUE_PROJECT.getValue().equals(codeGenType)) {
+            previewRoot = previewRoot.resolve("dist").normalize();
+        }
+        if (!Files.isDirectory(previewRoot)) {
+            return false;
+        }
+        try (Stream<Path> entries = Files.list(previewRoot)) {
+            return entries.findAny().isPresent();
+        } catch (java.io.IOException e) {
+            return false;
+        }
     }
 
     String signPreviewTokenForTest(String previewKey, long expiresAt) {

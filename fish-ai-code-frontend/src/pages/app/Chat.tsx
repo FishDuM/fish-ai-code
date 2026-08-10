@@ -507,6 +507,8 @@ export default function AppChat() {
   const previewBlockedByOrigin = Boolean(htmlPreviewUrl) && !isPreviewIsolated;
   const supportsEditMode = Boolean(app?.codeGenType) && canEdit && (!isVuePreview || isPreviewIsolated);
   const hasEditablePreview = Boolean(htmlPreviewUrl);
+  // 有对话历史但无预览会话（未生成过代码/生成失败）时，占位文案提示"未生成"而非引导发消息
+  const hasAiHistory = messages.some((m) => m.role === 'ai' && m.content);
   const showPreviewToolbar = (showPreview || Boolean(htmlPreviewUrl)) && hasEditablePreview;
   const editModeTooltip = isVuePreview && !isPreviewIsolated
     ? '请先配置独立预览域名'
@@ -986,6 +988,11 @@ export default function AppChat() {
                                   <Spin size="large" style={{ marginBottom: 16 }} />
                                   <div>正在加载后端生成的预览文件...</div>
                                 </>
+                              ) : hasAiHistory ? (
+                                <>
+                                  <EyeOutlined style={{ fontSize: 48, marginBottom: 16, color: 'rgba(17,25,37,0.15)' }} />
+                                  <div>尚未生成代码</div>
+                                </>
                               ) : (
                                 <>
                                   <EyeOutlined style={{ fontSize: 48, marginBottom: 16, color: 'rgba(17,25,37,0.15)' }} />
@@ -1012,6 +1019,11 @@ export default function AppChat() {
                               <>
                                 <Spin size="large" style={{ marginBottom: 16 }} />
                                 <div>正在加载后端生成的预览文件...</div>
+                              </>
+                            ) : hasAiHistory ? (
+                              <>
+                                <EyeOutlined style={{ fontSize: 48, marginBottom: 16, color: 'rgba(17,25,37,0.15)' }} />
+                                <div>尚未生成代码</div>
                               </>
                             ) : (
                               <>

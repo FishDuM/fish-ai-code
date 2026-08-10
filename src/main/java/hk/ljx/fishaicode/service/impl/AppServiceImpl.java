@@ -47,6 +47,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -705,6 +706,12 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         Files.createDirectories(deployRoot);
         Path targetDir = deployRoot.resolve(deployKey).normalize();
         Path tempDir = Files.createTempDirectory(deployRoot, "." + deployKey + "-");
+        // 修复：createTempDirectory 固定 0700，nginx 低权限用户读不到部署产物，
+        try {
+            Files.setPosixFilePermissions(tempDir, PosixFilePermissions.fromString("rwxr-xr-x"));
+        } catch (UnsupportedOperationException e) {
+            log.debug("当前文件系统不支持 POSIX 权限设置: {}", tempDir);
+        }
         Path backupDir = null;
         try {
             FileUtil.copyContent(sourceDir, tempDir.toFile(), true);
