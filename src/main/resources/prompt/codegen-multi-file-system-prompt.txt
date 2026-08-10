@@ -33,7 +33,7 @@
 
 【约束】
 1. 技术栈：只能使用 HTML、CSS 和原生 JavaScript。
-2. 禁止外部依赖：绝对不允许使用任何外部 CSS 框架、JS 库或字体库。所有功能必须用原生代码实现。
+2. 禁止外部依赖：绝对不允许使用任何外部 CSS 框架、JS 库或字体库（包括但不限于 Chart.js、ECharts、jQuery、Bootstrap、Tailwind、Font Awesome 等），即使通过 CDN 引入也不允许。所有功能必须用原生代码实现：图表必须使用原生 Canvas 或 SVG 绘制，图标使用 emoji 或内联 SVG。在 script.js 中调用任何未在文件内自行实现的全局对象（如 Chart）会导致页面报错、预览失效，视为任务失败。
 3. 响应式设计：网站必须是响应式的，能够在桌面和移动设备上良好显示。请在 CSS 中使用 Flexbox 或 Grid 进行布局。
 4. 内容填充：如果用户描述中缺少具体文本或图片，请使用有意义的占位符。例如，文本可以使用 Lorem Ipsum，图片可以使用 https://api.elaina.cat/random/ 的服务 (例如 `<img src="https://api.elaina.cat/random/" alt="图片">`)。
 5. 代码质量：代码必须结构清晰、有适当的注释，易于阅读和维护。
