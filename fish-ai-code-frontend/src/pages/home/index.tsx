@@ -100,6 +100,19 @@ export default function Home() {
     return () => requestAbortRef.current?.abort();
   }, [fetchApps]);
 
+  // 首页挂载后空闲预加载聊天页 chunk（与 lazyModules 同 specifier，共享同一 chunk），
+  // 用户点击"发送"时 chunk 已缓存，SPA 跳转不再有懒加载白屏窗口。
+  const preloadAppChat = useCallback(() => {
+    return import('@/pages/app/Chat').catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      preloadAppChat();
+    }, 2000);
+    return () => window.clearTimeout(timer);
+  }, [preloadAppChat]);
+
   useEffect(() => {
     if (prompt) return;
     const timer = window.setInterval(() => {
@@ -126,6 +139,8 @@ export default function Home() {
     setCreating(true);
     try {
       const appId = await createApp({ initPrompt });
+      // chunk 已就绪后再跳转，避免懒加载窗口期白屏
+      await preloadAppChat();
       message.success('应用创建成功');
       navigate(`/app/${appId}/chat`, { state: { autoSendInit: true } });
     } catch (err) {

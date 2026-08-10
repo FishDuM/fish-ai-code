@@ -1,11 +1,13 @@
 package hk.ljx.fishaicode.core;
 
+import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.service.TokenStream;
 import dev.langchain4j.service.tool.ToolExecution;
 import hk.ljx.fishaicode.ai.AiCodeGeneratorService;
 import hk.ljx.fishaicode.ai.AiCodeGeneratorServiceFactory;
+import hk.ljx.fishaicode.ai.model.MultiFileCodeResult;
 import hk.ljx.fishaicode.ai.model.message.AiResponseMessage;
 import hk.ljx.fishaicode.ai.model.message.ToolExecutedMessage;
 import hk.ljx.fishaicode.ai.model.message.ToolRequestMessage;
@@ -18,12 +20,16 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.FluxSink;
 
 import java.io.File;
 
 @Slf4j
 @Service
 public class AiCodeGeneratorFacade {
+
+    /** MULTI_FILE 生成最多尝试次数：模型偶发只输出 HTML 代码块导致 css/js 为空，重试一次纠正。 */
+    private static final int MULTI_FILE_MAX_ATTEMPTS = 2;
 
     @Resource
     private AiCodeGeneratorServiceFactory aiCodeGeneratorServiceFactory;
@@ -89,7 +95,7 @@ public class AiCodeGeneratorFacade {
             }
             case MULTI_FILE -> {
                 Flux<String> codeStream = aiCodeGeneratorService.generateMultiFileCodeStream(userMessage);
-                yield processCodeStream(codeStream, CodeGenTypeEnum.MULTI_FILE, appId);
+                yield processMultiFileCodeStream(codeStream, appId, aiCodeGeneratorService, userMessage, 0);
             }
             case VUE_PROJECT -> {
                 TokenStream tokenStream = aiCodeGeneratorService.generateVueProjectCodeStream(appId, userMessage);
@@ -100,6 +106,75 @@ public class AiCodeGeneratorFacade {
                 throw new BusinessException(ErrorCode.SYSTEM_ERROR, errorMessage);
             }
         };
+    }
+
+    /**
+     * MULTI_FILE 流式处理：解析后校验完整性，缺 css/js 时用纠正提示重生成一次。
+     */
+    private Flux<String> processMultiFileCodeStream(Flux<String> codeStream, Long appId,
+                                                    AiCodeGeneratorService aiCodeGeneratorService,
+                                                    String userMessage, int attempt) {
+        return Flux.create(sink -> {
+            StringBuilder codeBuilder = new StringBuilder();
+            codeStream.subscribe(
+                    chunk -> {
+                        codeBuilder.append(chunk);
+                        sink.next(chunk);
+                    },
+                    sink::error,
+                    () -> {
+                        String completeCode = codeBuilder.toString();
+                        try {
+                            MultiFileCodeResult parsedResult =
+                                    (MultiFileCodeResult) CodeParserExecutor.executeParser(completeCode, CodeGenTypeEnum.MULTI_FILE);
+                            if (attempt < MULTI_FILE_MAX_ATTEMPTS - 1 && isMissingReferencedFiles(parsedResult)) {
+                                log.warn("多文件生成缺少 CSS/JS 代码块（html:{}B css:{}B js:{}B），第 {} 次重试，appId: {}",
+                                        parsedResult.getHtmlCode().length(),
+                                        parsedResult.getCssCode().length(),
+                                        parsedResult.getJsCode().length(),
+                                        attempt + 1, appId);
+                                Flux<String> retryStream = aiCodeGeneratorService
+                                        .generateMultiFileCodeStream(buildCorrectiveMessage(userMessage));
+                                processMultiFileCodeStream(retryStream, appId, aiCodeGeneratorService, userMessage, attempt + 1)
+                                        .subscribe(sink::next, sink::error, sink::complete);
+                                return;
+                            }
+                            // 重试后仍缺文件：不保存 css/js 为空的残次品，明确报错引导重试
+                            if (isMissingReferencedFiles(parsedResult)) {
+                                log.warn("多文件生成重试后仍缺少 CSS/JS 代码块，拒绝保存残缺产物，appId: {}", appId);
+                                sink.error(new BusinessException(ErrorCode.OPERATION_ERROR,
+                                        "生成结果缺少 CSS/JS 文件，请重新生成"));
+                                return;
+                            }
+                            File savedDir = CodeFileSaverExecutor.executeSaver(parsedResult, CodeGenTypeEnum.MULTI_FILE, appId);
+                            log.info("保存成功，路径为：{}", savedDir.getAbsolutePath());
+                            sink.complete();
+                        } catch (Exception e) {
+                            log.error("代码保存失败，appId: {}, 类型: {}", appId, CodeGenTypeEnum.MULTI_FILE, e);
+                            sink.error(new BusinessException(ErrorCode.OPERATION_ERROR, "代码保存失败，请重试"));
+                        }
+                    }
+            );
+        }, FluxSink.OverflowStrategy.BUFFER);
+    }
+
+    /**
+     * 完整性校验：HTML 引用了 style.css / script.js，但对应代码块为空 → 缺文件。
+     */
+    private boolean isMissingReferencedFiles(MultiFileCodeResult result) {
+        String htmlCode = result.getHtmlCode();
+        if (StrUtil.isBlank(htmlCode)) {
+            return false;
+        }
+        boolean missingCss = StrUtil.isBlank(result.getCssCode()) && htmlCode.contains("style.css");
+        boolean missingJs = StrUtil.isBlank(result.getJsCode()) && htmlCode.contains("script.js");
+        return missingCss || missingJs;
+    }
+
+    private String buildCorrectiveMessage(String originalMessage) {
+        return "你上一次的输出缺少了必需的 CSS 或 JavaScript 代码块（HTML 中引用了 style.css / script.js 但未提供对应代码块）。"
+                + "请重新输出完整的三个代码块：```html、```css、```javascript，每个代码块内放置完整文件内容，不要省略任何一块。\n\n"
+                + "原始需求：\n" + originalMessage;
     }
 
     /**

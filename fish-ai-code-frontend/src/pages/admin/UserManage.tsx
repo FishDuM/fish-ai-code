@@ -11,7 +11,7 @@ const { Title } = Typography;
 
 export default function UserManage() {
   useTitle('用户管理');
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const [users, setUsers] = useState<UserVO[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -89,7 +89,7 @@ export default function UserManage() {
   };
 
   const handleDelete = (user: UserVO) => {
-    Modal.confirm({
+    modal.confirm({
       title: '确认删除',
       content: `确定要删除用户「${user.userName || user.userAccount}」吗？`,
       okText: '删除',

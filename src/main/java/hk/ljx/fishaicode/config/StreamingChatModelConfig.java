@@ -24,7 +24,11 @@ public class StreamingChatModelConfig {
 
     private String modelName;
 
-    private Integer maxTokens;
+    /**
+     * 默认 16384：HTML/MULTI_FILE 代码生成走该模型，输出顺序 HTML→CSS→JS。
+     * 不配置时请求体不带 max_tokens，服务商默认输出上限会把长输出截断，CSS/JS 直接丢失。
+     */
+    private Integer maxTokens = 16384;
 
     private Double temperature;
 

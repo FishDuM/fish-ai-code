@@ -75,7 +75,9 @@ public class WorkflowService {
         List<String> requiredFiles = resolveRequiredFiles(codeGenType);
         List<String> missing = new ArrayList<>();
         for (String fileName : requiredFiles) {
-            if (!FileUtil.exist(Paths.get(dir.getAbsolutePath(), fileName).toString())) {
+            File file = Paths.get(dir.getAbsolutePath(), fileName).toFile();
+            // 0 字节文件视为缺失：AI 漏输出 css/js 时会被建成空文件，仅查 exist 会漏报
+            if (!FileUtil.exist(file) || (file.isFile() && file.length() == 0)) {
                 missing.add(fileName);
             }
         }

@@ -45,6 +45,10 @@ langchain4j:
       base-url: https://api.deepseek.com
       api-key: "你的DeepSeek_API_KEY"
       model-name: deepseek-chat
+      # 重要：必须配置 max-tokens！HTML/MULTI_FILE 代码生成走该模型，
+      # 不配置时请求体不带该字段，服务商默认输出上限会把长输出截断
+      # （输出顺序 HTML→CSS→JS，截断时 CSS/JS 直接丢失，只剩 index.html）
+      max-tokens: 16384
       request-timeout: 120s
       log-requests: true
       log-responses: true

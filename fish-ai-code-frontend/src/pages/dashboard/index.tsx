@@ -13,7 +13,7 @@ const { Title } = Typography;
 export default function Dashboard() {
   useTitle('我的应用');
   const navigate = useNavigate();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const [apps, setApps] = useState<AppVO[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -60,7 +60,7 @@ export default function Dashboard() {
   };
 
   // useCallback 包一下 AppCard 传进来的回调，配合 React.memo 风格的子组件
-  // 可以减少无谓的列表项重渲染。这里主要是为 handleDelete 用（Modal.confirm
+  // 可以减少无谓的列表项重渲染。这里主要是为 handleDelete 用（confirm
   // 闭包里需要稳定引用以便 latest fetchApps 能被取到）。
   const handleEdit = useCallback((app: AppVO) => {
     setEditApp(app);
@@ -85,7 +85,7 @@ export default function Dashboard() {
   };
 
   const handleDelete = useCallback((app: AppVO) => {
-    Modal.confirm({
+    modal.confirm({
       title: '确认删除',
       content: `确定要删除应用「${app.appName || '未命名'}」吗？此操作不可撤销。`,
       okText: '删除',
@@ -101,7 +101,7 @@ export default function Dashboard() {
         }
       },
     });
-  }, [fetchApps, message]);
+  }, [fetchApps, message, modal]);
 
   return (
     <div className="page-surface">
