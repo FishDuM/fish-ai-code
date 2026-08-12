@@ -69,53 +69,18 @@ public class RateLimitAspect {
                 break;
             case USER:
                 // 用户级别：用户ID
-                try {
-                    ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-                    if (attributes != null) {
-                        HttpServletRequest request = attributes.getRequest();
-                        User loginUser = userService.getLoginUser(request);
-                        keyBuilder.append("user:").append(loginUser.getId());
-                    } else {
-                        // 无法获取请求上下文，使用IP限流
-                        keyBuilder.append("ip:").append(getClientIP());
-                    }
-                } catch (BusinessException e) {
-                    // 未登录用户使用IP限流
-                    keyBuilder.append("ip:").append(getClientIP());
+                ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                if (attributes == null) {
+                    throw new BusinessException(ErrorCode.SYSTEM_ERROR, "无法获取请求上下文");
                 }
-                break;
-            case IP:
-                // IP级别：客户端IP
-                keyBuilder.append("ip:").append(getClientIP());
+                HttpServletRequest request = attributes.getRequest();
+                User loginUser = userService.getLoginUser(request);
+                keyBuilder.append("user:").append(loginUser.getId());
                 break;
             default:
                 throw new BusinessException(ErrorCode.SYSTEM_ERROR, "不支持的限流类型");
         }
         return keyBuilder.toString();
-    }
-
-    /**
-     * 获取客户端IP地址
-     * @return 客户端IP地址
-     */
-    private String getClientIP() {
-        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-        if (attributes == null) {
-            return "unknown";
-        }
-        HttpServletRequest request = attributes.getRequest();
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("X-Real-IP");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getRemoteAddr();
-        }
-        // 处理多级代理的情况
-        if (ip != null && ip.contains(",")) {
-            ip = ip.split(",")[0].trim();
-        }
-        return ip != null ? ip : "unknown";
     }
 
 }

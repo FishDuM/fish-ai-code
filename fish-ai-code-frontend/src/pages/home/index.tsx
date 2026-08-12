@@ -5,6 +5,8 @@ import { useNavigate, useSearchParams } from 'react-router';
 import AppCard from '@/components/AppCard';
 import SearchInput from '@/components/SearchInput';
 import { createApp, listFeaturedApps } from '@/api/app';
+import { ApiError } from '@/api/error';
+import { ERROR_CODES } from '@/constants';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useTitle } from '@/hooks/useTitle';
 import logoUrl from '@/assets/logo.png';
@@ -144,7 +146,12 @@ export default function Home() {
       message.success('应用创建成功');
       navigate(`/app/${appId}/chat`, { state: { autoSendInit: true } });
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '创建失败');
+      // 42900 = AI 限流：明确提示稍后再试（失败不跳转）
+      if (err instanceof ApiError && err.code === ERROR_CODES.TOO_MANY_REQUEST) {
+        message.error('AI 请求次数已达上限，请稍后再试');
+      } else {
+        message.error(err instanceof Error ? err.message : '创建失败');
+      }
     } finally {
       setCreating(false);
     }

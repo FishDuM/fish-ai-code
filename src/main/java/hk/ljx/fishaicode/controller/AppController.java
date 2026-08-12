@@ -80,7 +80,8 @@ public class AppController {
      * @return 新应用 id
      */
     @PostMapping("/add")
-    @RateLimit(key = "app", rate = 10, rateInterval = 60, limitType = RateLimitType.USER, message = "当前还在内测阶段，AI服务请求有限制哦~")
+    @AuthCheck
+    @RateLimit(key = "ai", rate = 10, rateInterval = 60, limitType = RateLimitType.USER, message = "AI 服务一分钟内请求次数过多，请稍后重试")
     @CacheEvict(value = "public_good_app_page", allEntries = true)
     public BaseResponse<Long> addApp(@Valid @RequestBody AppAddRequest appAddRequest, HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
@@ -96,6 +97,7 @@ public class AppController {
      * @return 是否更新成功
      */
     @PostMapping("/update")
+    @AuthCheck
     @CacheEvict(value = "public_good_app_page", allEntries = true)
     public BaseResponse<Boolean> updateMyApp(@Valid @RequestBody AppUpdateRequest appUpdateRequest, HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
@@ -111,6 +113,7 @@ public class AppController {
      * @return 是否删除成功
      */
     @PostMapping("/delete")
+    @AuthCheck
     @CacheEvict(value = "public_good_app_page", allEntries = true)
     public BaseResponse<Boolean> deleteMyApp(@Valid @RequestBody DeleteRequest deleteRequest, HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
@@ -147,6 +150,7 @@ public class AppController {
      * @return 分页结果
      */
     @PostMapping("/list/page/vo")
+    @AuthCheck
     public BaseResponse<Page<AppVO>> listMyAppsByPage(@Valid @RequestBody AppQueryRequest appQueryRequest,
                                                       HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
@@ -177,7 +181,8 @@ public class AppController {
      * @return sse流
      */
     @PostMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    @RateLimit(key = "chat", rate = 10, rateInterval = 60, limitType = RateLimitType.USER, message = "当前还在内测阶段，AI服务一分钟内请求次数过多，请稍后重试")
+    @AuthCheck
+    @RateLimit(key = "ai", rate = 10, rateInterval = 60, limitType = RateLimitType.USER, message = "AI 服务一分钟内请求次数过多，请稍后重试")
     public Flux<ServerSentEvent<String>> chatToGenCode(
             @Valid @RequestBody AppChatRequest appChatRequest,
             HttpServletRequest request) {
@@ -273,6 +278,7 @@ public class AppController {
      * @return 部署 URL
      */
     @PostMapping("/deploy")
+    @AuthCheck
     public BaseResponse<String> deployApp(@Valid @RequestBody AppDeployRequest appDeployRequest, HttpServletRequest request) {
         Long appId = appDeployRequest.getAppId();
         User loginUser = userService.getLoginUser(request);
@@ -349,6 +355,7 @@ public class AppController {
      * @param response 响应
      */
     @GetMapping("/download/{appId}")
+    @AuthCheck
     public void downloadAppCode(
             @Min(value = 1, message = "应用 ID 不合法") @PathVariable Long appId,
             HttpServletRequest request,

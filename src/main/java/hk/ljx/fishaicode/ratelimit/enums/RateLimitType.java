@@ -10,10 +10,5 @@ public enum RateLimitType {
     /**
      * 用户级别限流
      */
-    USER,
-
-    /**
-     * IP级别限流
-     */
-    IP
+    USER
 }
