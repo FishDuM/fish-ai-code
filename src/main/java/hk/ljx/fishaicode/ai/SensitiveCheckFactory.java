@@ -2,8 +2,8 @@ package hk.ljx.fishaicode.ai;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.service.AiServices;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
@@ -13,10 +13,14 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class SensitiveCheckFactory {
 
     private final ObjectProvider<ChatModel> routingChatModelPrototype;
+
+    public SensitiveCheckFactory(
+            @Qualifier("routingChatModelPrototype") ObjectProvider<ChatModel> routingChatModelPrototype) {
+        this.routingChatModelPrototype = routingChatModelPrototype;
+    }
 
     /**
      * 创建内容安全审查服务实例

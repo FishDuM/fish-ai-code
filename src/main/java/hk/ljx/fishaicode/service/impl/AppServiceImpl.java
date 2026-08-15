@@ -231,8 +231,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     @Override
     public App getAppWithPermission(Long appId, User loginUser) {
         ThrowUtils.throwIf(loginUser == null, ErrorCode.NOT_LOGIN_ERROR, "用户未登录");
-        App app = this.getById(appId);
-        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        App app = getRequiredApp(appId);
         boolean isOwner = app.getUserId().equals(loginUser.getId());
         boolean isAdmin = UserConstant.ADMIN_ROLE.equals(loginUser.getUserRole());
         ThrowUtils.throwIf(!isOwner && !isAdmin, ErrorCode.NO_AUTH_ERROR, "没有权限访问该应用");
@@ -244,8 +243,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
      */
     @Override
     public App getPublicAppById(Long appId, User loginUser) {
-        App app = this.getById(appId);
-        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        App app = getRequiredApp(appId);
         boolean isOwner = loginUser != null && app.getUserId().equals(loginUser.getId());
         boolean isAdmin = loginUser != null && UserConstant.ADMIN_ROLE.equals(loginUser.getUserRole());
         // 精选应用公开可见；非精选应用保持仅本人/管理员可见
@@ -262,8 +260,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     @Override
     public App getOwnedApp(Long appId, User loginUser) {
         ThrowUtils.throwIf(loginUser == null, ErrorCode.NOT_LOGIN_ERROR, "用户未登录");
-        App app = this.getById(appId);
-        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        App app = getRequiredApp(appId);
         ThrowUtils.throwIf(!app.getUserId().equals(loginUser.getId()), ErrorCode.NO_AUTH_ERROR, "无权限访问该应用");
         return app;
     }
@@ -422,6 +419,12 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
                 getAdminQueryWrapper(adminAppQueryRequest));
     }
 
+    private App getRequiredApp(Long appId) {
+        App app = this.getById(appId);
+        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        return app;
+    }
+
     private QueryWrapper getMyAppQueryWrapper(AppQueryRequest appQueryRequest, long userId) {
         if (appQueryRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "请求参数为空");
@@ -431,10 +434,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         String sortOrder = appQueryRequest.getSortOrder();
         QueryWrapper queryWrapper = QueryWrapper.create()
                 .eq("userId", userId);
-        if (StrUtil.isNotBlank(appName)) {
-            queryWrapper.like("appName", appName);
-        }
-        PageSortUtils.applySort(queryWrapper, sortField, sortOrder, ALLOWED_SORT_FIELDS);
+        applyAppNameAndSort(queryWrapper, appName, sortField, sortOrder);
         return queryWrapper;
     }
 
@@ -448,10 +448,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         // 精选应用：优先级等于 FEATURED_PRIORITY 的应用
         QueryWrapper queryWrapper = QueryWrapper.create()
                 .eq("priority", AppConstant.FEATURED_PRIORITY);
-        if (StrUtil.isNotBlank(appName)) {
-            queryWrapper.like("appName", appName);
-        }
-        PageSortUtils.applySort(queryWrapper, sortField, sortOrder, ALLOWED_SORT_FIELDS);
+        applyAppNameAndSort(queryWrapper, appName, sortField, sortOrder);
         return queryWrapper;
     }
 
@@ -474,12 +471,19 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
                 .eq("priority", priority, priority != null)
                 .eq("userId", userId, userId != null)
                 .eq("codeGenType", codeGenType, StrUtil.isNotBlank(codeGenType))
-                .like("appName", appName, StrUtil.isNotBlank(appName))
                 .like("cover", cover, StrUtil.isNotBlank(cover))
                 .like("initPrompt", initPrompt, StrUtil.isNotBlank(initPrompt))
                 .like("deployKey", deployKey, StrUtil.isNotBlank(deployKey));
-        PageSortUtils.applySort(queryWrapper, sortField, sortOrder, ALLOWED_SORT_FIELDS);
+        applyAppNameAndSort(queryWrapper, appName, sortField, sortOrder);
         return queryWrapper;
+    }
+
+    private void applyAppNameAndSort(QueryWrapper queryWrapper, String appName,
+                                     String sortField, String sortOrder) {
+        if (StrUtil.isNotBlank(appName)) {
+            queryWrapper.like("appName", appName);
+        }
+        PageSortUtils.applySort(queryWrapper, sortField, sortOrder, ALLOWED_SORT_FIELDS);
     }
 
     @Override

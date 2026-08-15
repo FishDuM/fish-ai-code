@@ -2,9 +2,8 @@ package hk.ljx.fishaicode.ai;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.service.AiServices;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
@@ -12,10 +11,14 @@ import org.springframework.context.annotation.Configuration;
  * 动态获取多例的路由 ChatModel 创建命名服务，支持并发
  */
 @Configuration
-@RequiredArgsConstructor
 public class AiAppNameServiceFactory {
 
     private final ObjectProvider<ChatModel> routingChatModelPrototype;
+
+    public AiAppNameServiceFactory(
+            @Qualifier("routingChatModelPrototype") ObjectProvider<ChatModel> routingChatModelPrototype) {
+        this.routingChatModelPrototype = routingChatModelPrototype;
+    }
 
     /**
      * 创建 AI 应用命名服务实例
@@ -28,11 +31,4 @@ public class AiAppNameServiceFactory {
                 .build();
     }
 
-    /**
-     * 默认提供一个 Bean
-     */
-    @Bean
-    public AiAppNameService aiAppNameService() {
-        return createAiAppNameService();
-    }
 }

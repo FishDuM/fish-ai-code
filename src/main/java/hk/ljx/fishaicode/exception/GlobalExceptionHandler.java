@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @Hidden
 @RestControllerAdvice
@@ -43,6 +44,11 @@ public class GlobalExceptionHandler {
                 .map(violation -> violation.getMessage())
                 .orElse("请求参数错误");
         return ResultUtils.error(ErrorCode.PARAMS_ERROR, message);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public BaseResponse<?> methodArgumentTypeMismatchExceptionHandler(MethodArgumentTypeMismatchException e) {
+        return ResultUtils.error(ErrorCode.PARAMS_ERROR, "请求参数格式错误");
     }
 
     @ExceptionHandler(RuntimeException.class)

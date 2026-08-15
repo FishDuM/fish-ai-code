@@ -25,6 +25,7 @@ import hk.ljx.fishaicode.ratelimit.annotation.RateLimit;
 import hk.ljx.fishaicode.ratelimit.enums.RateLimitType;
 import hk.ljx.fishaicode.service.AppService;
 import hk.ljx.fishaicode.service.ProjectDownloadService;
+import hk.ljx.fishaicode.service.PreviewSessionService;
 import hk.ljx.fishaicode.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -66,7 +67,7 @@ public class AppController {
 
     private final GenerationCoordinator generationCoordinator;
 
-    private final PreviewTokenController previewTokenController;
+    private final PreviewSessionService previewSessionService;
 
     /**
      * 创建应用
@@ -233,7 +234,7 @@ public class AppController {
             HttpServletRequest request) {
         User loginUser = userService.getLoginUserOrNull(request);
         App app = appService.getPublicAppById(appId, loginUser);
-        return ResultUtils.success(previewTokenController.createPreviewSession(app.getCodeGenType() + "_" + appId));
+        return ResultUtils.success(previewSessionService.createPreviewSession(app.getCodeGenType() + "_" + appId));
     }
 
     @GetMapping("/preview-source/{appId}")

@@ -354,6 +354,9 @@ public class VueProjectBuilder {
         if (stats.fileCount == 0) {
             throw new IOException("构建产物为空");
         }
+        if (!Files.isRegularFile(outputDir.resolve("index.html"), LinkOption.NOFOLLOW_LINKS)) {
+            throw new IOException("构建产物缺少 index.html");
+        }
     }
 
     private void publishBuildOutput(Path sourceDir, Path outputDir) throws IOException {

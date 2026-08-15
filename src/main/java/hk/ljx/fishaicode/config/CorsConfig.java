@@ -1,6 +1,7 @@
 package hk.ljx.fishaicode.config;
 
 import jakarta.annotation.PostConstruct;
+import hk.ljx.fishaicode.common.OriginUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
@@ -55,12 +56,12 @@ public class CorsConfig implements WebMvcConfigurer {
         }
         log.info("CORS 允许的 Origin 白名单: {}", Arrays.toString(this.allowedOrigins));
 
-        String normalizedPreview = normalized(previewOrigin);
+        String normalizedPreview = OriginUtils.normalize(previewOrigin);
         if (normalizedPreview.isEmpty()) {
             return;
         }
         boolean covered = Arrays.stream(allowedOrigins)
-                .map(CorsConfig::normalized)
+                .map(OriginUtils::normalize)
                 .anyMatch(normalizedPreview::equals);
         if (!covered) {
             throw new IllegalStateException(
@@ -77,15 +78,9 @@ public class CorsConfig implements WebMvcConfigurer {
         }
         return Arrays.stream(raw.split(","))
                 .map(String::trim)
+                .map(OriginUtils::normalize)
                 .filter(StringUtils::hasText)
                 .toList();
-    }
-
-    private static String normalized(String origin) {
-        if (origin == null) {
-            return "";
-        }
-        return origin.replaceAll("/+$", "");
     }
 
     @Override

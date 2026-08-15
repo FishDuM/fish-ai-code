@@ -2,17 +2,21 @@ package hk.ljx.fishaicode.ai;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.service.AiServices;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Configuration;
 
 @Slf4j
 @Configuration
-@RequiredArgsConstructor
 public class AiCodeGenTypeRoutingServiceFactory {
 
     private final ObjectProvider<ChatModel> routingChatModelPrototype;
+
+    public AiCodeGenTypeRoutingServiceFactory(
+            @Qualifier("routingChatModelPrototype") ObjectProvider<ChatModel> routingChatModelPrototype) {
+        this.routingChatModelPrototype = routingChatModelPrototype;
+    }
 
     /**
      * 创建AI代码生成类型路由服务实例

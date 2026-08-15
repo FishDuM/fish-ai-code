@@ -1,10 +1,13 @@
 package hk.ljx.fishaicode.controller;
 
+import hk.ljx.fishaicode.common.OriginUtils;
 import hk.ljx.fishaicode.constant.AppConstant;
 import hk.ljx.fishaicode.exception.BusinessException;
+import hk.ljx.fishaicode.model.entity.App;
 import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
 import hk.ljx.fishaicode.model.entity.User;
 import hk.ljx.fishaicode.service.AppService;
+import hk.ljx.fishaicode.service.PreviewTokenService;
 import hk.ljx.fishaicode.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.io.FileSystemResource;
@@ -35,7 +38,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -62,7 +64,7 @@ public class StaticResourceController {
 
     private final AppService appService;
     private final UserService userService;
-    private final PreviewTokenController previewTokenController;
+    private final PreviewTokenService previewTokenService;
 
     @Value("${app.preview-frame-ancestor:}")
     private String previewFrameAncestor;
@@ -173,7 +175,7 @@ public class StaticResourceController {
                 String firstSegment = rest.contains("/")
                         ? rest.substring(0, rest.indexOf('/'))
                         : rest;
-                if (previewTokenController.verifyPreviewToken(previewKey, firstSegment)) {
+                if (previewTokenService.verify(previewKey, firstSegment)) {
                     pathToken = firstSegment;
                     String afterToken = rest.substring(firstSegment.length());
                     resourcePath = afterToken.isEmpty()
@@ -249,31 +251,28 @@ public class StaticResourceController {
     }
 
     private boolean isValidPreviewKey(String previewKey) {
-        Matcher matcher = previewKey == null ? null : PreviewTokenController.PREVIEW_KEY_PATTERN.matcher(previewKey);
-        return matcher != null && matcher.matches();
+        return previewTokenService.isValidPreviewKey(previewKey);
     }
 
     private boolean isAuthorized(String previewKey, String previewToken, HttpServletRequest request) {
-        if (previewTokenController.verifyPreviewToken(previewKey, previewToken)) {
+        if (previewTokenService.verify(previewKey, previewToken)) {
             return true;
         }
-        Matcher matcher = PreviewTokenController.PREVIEW_KEY_PATTERN.matcher(previewKey);
-        if (!matcher.matches()) {
+        if (!previewTokenService.isValidPreviewKey(previewKey)) {
             return false;
         }
-        Long appId = Long.parseLong(matcher.group(2));
+        long appId = previewTokenService.appIdFromPreviewKey(previewKey);
         User loginUser = userService.getLoginUserOrNull(request);
         try {
-            appService.getPublicAppById(appId, loginUser);
-            return true;
+            App app = appService.getPublicAppById(appId, loginUser);
+            return matchesAppCodeGenType(previewKey, app);
         } catch (BusinessException e) {
             return false;
         }
     }
 
     private boolean canReadProjectSource(String previewKey, HttpServletRequest request) {
-        Matcher matcher = PreviewTokenController.PREVIEW_KEY_PATTERN.matcher(previewKey);
-        if (!matcher.matches()) {
+        if (!previewTokenService.isValidPreviewKey(previewKey)) {
             return false;
         }
         User loginUser = userService.getLoginUserOrNull(request);
@@ -281,11 +280,17 @@ public class StaticResourceController {
             return false;
         }
         try {
-            appService.getAppWithPermission(Long.parseLong(matcher.group(2)), loginUser);
-            return true;
+            App app = appService.getAppWithPermission(previewTokenService.appIdFromPreviewKey(previewKey), loginUser);
+            return matchesAppCodeGenType(previewKey, app);
         } catch (BusinessException e) {
             return false;
         }
+    }
+
+    private boolean matchesAppCodeGenType(String previewKey, App app) {
+        return app != null
+                && app.getCodeGenType() != null
+                && app.getCodeGenType().equals(previewTokenService.codeGenTypeFromPreviewKey(previewKey));
     }
 
     /**
@@ -306,8 +311,9 @@ public class StaticResourceController {
     private ResponseEntity<Resource> buildResponse(Resource resource, String contentType, String previewKey) {
         boolean vueProject = previewKey.startsWith(CodeGenTypeEnum.VUE_PROJECT.getValue() + "_");
         String frameAncestors = "'self'";
-        if (previewFrameAncestor != null && !previewFrameAncestor.isBlank()) {
-            frameAncestors += " " + previewFrameAncestor.trim();
+        String normalizedFrameAncestor = OriginUtils.normalize(previewFrameAncestor);
+        if (!normalizedFrameAncestor.isBlank()) {
+            frameAncestors += " " + normalizedFrameAncestor;
         }
         return ResponseEntity.ok()
                 .header("Content-Type", contentType)

@@ -3,11 +3,17 @@ package hk.ljx.fishaicode.core.builder;
 import hk.ljx.fishaicode.constant.AppConstant;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class VueProjectBuilderTest {
@@ -104,5 +110,24 @@ class VueProjectBuilderTest {
                 .filter(arg -> arg.startsWith("type=bind,src=") && arg.contains("dst=/output,"))
                 .findFirst().orElseThrow();
         assertTrue(outputMount.startsWith("type=bind,src=" + hostRoot.resolve("vue-build-1").resolve("dist") + ","));
+    }
+
+    @Test
+    void validateBuildOutputRejectsOutputWithoutIndexHtml() throws Exception {
+        Path outputDir = Files.createTempDirectory("vue-build-output-");
+        try {
+            Files.writeString(outputDir.resolve("assets.js"), "console.log('asset');");
+            Method validateBuildOutput = VueProjectBuilder.class
+                    .getDeclaredMethod("validateBuildOutput", Path.class);
+            validateBuildOutput.setAccessible(true);
+
+            InvocationTargetException exception = assertThrows(InvocationTargetException.class,
+                    () -> validateBuildOutput.invoke(builder, outputDir));
+
+            assertInstanceOf(IOException.class, exception.getCause());
+        } finally {
+            Files.deleteIfExists(outputDir.resolve("assets.js"));
+            Files.deleteIfExists(outputDir);
+        }
     }
 }

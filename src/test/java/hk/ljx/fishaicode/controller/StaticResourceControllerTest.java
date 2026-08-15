@@ -6,6 +6,7 @@ import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.model.entity.App;
 import hk.ljx.fishaicode.model.entity.User;
 import hk.ljx.fishaicode.service.AppService;
+import hk.ljx.fishaicode.service.PreviewTokenService;
 import hk.ljx.fishaicode.service.UserService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +18,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.servlet.HandlerMapping;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -37,8 +39,8 @@ class StaticResourceControllerTest {
 
     private final AppService appService = mock(AppService.class);
     private final UserService userService = mock(UserService.class);
-    private final PreviewTokenController tokenController = new PreviewTokenController(appService, userService);
-    private final StaticResourceController controller = new StaticResourceController(appService, userService, tokenController);
+    private final PreviewTokenService tokenService = new PreviewTokenService("fish-ai-code-preview-secret-dev");
+    private final StaticResourceController controller = new StaticResourceController(appService, userService, tokenService);
     private final String testId = Long.toString(ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE));
     private final Path outputRoot = Path.of(AppConstant.CODE_OUTPUT_ROOT_DIR);
     private final String htmlPreviewKey = "html_" + testId;
@@ -64,11 +66,10 @@ class StaticResourceControllerTest {
         // 默认：未登录用户访问（精选应用公开可见），权限校验通过
         when(userService.getLoginUserOrNull(any())).thenReturn(null);
         when(appService.getPublicAppById(any(), any()))
-                .thenReturn(App.builder().id(Long.parseLong(testId)).build());
-        // 手动 new 不走 Spring，@Value 不生效：反射注入与默认配置一致的 secret
-        Field secretField = PreviewTokenController.class.getDeclaredField("previewTokenSecret");
-        secretField.setAccessible(true);
-        secretField.set(tokenController, "fish-ai-code-preview-secret-dev");
+                .thenReturn(App.builder()
+                        .id(Long.parseLong(testId))
+                        .codeGenType("html")
+                        .build());
     }
 
     @AfterEach
@@ -98,6 +99,8 @@ class StaticResourceControllerTest {
 
     @Test
     void servesVuePreviewFromDistDirectory() throws Exception {
+        when(appService.getPublicAppById(any(), any()))
+                .thenReturn(App.builder().id(Long.parseLong(testId)).codeGenType("vue_project").build());
         ResponseEntity<Resource> response = serve(vuePreviewKey, "/index.html");
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
@@ -150,12 +153,52 @@ class StaticResourceControllerTest {
     }
 
     @Test
+    void rejectsPreviewKeyWithAppIdOutsideLongRange() {
+        ResponseEntity<Resource> response = serve("html_9223372036854775808", "/index.html");
+
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        assertFalse(response.hasBody());
+    }
+
+    @Test
     void rejectsPrivateAppWithoutPermission() {
         // 非精选应用且非本人/管理员：getPublicAppById 抛 NO_AUTH_ERROR，接口应返回 404（不泄露存在性）
         when(appService.getPublicAppById(any(), any()))
                 .thenThrow(new BusinessException(ErrorCode.NO_AUTH_ERROR, "没有权限访问该应用"));
 
         ResponseEntity<Resource> response = serve(htmlPreviewKey, "/index.html");
+
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        assertFalse(response.hasBody());
+    }
+
+    @Test
+    void rejectsPreviewResourceWithMismatchedCodeGenType() {
+        User loginUser = User.builder().id(Long.parseLong(testId)).build();
+        when(userService.getLoginUserOrNull(any())).thenReturn(loginUser);
+        when(appService.getPublicAppById(any(), any()))
+                .thenReturn(App.builder().id(Long.parseLong(testId)).codeGenType("vue_project").build());
+
+        ResponseEntity<Resource> response = serve(htmlPreviewKey, "/index.html");
+
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        assertFalse(response.hasBody());
+    }
+
+    @Test
+    void rejectsSourceListWithMismatchedCodeGenType() throws Exception {
+        User loginUser = User.builder().id(Long.parseLong(testId)).build();
+        when(userService.getLoginUserOrNull(any())).thenReturn(loginUser);
+        when(appService.getAppWithPermission(any(), any()))
+                .thenReturn(App.builder()
+                        .id(Long.parseLong(testId))
+                        .userId(Long.parseLong(testId))
+                        .codeGenType("vue_project")
+                        .build());
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/static/" + htmlPreviewKey + "/__list__");
+        request.setAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE, "/static/" + htmlPreviewKey + "/__list__");
+
+        ResponseEntity<Object> response = controller.listProjectFiles(htmlPreviewKey, request);
 
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
         assertFalse(response.hasBody());
@@ -266,10 +309,10 @@ class StaticResourceControllerTest {
     @Test
     void verifyRejectsTokenWhenSecretNotConfigured() throws Exception {
         // secret 未配置（置空）时：验签不抛 NPE；无权限场景应返回 404 而非 500
-        Field secretField = PreviewTokenController.class.getDeclaredField("previewTokenSecret");
+        Field secretField = PreviewTokenService.class.getDeclaredField("previewTokenSecret");
         secretField.setAccessible(true);
-        Object original = secretField.get(tokenController);
-        secretField.set(tokenController, "");
+        Object original = secretField.get(tokenService);
+        secretField.set(tokenService, "");
         try {
             // 非精选且非本人：cookie 鉴权也失败 → 应 404（而不是 500 NPE）
             when(appService.getPublicAppById(any(), any()))
@@ -281,13 +324,19 @@ class StaticResourceControllerTest {
 
             assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
         } finally {
-            secretField.set(tokenController, original);
+            secretField.set(tokenService, original);
         }
     }
 
     private String issueTokenForTest(String previewKey, long expiresAt) {
-        // 复用 token controller 的签名逻辑（同 secret 默认值），保证测试与实现一致
-        return tokenController.signPreviewTokenForTest(previewKey, expiresAt);
+        try {
+            Method method = PreviewTokenService.class.getDeclaredMethod(
+                    "createTokenForTest", String.class, long.class);
+            method.setAccessible(true);
+            return (String) method.invoke(tokenService, previewKey, expiresAt);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError("无法构造测试 token", e);
+        }
     }
 
     @Test
@@ -307,7 +356,11 @@ class StaticResourceControllerTest {
             User loginUser = User.builder().id(Long.parseLong(testId)).build();
             when(userService.getLoginUserOrNull(any())).thenReturn(loginUser);
             when(appService.getAppWithPermission(Long.parseLong(testId), loginUser))
-                    .thenReturn(App.builder().id(Long.parseLong(testId)).userId(Long.parseLong(testId)).build());
+                    .thenReturn(App.builder()
+                            .id(Long.parseLong(testId))
+                            .userId(Long.parseLong(testId))
+                            .codeGenType("vue_project")
+                            .build());
             MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/static/" + vuePreviewKey + "/__list__");
             request.setAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE, "/static/" + vuePreviewKey + "/__list__");
 
