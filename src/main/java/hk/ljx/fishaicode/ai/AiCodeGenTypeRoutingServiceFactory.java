@@ -2,20 +2,24 @@ package hk.ljx.fishaicode.ai;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.service.AiServices;
-import hk.ljx.fishaicode.utils.SpringContextUtil;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Configuration;
 
 @Slf4j
 @Configuration
+@RequiredArgsConstructor
 public class AiCodeGenTypeRoutingServiceFactory {
+
+    private final ObjectProvider<ChatModel> routingChatModelPrototype;
 
     /**
      * 创建AI代码生成类型路由服务实例
      */
     public AiCodeGenTypeRoutingService createAiCodeGenTypeRoutingService() {
         // 动态获取多例的路由 ChatModel，支持并发
-        ChatModel chatModel = SpringContextUtil.getBean("routingChatModelPrototype", ChatModel.class);
+        ChatModel chatModel = routingChatModelPrototype.getObject();
         return AiServices.builder(AiCodeGenTypeRoutingService.class)
                 .chatModel(chatModel)
                 .build();

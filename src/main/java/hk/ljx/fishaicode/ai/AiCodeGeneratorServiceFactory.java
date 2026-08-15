@@ -13,9 +13,9 @@ import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
 import hk.ljx.fishaicode.service.ChatHistoryService;
-import hk.ljx.fishaicode.utils.SpringContextUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
@@ -36,6 +36,10 @@ public class AiCodeGeneratorServiceFactory {
     private final ChatHistoryService chatHistoryService;
 
     private final ToolManager toolManager;
+
+    private final ObjectProvider<StreamingChatModel> reasoningStreamingChatModelPrototype;
+
+    private final ObjectProvider<StreamingChatModel> streamingChatModelPrototype;
 
     /**
      * ai 记忆服务
@@ -65,7 +69,7 @@ public class AiCodeGeneratorServiceFactory {
         chatHistoryService.loadChatHistoryToMemory(appId, chatMemory, type, HISTORY_WINDOW_MESSAGES);
         return switch (type) {
             case VUE_PROJECT -> {
-                StreamingChatModel reasoningStreamingChatModel = SpringContextUtil.getBean("reasoningStreamingChatModelPrototype", StreamingChatModel.class);
+                StreamingChatModel reasoningStreamingChatModel = reasoningStreamingChatModelPrototype.getObject();
                 yield AiServices.builder(AiCodeGeneratorService.class)
                         .chatModel(openAiChatModelWrapper.chatModel())
                         .chatMemoryProvider(memoryId -> chatMemory)
@@ -78,7 +82,7 @@ public class AiCodeGeneratorServiceFactory {
                         .build();
             }
             case HTML,MULTI_FILE ->{
-                StreamingChatModel openAiStreamingChatModel = SpringContextUtil.getBean("streamingChatModelPrototype", StreamingChatModel.class);
+                StreamingChatModel openAiStreamingChatModel = streamingChatModelPrototype.getObject();
                 yield AiServices.builder(AiCodeGeneratorService.class)
                         .chatMemory(chatMemory)
                         // 不要加 .chatModel()：它配了 response-format=json_object，
