@@ -13,7 +13,7 @@ import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.model.entity.User;
 import hk.ljx.fishaicode.model.enums.MessageTypeEnum;
 import hk.ljx.fishaicode.service.ChatHistoryService;
-import jakarta.annotation.Resource;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
@@ -27,13 +27,12 @@ import java.util.Set;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class JsonMessageStreamHandler {
 
-    @Resource
-    private VueProjectBuilder vueProjectBuilder;
+    private final VueProjectBuilder vueProjectBuilder;
 
-    @Resource
-    private ToolManager  toolManager;
+    private final ToolManager toolManager;
 
     /**
      * 处理 TokenStream（VUE_PROJECT）

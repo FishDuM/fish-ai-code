@@ -1,7 +1,7 @@
 package hk.ljx.fishaicode.ai.tools;
 
 import jakarta.annotation.PostConstruct;
-import jakarta.annotation.Resource;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -14,6 +14,7 @@ import java.util.Map;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class ToolManager {
 
     /**
@@ -24,8 +25,7 @@ public class ToolManager {
     /**
      * 自动注入所有工具
      */
-    @Resource
-    private BaseTool[] tools;
+    private final BaseTool[] tools;
 
     /**
      * 初始化工具映射

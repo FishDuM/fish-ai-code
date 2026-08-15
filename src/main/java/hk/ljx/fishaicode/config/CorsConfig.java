@@ -27,15 +27,20 @@ import java.util.Set;
 @Configuration
 public class CorsConfig implements WebMvcConfigurer {
 
-    private final String[] allowedOrigins;
-    private final String previewOrigin;
+    @Value("${app.cors-allowed-origins:}")
+    private String allowedOriginsConfig;
 
-    public CorsConfig(
-            @Value("${app.cors-allowed-origins:}") String allowedOrigins,
-            @Value("${app.origin:}") String appOrigin,
-            @Value("${app.preview-origin:}") String previewOrigin) {
-        this.previewOrigin = previewOrigin;
-        List<String> explicit = splitOrigins(allowedOrigins);
+    @Value("${app.origin:}")
+    private String appOrigin;
+
+    @Value("${app.preview-origin:}")
+    private String previewOrigin;
+
+    private String[] allowedOrigins;
+
+    @PostConstruct
+    public void init() {
+        List<String> explicit = splitOrigins(allowedOriginsConfig);
         if (!explicit.isEmpty()) {
             this.allowedOrigins = explicit.toArray(String[]::new);
         } else {
@@ -49,10 +54,7 @@ public class CorsConfig implements WebMvcConfigurer {
             this.allowedOrigins = merged.toArray(String[]::new);
         }
         log.info("CORS 允许的 Origin 白名单: {}", Arrays.toString(this.allowedOrigins));
-    }
 
-    @PostConstruct
-    public void validatePreviewOriginCovered() {
         String normalizedPreview = normalized(previewOrigin);
         if (normalizedPreview.isEmpty()) {
             return;

@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.nio.file.FileSystemException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -73,6 +74,6 @@ class ProjectPathResolverTest {
 
         assertThrows(IllegalArgumentException.class,
                 () -> projectPathResolver.resolveExistingFile(appId, "outside-link.txt"));
-        assertFalse(Files.isRegularFile(link, java.nio.file.LinkOption.NOFOLLOW_LINKS));
+        assertFalse(Files.isRegularFile(link, LinkOption.NOFOLLOW_LINKS));
     }
 }

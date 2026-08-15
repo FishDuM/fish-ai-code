@@ -1,6 +1,7 @@
 package hk.ljx.fishaicode.core.builder;
 
 import hk.ljx.fishaicode.constant.AppConstant;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -31,6 +32,7 @@ import java.util.UUID;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class VueProjectBuilder {
 
     private static final String PROJECT_DIR_PREFIX = "vue_project_";
@@ -39,10 +41,6 @@ public class VueProjectBuilder {
     private static final int PROCESS_STOP_TIMEOUT_SECONDS = 10;
 
     private final VueBuildProperties properties;
-
-    public VueProjectBuilder(VueBuildProperties properties) {
-        this.properties = properties;
-    }
 
     /**
      * 等待 AI 工具将项目文件落盘后构建，返回结果供调用方决定是否结束生成 SSE。

@@ -12,7 +12,7 @@ class AiCodeGeneratorFacadePersistenceTest {
 
     @Test
     void doesNotCompleteWhenGeneratedCodeCannotBePersisted() {
-        AiCodeGeneratorFacade facade = new AiCodeGeneratorFacade();
+        AiCodeGeneratorFacade facade = new AiCodeGeneratorFacade(null);
 
         BusinessException exception = assertThrows(BusinessException.class,
                 () -> facade.processCodeStream(Flux.empty(), CodeGenTypeEnum.HTML, 1L)

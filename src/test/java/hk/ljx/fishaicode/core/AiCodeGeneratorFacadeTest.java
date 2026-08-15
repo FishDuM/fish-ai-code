@@ -1,7 +1,7 @@
 package hk.ljx.fishaicode.core;
 
 import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
-import jakarta.annotation.Resource;
+import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -17,10 +17,10 @@ import static org.junit.jupiter.api.Assertions.*;
 @EnabledIfEnvironmentVariable(named = "DEEPSEEK_API_KEY", matches = ".+")
 @SpringBootTest
 @ActiveProfiles("test")
+@RequiredArgsConstructor
 class AiCodeGeneratorFacadeTest {
 
-    @Resource
-    private AiCodeGeneratorFacade aiCodeGeneratorFacade;
+    private final AiCodeGeneratorFacade aiCodeGeneratorFacade;
 
     @Test
     void generateAndSaveCodeStream() {

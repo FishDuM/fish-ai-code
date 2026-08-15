@@ -16,7 +16,7 @@ import hk.ljx.fishaicode.core.saver.CodeFileSaverExecutor;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
-import jakarta.annotation.Resource;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -26,13 +26,13 @@ import java.io.File;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class AiCodeGeneratorFacade {
 
     /** MULTI_FILE 生成最多尝试次数：模型偶发只输出 HTML 代码块导致 css/js 为空，重试一次纠正。 */
     private static final int MULTI_FILE_MAX_ATTEMPTS = 2;
 
-    @Resource
-    private AiCodeGeneratorServiceFactory aiCodeGeneratorServiceFactory;
+    private final AiCodeGeneratorServiceFactory aiCodeGeneratorServiceFactory;
 
     /**
      * 通用流式代码处理方法

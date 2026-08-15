@@ -3,7 +3,7 @@ package hk.ljx.fishaicode;
 import hk.ljx.fishaicode.workflow.model.enums.ImageCategoryEnum;
 import hk.ljx.fishaicode.workflow.model.ImageResource;
 import hk.ljx.fishaicode.workflow.tools.ImageSearchTool;
-import jakarta.annotation.Resource;
+import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -17,10 +17,10 @@ import static org.junit.jupiter.api.Assertions.*;
 @EnabledIfEnvironmentVariable(named = "PEXELS_API_KEY", matches = ".+")
 @SpringBootTest
 @ActiveProfiles("test")
+@RequiredArgsConstructor
 class ImageSearchToolTest {
 
-    @Resource
-    private ImageSearchTool imageSearchTool;
+    private final ImageSearchTool imageSearchTool;
 
     @Test
     void testSearchContentImages() {

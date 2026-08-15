@@ -4,7 +4,7 @@ import cn.hutool.json.JSONObject;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.agent.tool.ToolMemoryId;
-import jakarta.annotation.Resource;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -18,12 +18,12 @@ import java.nio.file.Path;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class FileReadTool extends BaseTool{
 
     private static final long MAX_FILE_SIZE_BYTES = 1024 * 1024;
 
-    @Resource
-    private ProjectPathResolver projectPathResolver;
+    private final ProjectPathResolver projectPathResolver;
 
     @Tool("读取指定路径的文件内容")
     public String readFile(

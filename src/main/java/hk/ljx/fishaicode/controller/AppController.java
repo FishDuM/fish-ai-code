@@ -26,8 +26,8 @@ import hk.ljx.fishaicode.ratelimit.enums.RateLimitType;
 import hk.ljx.fishaicode.service.AppService;
 import hk.ljx.fishaicode.service.ProjectDownloadService;
 import hk.ljx.fishaicode.service.UserService;
-import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
@@ -55,22 +55,18 @@ import java.util.Map;
 @RestController
 @RequestMapping("/app")
 @Validated
+@RequiredArgsConstructor
 public class AppController {
 
-    @Resource
-    private AppService appService;
+    private final AppService appService;
 
-    @Resource
-    private UserService userService;
+    private final UserService userService;
 
-    @Resource
-    private ProjectDownloadService projectDownloadService;
+    private final ProjectDownloadService projectDownloadService;
 
-    @Resource
-    private GenerationCoordinator generationCoordinator;
+    private final GenerationCoordinator generationCoordinator;
 
-    @Resource
-    private PreviewTokenController previewTokenController;
+    private final PreviewTokenController previewTokenController;
 
     /**
      * 创建应用

@@ -12,8 +12,8 @@ import hk.ljx.fishaicode.exception.ThrowUtils;
 import hk.ljx.fishaicode.model.dto.user.*;
 import hk.ljx.fishaicode.model.vo.LoginUserVO;
 import hk.ljx.fishaicode.model.vo.UserVO;
-import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import org.springframework.validation.annotation.Validated;
@@ -33,10 +33,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/user")
 @Validated
+@RequiredArgsConstructor
 public class UserController {
 
-    @Resource
-    private UserService userService;
+    private final UserService userService;
 
     /**
      * 用户注册

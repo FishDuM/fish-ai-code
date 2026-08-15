@@ -5,7 +5,6 @@ import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
-import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.service.AiServices;
 import hk.ljx.fishaicode.ai.guardrail.PromptSafetyInputGuardrail;
@@ -15,12 +14,13 @@ import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
 import hk.ljx.fishaicode.service.ChatHistoryService;
 import hk.ljx.fishaicode.utils.SpringContextUtil;
-import jakarta.annotation.Resource;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
 @Slf4j
+@RequiredArgsConstructor
 public class AiCodeGeneratorServiceFactory {
 
     /** 最近一轮已完成对话：1 个用户消息 + 1 个 AI 消息。 */
@@ -29,17 +29,13 @@ public class AiCodeGeneratorServiceFactory {
     /** 初始需求长期保留，但不能无限挤占模型上下文。 */
     private static final int INITIAL_PROMPT_MAX_CHARS = 2_000;
 
-    @Resource(name = "openAiChatModel")
-    private ChatModel chatModel;
+    private final OpenAiChatModelWrapper openAiChatModelWrapper;
 
-    @Resource
-    private RedisChatMemoryStore redisChatMemoryStore;
+    private final RedisChatMemoryStore redisChatMemoryStore;
 
-    @Resource
-    private ChatHistoryService chatHistoryService;
+    private final ChatHistoryService chatHistoryService;
 
-    @Resource
-    private ToolManager toolManager;
+    private final ToolManager toolManager;
 
     /**
      * ai 记忆服务
@@ -71,7 +67,7 @@ public class AiCodeGeneratorServiceFactory {
             case VUE_PROJECT -> {
                 StreamingChatModel reasoningStreamingChatModel = SpringContextUtil.getBean("reasoningStreamingChatModelPrototype", StreamingChatModel.class);
                 yield AiServices.builder(AiCodeGeneratorService.class)
-                        .chatModel(chatModel)
+                        .chatModel(openAiChatModelWrapper.chatModel())
                         .chatMemoryProvider(memoryId -> chatMemory)
                         .streamingChatModel(reasoningStreamingChatModel)
                         .tools(toolManager.getAllTools())

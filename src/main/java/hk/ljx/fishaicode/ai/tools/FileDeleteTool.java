@@ -4,7 +4,7 @@ import cn.hutool.json.JSONObject;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.agent.tool.ToolMemoryId;
-import jakarta.annotation.Resource;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -18,10 +18,10 @@ import java.nio.file.Path;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class FileDeleteTool extends BaseTool {
 
-    @Resource
-    private ProjectPathResolver projectPathResolver;
+    private final ProjectPathResolver projectPathResolver;
 
     @Tool("删除指定路径的文件")
     public String deleteFile(

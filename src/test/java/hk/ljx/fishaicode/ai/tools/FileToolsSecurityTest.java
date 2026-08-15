@@ -5,12 +5,12 @@ import cn.hutool.json.JSONUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -20,11 +20,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class FileToolsSecurityTest {
 
     private final ProjectPathResolver projectPathResolver = new ProjectPathResolver();
-    private final FileReadTool fileReadTool = new FileReadTool();
-    private final FileWriteTool fileWriteTool = new FileWriteTool();
-    private final FileModifyTool fileModifyTool = new FileModifyTool();
-    private final FileDeleteTool fileDeleteTool = new FileDeleteTool();
-    private final FileDirReadTool fileDirReadTool = new FileDirReadTool();
+    private final FileReadTool fileReadTool = new FileReadTool(projectPathResolver);
+    private final FileWriteTool fileWriteTool = new FileWriteTool(projectPathResolver);
+    private final FileModifyTool fileModifyTool = new FileModifyTool(projectPathResolver);
+    private final FileDeleteTool fileDeleteTool = new FileDeleteTool(projectPathResolver);
+    private final FileDirReadTool fileDirReadTool = new FileDirReadTool(projectPathResolver);
     private final long appId = ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE);
     private final Path outputRoot = Path.of(AppConstant.CODE_OUTPUT_ROOT_DIR);
     private Path projectRoot;
@@ -36,9 +36,6 @@ class FileToolsSecurityTest {
         outsideFile = outputRoot.resolve("outside_" + appId + ".txt");
         Files.createDirectories(projectRoot);
         Files.writeString(outsideFile, "outside");
-        for (Object tool : new Object[]{fileReadTool, fileWriteTool, fileModifyTool, fileDeleteTool, fileDirReadTool}) {
-            ReflectionTestUtils.setField(tool, "projectPathResolver", projectPathResolver);
-        }
     }
 
     @AfterEach
@@ -78,11 +75,11 @@ class FileToolsSecurityTest {
     @Test
     void toolHistorySummariesDoNotContainSourceCode() {
         String source = "<template><main>secret source</main></template>";
-        String writeSummary = fileWriteTool.generateToolExecutedResult(JSONUtil.parseObj(java.util.Map.of(
+        String writeSummary = fileWriteTool.generateToolExecutedResult(JSONUtil.parseObj(Map.of(
                 "relativeFilePath", "src/App.vue",
                 "content", source
         )));
-        String modifySummary = fileModifyTool.generateToolExecutedResult(JSONUtil.parseObj(java.util.Map.of(
+        String modifySummary = fileModifyTool.generateToolExecutedResult(JSONUtil.parseObj(Map.of(
                 "relativeFilePath", "src/App.vue",
                 "oldContent", source,
                 "newContent", "<template>updated</template>"

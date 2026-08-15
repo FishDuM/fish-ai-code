@@ -8,6 +8,7 @@ import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.model.vo.CaptchaVO;
 import hk.ljx.fishaicode.service.CaptchaService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -22,13 +23,10 @@ import static hk.ljx.fishaicode.constant.UserConstant.CAPTCHA_KEY_PREFIX;
  * @author fish
  */
 @Service
+@RequiredArgsConstructor
 public class CaptchaServiceImpl implements CaptchaService {
 
     private final StringRedisTemplate stringRedisTemplate;
-
-    public CaptchaServiceImpl(StringRedisTemplate stringRedisTemplate) {
-        this.stringRedisTemplate = stringRedisTemplate;
-    }
 
     @Override
     public CaptchaVO generateCaptcha() {

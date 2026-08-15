@@ -12,8 +12,8 @@ import hk.ljx.fishaicode.model.entity.User;
 import hk.ljx.fishaicode.service.AppService;
 import hk.ljx.fishaicode.service.ChatHistoryService;
 import hk.ljx.fishaicode.service.UserService;
-import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -32,16 +32,14 @@ import java.util.List;
 @RestController
 @RequestMapping("/chatHistory")
 @Validated
+@RequiredArgsConstructor
 public class ChatHistoryController {
 
-    @Resource
-    private ChatHistoryService chatHistoryService;
+    private final ChatHistoryService chatHistoryService;
 
-    @Resource
-    private AppService appService;
+    private final AppService appService;
 
-    @Resource
-    private UserService userService;
+    private final UserService userService;
 
     /**
      * 查询某个应用最新对话历史（进入聊天页面时调用）

@@ -9,7 +9,7 @@ import hk.ljx.fishaicode.workflow.model.ImageResource;
 import hk.ljx.fishaicode.workflow.model.QualityResult;
 import hk.ljx.fishaicode.workflow.tools.ImageSearchTool;
 import hk.ljx.fishaicode.workflow.tools.UndrawIllustrationTool;
-import jakarta.annotation.Resource;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +18,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 
 /**
  * 代码生成工作流服务 - 串联图片收集 → 提示词增强 → 产物完整性校验 → 项目构建
@@ -25,19 +26,16 @@ import java.util.concurrent.CompletableFuture;
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class WorkflowService {
 
-    @Resource
-    private ImageCollectionPlanService imageCollectionPlanService;
+    private final ImageCollectionPlanService imageCollectionPlanService;
 
-    @Resource
-    private ImageSearchTool imageSearchTool;
+    private final ImageSearchTool imageSearchTool;
 
-    @Resource
-    private UndrawIllustrationTool undrawIllustrationTool;
+    private final UndrawIllustrationTool undrawIllustrationTool;
 
-    @Resource(name = "virtualThreadExecutor")
-    private java.util.concurrent.ExecutorService virtualThreadExecutor;
+    private final ExecutorService virtualThreadExecutor;
 
     /**
      * 增强提示词：图片收集 + 提示词增强

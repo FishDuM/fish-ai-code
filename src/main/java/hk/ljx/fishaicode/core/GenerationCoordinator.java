@@ -2,6 +2,7 @@ package hk.ljx.fishaicode.core;
 
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
@@ -15,15 +16,12 @@ import java.util.function.Supplier;
 /** 同一应用的生成任务串行执行，锁在模型流结束后释放。 */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class GenerationCoordinator {
 
     private static final String LOCK_KEY_PREFIX = "app:generation:";
 
     private final RedissonClient redissonClient;
-
-    public GenerationCoordinator(RedissonClient redissonClient) {
-        this.redissonClient = redissonClient;
-    }
 
     /**
      * 获取应用级锁后开始生成。重复请求不会加入队列，而是立即失败，避免旧请求覆盖新请求。

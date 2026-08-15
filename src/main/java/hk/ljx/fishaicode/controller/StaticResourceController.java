@@ -20,11 +20,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.HandlerMapping;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -44,6 +46,7 @@ import java.util.stream.Stream;
 @Slf4j
 @RestController
 @RequestMapping("/static")
+@RequiredArgsConstructor
 public class StaticResourceController {
 
     /** 源码清单忽略的目录与文件扩展名（与前端 vite 插件保持一致） */
@@ -66,13 +69,6 @@ public class StaticResourceController {
 
     @Value("${app.preview-connect-src:'self'}")
     private String previewConnectSrc;
-
-    public StaticResourceController(AppService appService, UserService userService,
-                                    PreviewTokenController previewTokenController) {
-        this.appService = appService;
-        this.userService = userService;
-        this.previewTokenController = previewTokenController;
-    }
 
     /**
      * 返回 Vue 项目源码文件清单（供前端"代码"tab 文件树使用）。
@@ -243,7 +239,7 @@ public class StaticResourceController {
                         "text/html; charset=UTF-8", previewKey);
             }
             return buildResponse(resource, getContentTypeWithCharset(realTargetPath.toString()), previewKey);
-        } catch (java.nio.file.NoSuchFileException e) {
+        } catch (NoSuchFileException e) {
             // 预览目录或文件不存在（应用未生成/已删除/未构建）：语义是 404，不是服务错误
             return ResponseEntity.notFound().build();
         } catch (Exception e) {

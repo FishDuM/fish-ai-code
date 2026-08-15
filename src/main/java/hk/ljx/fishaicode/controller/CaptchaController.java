@@ -4,7 +4,7 @@ import hk.ljx.fishaicode.common.BaseResponse;
 import hk.ljx.fishaicode.common.ResultUtils;
 import hk.ljx.fishaicode.model.vo.CaptchaVO;
 import hk.ljx.fishaicode.service.CaptchaService;
-import jakarta.annotation.Resource;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -16,10 +16,10 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/captcha")
+@RequiredArgsConstructor
 public class CaptchaController {
 
-    @Resource
-    private CaptchaService captchaService;
+    private final CaptchaService captchaService;
 
     /**
      * 生成验证码（答案存入 Redis，登录/注册时携带 captchaId + captchaCode 校验；

@@ -5,7 +5,7 @@ import cn.hutool.json.JSONObject;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.agent.tool.ToolMemoryId;
-import jakarta.annotation.Resource;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -26,14 +26,14 @@ import java.util.Set;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class FileDirReadTool extends BaseTool {
 
     private static final int MAX_DEPTH = 8;
     private static final int MAX_FILE_COUNT = 500;
     private static final int MAX_OUTPUT_LENGTH = 40_000;
 
-    @Resource
-    private ProjectPathResolver projectPathResolver;
+    private final ProjectPathResolver projectPathResolver;
 
     /**
      * 需要忽略的文件和目录

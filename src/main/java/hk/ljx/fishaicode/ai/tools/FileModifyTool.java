@@ -4,7 +4,7 @@ import cn.hutool.json.JSONObject;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.agent.tool.ToolMemoryId;
-import jakarta.annotation.Resource;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -20,12 +20,12 @@ import java.nio.charset.StandardCharsets;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class FileModifyTool extends BaseTool {
 
     private static final long MAX_FILE_SIZE_BYTES = 1024 * 1024;
 
-    @Resource
-    private ProjectPathResolver projectPathResolver;
+    private final ProjectPathResolver projectPathResolver;
 
     @Tool("修改文件内容，用新内容替换指定的旧内容")
     public String modifyFile(

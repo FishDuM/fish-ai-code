@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
-import jakarta.annotation.Resource;
+import lombok.RequiredArgsConstructor;
 import java.util.List;
 import java.util.UUID;
 
@@ -14,10 +14,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @SpringBootTest
 @ActiveProfiles("test")
+@RequiredArgsConstructor
 class RedisChatMemoryStoreConfigTest {
 
-    @Resource
-    private RedisChatMemoryStore redisChatMemoryStore;
+    private final RedisChatMemoryStore redisChatMemoryStore;
 
     @Test
     void authenticatesWithRedisAndPersistsChatMemory() {

@@ -37,12 +37,15 @@ import hk.ljx.fishaicode.ai.SensitiveCheckFactory;
 import hk.ljx.fishaicode.workflow.service.WorkflowService;
 import hk.ljx.fishaicode.service.AppService;
 import hk.ljx.fishaicode.service.ChatHistoryService;
-import jakarta.annotation.Resource;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 import reactor.core.publisher.Flux;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.Files;
@@ -51,6 +54,7 @@ import java.nio.file.attribute.PosixFilePermissions;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
@@ -62,50 +66,38 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppService {
 
-    @Resource
-    private AppDeployProperties appDeployProperties;
+    private final AppDeployProperties appDeployProperties;
 
-    private static final java.util.Set<String> ALLOWED_SORT_FIELDS = java.util.Set.of(
+    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
             "id", "appName", "priority", "userId", "createTime", "updateTime", "editTime"
     );
 
-    @Resource
-    private AiCodeGeneratorFacade aiCodeGeneratorFacade;
+    private final AiCodeGeneratorFacade aiCodeGeneratorFacade;
 
-    @Resource
-    private ChatHistoryService chatHistoryService;
+    private final ChatHistoryService chatHistoryService;
 
-    @Resource
-    private StreamHandlerExecutor streamHandlerExecutor;
+    private final StreamHandlerExecutor streamHandlerExecutor;
 
-    @Resource
-    private VueProjectBuilder vueProjectBuilder;
+    private final VueProjectBuilder vueProjectBuilder;
 
-    @Resource
-    private AiCodeGenTypeRoutingServiceFactory aiCodeGenTypeRoutingServiceFactory;
+    private final AiCodeGenTypeRoutingServiceFactory aiCodeGenTypeRoutingServiceFactory;
 
-    @Resource
-    private AiAppNameServiceFactory aiAppNameServiceFactory;
+    private final AiAppNameServiceFactory aiAppNameServiceFactory;
 
-    @Resource
-    private SensitiveCheckFactory sensitiveCheckFactory;
+    private final SensitiveCheckFactory sensitiveCheckFactory;
 
-    @Resource
-    private WorkflowService workflowService;
+    private final WorkflowService workflowService;
 
-    @Resource
-    private GenerationCoordinator generationCoordinator;
+    private final GenerationCoordinator generationCoordinator;
 
-    @Resource(name = "virtualThreadExecutor")
-    private ExecutorService virtualThreadExecutor;
+    private final ExecutorService virtualThreadExecutor;
 
-    @Resource
-    private RedisChatMemoryStore redisChatMemoryStore;
+    private final RedisChatMemoryStore redisChatMemoryStore;
 
-    @Resource
-    private org.springframework.transaction.support.TransactionTemplate transactionTemplate;
+    private final TransactionTemplate transactionTemplate;
 
 
     @Override
@@ -115,12 +107,6 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "请求参数为空");
         }
         String initPrompt = appAddRequest.getInitPrompt();
-        if (StrUtil.isBlank(initPrompt)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "应用初始化 prompt 不能为空");
-        }
-        if (initPrompt.length() > 10000) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "初始化 prompt 过长");
-        }
         // 前置 AI 调用并行化：敏感审查、应用名生成、类型路由互不依赖，
         // 用虚拟线程并发执行（都是短输出任务，max-tokens:100 限长后单次 ~2s）。
         // 敏感审查是硬门槛——失败必须提前中断，不等待其余两个。
@@ -195,14 +181,6 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     @Override
     public boolean updateMyApp(Long id, String appName, User loginUser) {
-        // 1. 校验
-        if (id == null || id <= 0) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR);
-        }
-        if (StrUtil.isBlank(appName)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "应用名称不能为空");
-        }
-        // 2. 检查应用是否存在
         App oldApp = this.getById(id);
         if (oldApp == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
@@ -224,14 +202,6 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     @Override
     public boolean adminUpdateApp(Long id, String appName, String cover, Integer priority) {
-        // 1. 校验
-        if (id == null || id <= 0) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR);
-        }
-        if (appName != null && StrUtil.isBlank(appName)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "应用名称不能为空");
-        }
-        // 2. 检查应用是否存在
         App oldApp = this.getById(id);
         if (oldApp == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
@@ -260,7 +230,6 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
      */
     @Override
     public App getAppWithPermission(Long appId, User loginUser) {
-        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不合法");
         ThrowUtils.throwIf(loginUser == null, ErrorCode.NOT_LOGIN_ERROR, "用户未登录");
         App app = this.getById(appId);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
@@ -275,7 +244,6 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
      */
     @Override
     public App getPublicAppById(Long appId, User loginUser) {
-        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不合法");
         App app = this.getById(appId);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
         boolean isOwner = loginUser != null && app.getUserId().equals(loginUser.getId());
@@ -293,7 +261,6 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
      */
     @Override
     public App getOwnedApp(Long appId, User loginUser) {
-        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不合法");
         ThrowUtils.throwIf(loginUser == null, ErrorCode.NOT_LOGIN_ERROR, "用户未登录");
         App app = this.getById(appId);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
@@ -310,11 +277,6 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
      */
     @Override
     public boolean deleteMyApp(long id, User loginUser) {
-        // 1. 校验
-        if (id <= 0) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR);
-        }
-        // 2. 检查应用是否存在
         App oldApp = this.getById(id);
         if (oldApp == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
@@ -338,10 +300,6 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
      */
     @Override
     public boolean adminDeleteApp(long id) {
-        // 1. 校验
-        if (id <= 0) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR);
-        }
         App app = this.getById(id);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
         // 2. 锁内删除：正在生成/部署时立即失败，避免磁盘清理与写文件竞争
@@ -562,10 +520,6 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     @Override
     public Flux<String>  chatToGenCode(Long appId, String message, User loginUser) {
-        // 1、校验参数
-        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
-        ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "用户消息不能为空");
-        // 2、获取应用信息
         App app = this.getById(appId);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
         // 3、权限校验：仅应用主人或管理员可以对话（编辑权限）
@@ -636,8 +590,6 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
      */
     @Override
     public String deployApp(Long appId, User loginUser) {
-        // 1、参数校验
-        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用ID不能为空");
         ThrowUtils.throwIf(loginUser == null, ErrorCode.NOT_LOGIN_ERROR, "用户未登录");
         return generationCoordinator.executeExclusively(appId, () -> deployAppWithProjectLock(appId, loginUser));
     }
@@ -701,7 +653,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         return String.format("%s/%s/", deployBase, deployKey);
     }
 
-    private void publishDeployFiles(File sourceDir, String deployKey) throws java.io.IOException {
+    private void publishDeployFiles(File sourceDir, String deployKey) throws IOException {
         Path deployRoot = Paths.get(AppConstant.CODE_DEPLOY_ROOT_DIR).toAbsolutePath().normalize();
         Files.createDirectories(deployRoot);
         Path targetDir = deployRoot.resolve(deployKey).normalize();
@@ -732,10 +684,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
                     e.addSuppressed(restoreError);
                 }
             }
-            if (e instanceof java.io.IOException ioException) {
+            if (e instanceof IOException ioException) {
                 throw ioException;
             }
-            throw new java.io.IOException("发布部署文件失败", e);
+            throw new IOException("发布部署文件失败", e);
         } finally {
             if (tempDir != null) {
                 FileUtil.del(tempDir.toFile());
@@ -743,10 +695,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         }
     }
 
-    private void moveDirectory(Path source, Path target) throws java.io.IOException {
+    private void moveDirectory(Path source, Path target) throws IOException {
         try {
             Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
-        } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+        } catch (AtomicMoveNotSupportedException e) {
             Files.move(source, target);
         }
     }

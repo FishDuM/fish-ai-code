@@ -21,15 +21,16 @@ import hk.ljx.fishaicode.model.vo.LoginUserVO;
 import hk.ljx.fishaicode.model.vo.UserVO;
 import hk.ljx.fishaicode.service.CaptchaService;
 import hk.ljx.fishaicode.service.UserService;
-import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static hk.ljx.fishaicode.constant.UserConstant.USER_LOGIN_STATE;
@@ -40,33 +41,23 @@ import static hk.ljx.fishaicode.constant.UserConstant.USER_LOGIN_STATE;
  * @author fish
  */
 @Service
+@RequiredArgsConstructor
 public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements UserService{
 
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
-    @Resource
-    private CaptchaService captchaService;
+    private final CaptchaService captchaService;
 
-    private static final java.util.Set<String> ALLOWED_SORT_FIELDS = java.util.Set.of(
+    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
             "id", "userAccount", "userName", "userRole", "createTime", "updateTime", "editTime"
     );
 
     @Override
     public long userRegister(String userAccount, String userPassword, String checkPassword, String captchaId, String captchaCode, HttpServletRequest request) {
-        // 1. 校验
-        if (StrUtil.hasBlank(userAccount, userPassword, checkPassword)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数为空");
-        }
-        if (userAccount.length() < 4) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户账号过短");
-        }
-        if (userPassword.length() < 8 || checkPassword.length() < 8) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户密码过短");
-        }
         if (!userPassword.equals(checkPassword)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "两次输入的密码不一致");
         }
-        // 1.1 校验验证码（5 分钟内可重复使用，过期前不失效）
+        // 1. 校验验证码（5 分钟内可重复使用，过期前不失效）
         captchaService.verifyCaptcha(captchaId, captchaCode);
         // 2. 检查是否重复
         QueryWrapper queryWrapper = new QueryWrapper();
@@ -96,8 +87,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
         // 1. 校验
         ThrowUtils.throwIf(userAddRequest == null, ErrorCode.PARAMS_ERROR, "请求参数为空");
         String userAccount = userAddRequest.getUserAccount();
-        ThrowUtils.throwIf(StrUtil.isBlank(userAccount) || userAccount.length() < 4,
-                ErrorCode.PARAMS_ERROR, "用户账号过短");
         String userRole = userAddRequest.getUserRole();
         if (StrUtil.isNotBlank(userRole)) {
             ThrowUtils.throwIf(UserRoleEnum.getEnumByValue(userRole) == null,
@@ -142,17 +131,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
 
     @Override
     public LoginUserVO userLogin(String userAccount, String userPassword, String captchaId, String captchaCode, HttpServletRequest request) {
-        // 1. 校验
-        if (StrUtil.hasBlank(userAccount, userPassword)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数为空");
-        }
-        if (userAccount.length() < 4) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "账号错误");
-        }
-        if (userPassword.length() < 8) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "密码错误");
-        }
-        // 1.1 校验验证码（5 分钟内可重复使用，过期前不失效）
         captchaService.verifyCaptcha(captchaId, captchaCode);
         // 2. 查询用户
         QueryWrapper queryWrapper = new QueryWrapper();

@@ -16,9 +16,15 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.servlet.HandlerMapping;
 
+import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -60,7 +66,7 @@ class StaticResourceControllerTest {
         when(appService.getPublicAppById(any(), any()))
                 .thenReturn(App.builder().id(Long.parseLong(testId)).build());
         // 手动 new 不走 Spring，@Value 不生效：反射注入与默认配置一致的 secret
-        java.lang.reflect.Field secretField = PreviewTokenController.class.getDeclaredField("previewTokenSecret");
+        Field secretField = PreviewTokenController.class.getDeclaredField("previewTokenSecret");
         secretField.setAccessible(true);
         secretField.set(tokenController, "fish-ai-code-preview-secret-dev");
     }
@@ -82,7 +88,7 @@ class StaticResourceControllerTest {
         ResponseEntity<Resource> response = serve(htmlPreviewKey, "/assets/app.js");
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertEquals("console.log('preview');", response.getBody().getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
+        assertEquals("console.log('preview');", response.getBody().getContentAsString(StandardCharsets.UTF_8));
         assertEquals("default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https:; "
                         + "img-src 'self' https: data: blob:; font-src 'self' data: https:; connect-src 'self'; "
                         + "media-src 'self'; object-src 'none'; worker-src 'none'; base-uri 'none'; "
@@ -95,7 +101,7 @@ class StaticResourceControllerTest {
         ResponseEntity<Resource> response = serve(vuePreviewKey, "/index.html");
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertEquals("<h1>vue preview</h1>", response.getBody().getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
+        assertEquals("<h1>vue preview</h1>", response.getBody().getContentAsString(StandardCharsets.UTF_8));
         assertEquals("default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https:; "
                         + "img-src 'self' https: data: blob:; font-src 'self' data: https:; connect-src 'self'; "
                         + "media-src 'self'; object-src 'none'; worker-src 'none'; base-uri 'none'; "
@@ -105,7 +111,7 @@ class StaticResourceControllerTest {
 
     @Test
     void usesConfiguredPreviewConnectWhitelist() throws Exception {
-        java.lang.reflect.Field connectSrcField = StaticResourceController.class.getDeclaredField("previewConnectSrc");
+        Field connectSrcField = StaticResourceController.class.getDeclaredField("previewConnectSrc");
         connectSrcField.setAccessible(true);
         connectSrcField.set(controller, "'self' https://api.example.com http://localhost:3001");
 
@@ -117,7 +123,7 @@ class StaticResourceControllerTest {
 
     @Test
     void rejectsBroadPreviewConnectWhitelist() throws Exception {
-        java.lang.reflect.Field connectSrcField = StaticResourceController.class.getDeclaredField("previewConnectSrc");
+        Field connectSrcField = StaticResourceController.class.getDeclaredField("previewConnectSrc");
         connectSrcField.setAccessible(true);
         connectSrcField.set(controller, "'self' https:");
 
@@ -177,7 +183,7 @@ class StaticResourceControllerTest {
         ResponseEntity<Resource> response = serve(htmlPreviewKey, "/index.html", token);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertEquals("<h1>preview</h1>", response.getBody().getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
+        assertEquals("<h1>preview</h1>", response.getBody().getContentAsString(StandardCharsets.UTF_8));
     }
 
     @Test
@@ -234,7 +240,7 @@ class StaticResourceControllerTest {
 
             assertEquals(HttpStatus.OK, response.getStatusCode());
             assertEquals("console.log('vue app')",
-                    response.getBody().getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
+                    response.getBody().getContentAsString(StandardCharsets.UTF_8));
         } finally {
             Files.deleteIfExists(vuePreviewRoot.resolve("dist").resolve("assets").resolve("app.js"));
             Files.deleteIfExists(vuePreviewRoot.resolve("dist").resolve("assets"));
@@ -254,13 +260,13 @@ class StaticResourceControllerTest {
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals("<h1>vue preview</h1>",
-                response.getBody().getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
+                response.getBody().getContentAsString(StandardCharsets.UTF_8));
     }
 
     @Test
     void verifyRejectsTokenWhenSecretNotConfigured() throws Exception {
         // secret 未配置（置空）时：验签不抛 NPE；无权限场景应返回 404 而非 500
-        java.lang.reflect.Field secretField = PreviewTokenController.class.getDeclaredField("previewTokenSecret");
+        Field secretField = PreviewTokenController.class.getDeclaredField("previewTokenSecret");
         secretField.setAccessible(true);
         Object original = secretField.get(tokenController);
         secretField.set(tokenController, "");
@@ -310,7 +316,7 @@ class StaticResourceControllerTest {
 
             assertEquals(HttpStatus.OK, response.getStatusCode());
             @SuppressWarnings("unchecked")
-            java.util.List<java.util.Map<String, String>> files = (java.util.List<java.util.Map<String, String>>) response.getBody();
+            List<Map<String, String>> files = (List<Map<String, String>>) response.getBody();
             assertEquals(3, files.size());
             // 深度优先：App.vue(深度1, 字母序在 main.js 前)，main.js(深度1)，components/Nav.vue(深度2)
             assertEquals("App.vue", files.get(0).get("path"));
@@ -336,8 +342,8 @@ class StaticResourceControllerTest {
 
     private void deleteRecursivelyForTest(Path root) throws Exception {
         if (!Files.exists(root)) return;
-        try (java.util.stream.Stream<Path> stream = Files.walk(root)) {
-            stream.sorted(java.util.Comparator.reverseOrder()).forEach(p -> {
+        try (Stream<Path> stream = Files.walk(root)) {
+            stream.sorted(Comparator.reverseOrder()).forEach(p -> {
                 try {
                     Files.deleteIfExists(p);
                 } catch (Exception ignored) {

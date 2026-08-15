@@ -11,12 +11,14 @@ import hk.ljx.fishaicode.model.vo.PreviewSessionVO;
 import hk.ljx.fishaicode.service.AppService;
 import hk.ljx.fishaicode.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -35,6 +37,7 @@ import java.util.stream.Stream;
  */
 @RestController
 @RequestMapping("/static")
+@RequiredArgsConstructor
 public class PreviewTokenController {
 
     /** 预览 token 有效期：15 分钟 */
@@ -54,11 +57,6 @@ public class PreviewTokenController {
 
     @Value("${app.preview-origin:http://preview.localhost:3000}")
     private String previewOrigin;
-
-    public PreviewTokenController(AppService appService, UserService userService) {
-        this.appService = appService;
-        this.userService = userService;
-    }
 
     @GetMapping("/preview-token/{previewKey}")
     public Map<String, Object> issuePreviewToken(
@@ -122,7 +120,7 @@ public class PreviewTokenController {
         }
         try (Stream<Path> entries = Files.list(previewRoot)) {
             return entries.findAny().isPresent();
-        } catch (java.io.IOException e) {
+        } catch (IOException e) {
             return false;
         }
     }

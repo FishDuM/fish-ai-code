@@ -8,6 +8,7 @@ import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
@@ -100,7 +101,7 @@ public abstract class CodeFileSaverTemplate<T> {
         FileUtil.writeString(content == null ? "" : content, filePath, StandardCharsets.UTF_8);
     }
 
-    private void move(Path source, Path target) throws java.io.IOException {
+    private void move(Path source, Path target) throws IOException {
         try {
             Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
         } catch (AtomicMoveNotSupportedException e) {

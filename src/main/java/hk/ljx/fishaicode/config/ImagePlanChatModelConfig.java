@@ -2,7 +2,9 @@ package hk.ljx.fishaicode.config;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
+import hk.ljx.fishaicode.workflow.ai.ImagePlanChatModelWrapper;
 import lombok.Data;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -45,5 +47,10 @@ public class ImagePlanChatModelConfig {
                 .logRequests(logRequests)
                 .logResponses(logResponses)
                 .build();
+    }
+
+    @Bean
+    public ImagePlanChatModelWrapper imagePlanChatModelWrapper(@Qualifier("imagePlanChatModelPrototype") ChatModel chatModel) {
+        return new ImagePlanChatModelWrapper(chatModel);
     }
 }

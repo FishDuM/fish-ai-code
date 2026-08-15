@@ -7,8 +7,8 @@ import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.model.entity.User;
 import hk.ljx.fishaicode.model.enums.UserRoleEnum;
 import hk.ljx.fishaicode.service.UserService;
-import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -26,10 +26,10 @@ import java.util.Map;
 @Aspect
 @Component
 @Order(1)
+@RequiredArgsConstructor
 public class AuthCheckAspect {
 
-    @Resource
-    private UserService userService;
+    private final UserService userService;
 
     /**
      * 执行拦截

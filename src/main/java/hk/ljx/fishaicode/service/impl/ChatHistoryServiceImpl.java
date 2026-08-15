@@ -22,7 +22,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 对话历史 服务层实现。
@@ -33,7 +36,7 @@ import java.util.List;
 @Service
 public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatHistory> implements ChatHistoryService {
 
-    private static final java.util.Set<String> ALLOWED_SORT_FIELDS = java.util.Set.of(
+    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
             "id", "appId", "userId", "messageType", "createTime", "updateTime"
     );
 
@@ -97,10 +100,8 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
 
     @Override
     public List<ChatHistory> listChatHistoryBefore(Long appId, LocalDateTime before, Long beforeId, int limit) {
-        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
-        ThrowUtils.throwIf(before == null, ErrorCode.PARAMS_ERROR, "游标时间不能为空");
         limit = Math.min(Math.max(limit, 1), 20);
-        List<ChatHistory> descending = new java.util.ArrayList<>(limit);
+        List<ChatHistory> descending = new ArrayList<>(limit);
         if (beforeId != null) {
             // 先取同一秒内、ID 更小的记录，再取更早时间的记录，避免分页边界漏消息。
             descending.addAll(this.list(QueryWrapper.create()
@@ -119,13 +120,12 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
                     .orderBy("id", false)
                     .limit(remaining)));
         }
-        java.util.Collections.reverse(descending);
+        Collections.reverse(descending);
         return descending;
     }
 
     @Override
     public List<ChatHistory> listLatestChatHistory(Long appId, int limit) {
-        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
         limit = Math.min(Math.max(limit, 1), 20);
         // 查询最新的 limit 条（降序），然后在内存中反转为正序
         QueryWrapper queryWrapper = QueryWrapper.create()
@@ -135,7 +135,7 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
                 .limit(limit);
         List<ChatHistory> list = this.list(queryWrapper);
         // 反转为时间正序（旧消息在前，新消息在后）
-        java.util.Collections.reverse(list);
+        Collections.reverse(list);
         return list;
     }
 

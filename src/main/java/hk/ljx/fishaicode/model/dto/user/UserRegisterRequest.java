@@ -29,6 +29,7 @@ public class UserRegisterRequest implements Serializable {
      * 确认密码
      */
     @NotBlank(message = "确认密码不能为空")
+    @Size(min = 8, max = 16, message = "密码长度需在 8-16 个字符之间")
     private String checkPassword;
 
     /**

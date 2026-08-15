@@ -5,8 +5,8 @@ import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.model.entity.User;
 import hk.ljx.fishaicode.ratelimit.annotation.RateLimit;
 import hk.ljx.fishaicode.service.UserService;
-import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.Aspect;
@@ -29,11 +29,10 @@ import java.time.Duration;
 @Aspect
 @Component
 @Slf4j
+@RequiredArgsConstructor
 public class RateLimitAspect {
-    @Resource
-    private RedissonClient redissonClient;
-    @Resource
-    private UserService userService;
+    private final RedissonClient redissonClient;
+    private final UserService userService;
 
     @Before("@annotation(rateLimit)")
     public void doBefore(JoinPoint point, RateLimit rateLimit) {

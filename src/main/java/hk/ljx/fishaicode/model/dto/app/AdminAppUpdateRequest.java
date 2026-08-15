@@ -2,6 +2,7 @@ package hk.ljx.fishaicode.model.dto.app;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
@@ -23,6 +24,7 @@ public class AdminAppUpdateRequest implements Serializable {
     /**
      * 应用名称
      */
+    @Pattern(regexp = ".*\\S.*", message = "应用名称不能为空")
     @Size(max = 20, message = "应用名称最长 20 个字符")
     private String appName;
 

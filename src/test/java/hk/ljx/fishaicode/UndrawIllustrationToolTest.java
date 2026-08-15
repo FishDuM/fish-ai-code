@@ -3,7 +3,7 @@ package hk.ljx.fishaicode;
 import hk.ljx.fishaicode.workflow.model.enums.ImageCategoryEnum;
 import hk.ljx.fishaicode.workflow.model.ImageResource;
 import hk.ljx.fishaicode.workflow.tools.UndrawIllustrationTool;
-import jakarta.annotation.Resource;
+import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -17,10 +17,10 @@ import static org.junit.jupiter.api.Assertions.*;
 @EnabledIfEnvironmentVariable(named = "UNDRAW_TOKEN", matches = ".+")
 @SpringBootTest
 @ActiveProfiles("test")
+@RequiredArgsConstructor
 class UndrawIllustrationToolTest {
 
-    @Resource
-    private UndrawIllustrationTool undrawIllustrationTool;
+    private final UndrawIllustrationTool undrawIllustrationTool;
 
     @Test
     void testSearchIllustrations() {
