@@ -53,21 +53,25 @@ public class ProjectDownloadServiceImpl implements ProjectDownloadService {
      * @return 是否允许
      */
     private boolean isPathAllowed(Path projectRoot, Path fullPath) {
-        // 获取相对路径
-        Path relativePath = projectRoot.relativize(fullPath);
-        // 检查路径中的每一部分
-        for (Path part : relativePath) {
-            String partName = part.toString();
-            // 检查是否在忽略名称列表中
-            if (IGNORED_NAMES.contains(partName)) {
+        try {
+            Path realPath = fullPath.toRealPath();
+            if (!realPath.startsWith(projectRoot)) {
                 return false;
             }
-            // 检查文件扩展名
-            if (IGNORED_EXTENSIONS.stream().anyMatch(partName::endsWith)) {
-                return false;
+            Path relativePath = projectRoot.relativize(realPath);
+            for (Path part : relativePath) {
+                String partName = part.toString();
+                if (IGNORED_NAMES.contains(partName)) {
+                    return false;
+                }
+                if (IGNORED_EXTENSIONS.stream().anyMatch(partName::endsWith)) {
+                    return false;
+                }
             }
+            return true;
+        } catch (Exception e) {
+            return false;
         }
-        return true;
     }
 
     @Override
@@ -85,8 +89,9 @@ public class ProjectDownloadServiceImpl implements ProjectDownloadService {
         response.addHeader("Content-Disposition",
                 String.format("attachment; filename=\"%s.zip\"", downloadFileName));
         // 定义文件过滤器
-        FileFilter filter = file -> isPathAllowed(projectDir.toPath(), file.toPath());
         try {
+            Path realProjectRoot = projectDir.toPath().toRealPath();
+            FileFilter filter = file -> isPathAllowed(realProjectRoot, file.toPath());
             // 使用 Hutool 的 ZipUtil 直接将过滤后的目录压缩到响应输出流
             ZipUtil.zip(response.getOutputStream(), StandardCharsets.UTF_8, false, filter, projectDir);
             log.info("项目打包下载完成: {}", downloadFileName);

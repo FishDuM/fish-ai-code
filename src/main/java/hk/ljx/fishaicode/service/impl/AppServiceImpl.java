@@ -102,6 +102,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     @Override
     public long addApp(AppAddRequest appAddRequest, User loginUser) {
+        ThrowUtils.throwIf(loginUser == null, ErrorCode.NOT_LOGIN_ERROR, "用户未登录");
         // 1. 校验
         if (appAddRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "请求参数为空");
@@ -181,6 +182,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     @Override
     public boolean updateMyApp(Long id, String appName, User loginUser) {
+        ThrowUtils.throwIf(loginUser == null, ErrorCode.NOT_LOGIN_ERROR, "用户未登录");
         App oldApp = this.getById(id);
         if (oldApp == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
@@ -274,6 +276,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
      */
     @Override
     public boolean deleteMyApp(long id, User loginUser) {
+        ThrowUtils.throwIf(loginUser == null, ErrorCode.NOT_LOGIN_ERROR, "用户未登录");
         App oldApp = this.getById(id);
         if (oldApp == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
@@ -433,7 +436,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         String sortField = appQueryRequest.getSortField();
         String sortOrder = appQueryRequest.getSortOrder();
         QueryWrapper queryWrapper = QueryWrapper.create()
-                .eq("userId", userId);
+                .eq(App::getUserId, userId);
         applyAppNameAndSort(queryWrapper, appName, sortField, sortOrder);
         return queryWrapper;
     }
@@ -447,7 +450,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         String sortOrder = appQueryRequest.getSortOrder();
         // 精选应用：优先级等于 FEATURED_PRIORITY 的应用
         QueryWrapper queryWrapper = QueryWrapper.create()
-                .eq("priority", AppConstant.FEATURED_PRIORITY);
+                .eq(App::getPriority, AppConstant.FEATURED_PRIORITY);
         applyAppNameAndSort(queryWrapper, appName, sortField, sortOrder);
         return queryWrapper;
     }
@@ -467,13 +470,13 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         String sortField = adminAppQueryRequest.getSortField();
         String sortOrder = adminAppQueryRequest.getSortOrder();
         QueryWrapper queryWrapper = QueryWrapper.create()
-                .eq("id", id, id != null)
-                .eq("priority", priority, priority != null)
-                .eq("userId", userId, userId != null)
-                .eq("codeGenType", codeGenType, StrUtil.isNotBlank(codeGenType))
-                .like("cover", cover, StrUtil.isNotBlank(cover))
-                .like("initPrompt", initPrompt, StrUtil.isNotBlank(initPrompt))
-                .like("deployKey", deployKey, StrUtil.isNotBlank(deployKey));
+                .eq(App::getId, id, id != null)
+                .eq(App::getPriority, priority, priority != null)
+                .eq(App::getUserId, userId, userId != null)
+                .eq(App::getCodeGenType, codeGenType, StrUtil.isNotBlank(codeGenType))
+                .like(App::getCover, cover, StrUtil.isNotBlank(cover))
+                .like(App::getInitPrompt, initPrompt, StrUtil.isNotBlank(initPrompt))
+                .like(App::getDeployKey, deployKey, StrUtil.isNotBlank(deployKey));
         applyAppNameAndSort(queryWrapper, appName, sortField, sortOrder);
         return queryWrapper;
     }
@@ -481,7 +484,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     private void applyAppNameAndSort(QueryWrapper queryWrapper, String appName,
                                      String sortField, String sortOrder) {
         if (StrUtil.isNotBlank(appName)) {
-            queryWrapper.like("appName", appName);
+            queryWrapper.like(App::getAppName, appName);
         }
         PageSortUtils.applySort(queryWrapper, sortField, sortOrder, ALLOWED_SORT_FIELDS);
     }
@@ -524,6 +527,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     @Override
     public Flux<String>  chatToGenCode(Long appId, String message, User loginUser) {
+        ThrowUtils.throwIf(loginUser == null, ErrorCode.NOT_LOGIN_ERROR, "用户未登录");
         App app = this.getById(appId);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
         // 3、权限校验：仅应用主人或管理员可以对话（编辑权限）

@@ -7,8 +7,8 @@ import hk.ljx.fishaicode.ai.AiCodeGenTypeRoutingService;
 import hk.ljx.fishaicode.annotation.AuthCheck;
 import hk.ljx.fishaicode.common.BaseResponse;
 import hk.ljx.fishaicode.common.DeleteRequest;
+import hk.ljx.fishaicode.common.GeneratedPathResolver;
 import hk.ljx.fishaicode.common.ResultUtils;
-import hk.ljx.fishaicode.constant.AppConstant;
 import hk.ljx.fishaicode.constant.UserConstant;
 import hk.ljx.fishaicode.core.GenerationCoordinator;
 import hk.ljx.fishaicode.exception.BusinessException;
@@ -43,9 +43,11 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 
-import java.io.File;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
 
 /**
@@ -68,6 +70,8 @@ public class AppController {
     private final GenerationCoordinator generationCoordinator;
 
     private final PreviewSessionService previewSessionService;
+
+    private final GeneratedPathResolver generatedPathResolver;
 
     /**
      * 创建应用
@@ -244,18 +248,21 @@ public class AppController {
         User loginUser = userService.getLoginUser(request);
         App app = appService.getAppWithPermission(appId, loginUser);
         ThrowUtils.throwIf("vue_project".equals(app.getCodeGenType()), ErrorCode.PARAMS_ERROR, "Vue 项目不支持源码预览");
-        String sourceDirName = app.getCodeGenType() + "_" + appId;
         PreviewSourceVO source = generationCoordinator.executeExclusively(appId, () -> {
             try {
-                File sourceDir = new File(AppConstant.CODE_OUTPUT_ROOT_DIR, sourceDirName);
-                File htmlFile = new File(sourceDir, "index.html");
-                ThrowUtils.throwIf(!htmlFile.isFile(), ErrorCode.NOT_FOUND_ERROR, "应用代码不存在，请先生成代码");
-                String html = Files.readString(htmlFile.toPath(), StandardCharsets.UTF_8);
-                String css = readOptionalFile(new File(sourceDir, "style.css"));
-                String javascript = readOptionalFile(new File(sourceDir, "script.js"));
+                Path sourceDir = generatedPathResolver.resolveExistingDirectory(app.getCodeGenType(), appId);
+                Path htmlFile = generatedPathResolver.resolveOptionalFile(sourceDir, "index.html");
+                ThrowUtils.throwIf(htmlFile == null, ErrorCode.NOT_FOUND_ERROR, "应用代码不存在，请先生成代码");
+                String html = Files.readString(htmlFile, StandardCharsets.UTF_8);
+                String css = readOptionalFile(sourceDir, "style.css");
+                String javascript = readOptionalFile(sourceDir, "script.js");
                 return new PreviewSourceVO(html, css, javascript);
             } catch (BusinessException e) {
                 throw e;
+            } catch (NoSuchFileException e) {
+                throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "应用代码不存在，请先生成代码");
+            } catch (IOException e) {
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "读取预览源码失败");
             } catch (Exception e) {
                 throw new BusinessException(ErrorCode.SYSTEM_ERROR, "读取预览源码失败");
             }
@@ -263,8 +270,9 @@ public class AppController {
         return ResultUtils.success(source);
     }
 
-    private String readOptionalFile(File file) throws Exception {
-        return file.isFile() ? Files.readString(file.toPath(), StandardCharsets.UTF_8) : "";
+    private String readOptionalFile(Path sourceDir, String fileName) throws Exception {
+        Path file = generatedPathResolver.resolveOptionalFile(sourceDir, fileName);
+        return file == null ? "" : Files.readString(file, StandardCharsets.UTF_8);
     }
 
     /**
@@ -354,19 +362,20 @@ public class AppController {
     @GetMapping("/download/{appId}")
     @AuthCheck
     public void downloadAppCode(
-            @Min(value = 1, message = "应用 ID 不合法") @PathVariable Long appId,
-            HttpServletRequest request,
-            HttpServletResponse response) {
+             @Min(value = 1, message = "应用 ID 不合法") @PathVariable Long appId,
+             HttpServletRequest request,
+             HttpServletResponse response) {
         User loginUser = userService.getLoginUser(request);
         App app = appService.getOwnedApp(appId, loginUser);
         generationCoordinator.executeExclusively(appId, () -> {
             String codeGenType = app.getCodeGenType();
-            String sourceDirName = codeGenType + "_" + appId;
-            String sourceDirPath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + sourceDirName;
-            File sourceDir = new File(sourceDirPath);
-            ThrowUtils.throwIf(!sourceDir.exists() || !sourceDir.isDirectory(),
-                    ErrorCode.NOT_FOUND_ERROR, "应用代码不存在，请先生成代码");
-            projectDownloadService.downloadProjectAsZip(sourceDirPath, String.valueOf(appId), response);
+            Path sourceDir;
+            try {
+                sourceDir = generatedPathResolver.resolveExistingDirectory(codeGenType, appId);
+            } catch (Exception e) {
+                throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "应用代码不存在，请先生成代码");
+            }
+            projectDownloadService.downloadProjectAsZip(sourceDir.toString(), String.valueOf(appId), response);
             return null;
         });
     }

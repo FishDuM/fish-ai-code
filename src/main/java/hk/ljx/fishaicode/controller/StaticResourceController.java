@@ -1,7 +1,7 @@
 package hk.ljx.fishaicode.controller;
 
+import hk.ljx.fishaicode.common.GeneratedPathResolver;
 import hk.ljx.fishaicode.common.OriginUtils;
-import hk.ljx.fishaicode.constant.AppConstant;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.model.entity.App;
 import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
@@ -27,11 +27,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.charset.StandardCharsets;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -65,6 +65,7 @@ public class StaticResourceController {
     private final AppService appService;
     private final UserService userService;
     private final PreviewTokenService previewTokenService;
+    private final GeneratedPathResolver generatedPathResolver;
 
     @Value("${app.preview-frame-ancestor:}")
     private String previewFrameAncestor;
@@ -85,11 +86,20 @@ public class StaticResourceController {
         if (!isValidPreviewKey(previewKey) || !canReadProjectSource(previewKey, request)) {
             return ResponseEntity.notFound().build();
         }
-        Path sourceRoot = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, previewKey)
-                .toAbsolutePath()
-                .normalize()
-                .resolve("src")
-                .normalize();
+        Path previewRoot;
+        try {
+            previewRoot = generatedPathResolver.resolveExistingDirectory(
+                    previewTokenService.codeGenTypeFromPreviewKey(previewKey),
+                    previewTokenService.appIdFromPreviewKey(previewKey));
+        } catch (Exception e) {
+            return ResponseEntity.notFound().build();
+        }
+        Path sourceRoot;
+        try {
+            sourceRoot = generatedPathResolver.resolveExistingDirectory(previewRoot, "src");
+        } catch (Exception e) {
+            return ResponseEntity.ok(List.of());
+        }
         if (!Files.isDirectory(sourceRoot)) {
             return ResponseEntity.ok(List.of());
         }
@@ -202,11 +212,11 @@ public class StaticResourceController {
             if (resourcePath.equals("/")) {
                 resourcePath = "/index.html";
             }
-            Path previewRoot = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, previewKey)
-                    .toAbsolutePath()
-                    .normalize();
-            if (previewKey.startsWith(CodeGenTypeEnum.VUE_PROJECT.getValue() + "_")) {
-                previewRoot = previewRoot.resolve("dist").normalize();
+            String codeGenType = previewTokenService.codeGenTypeFromPreviewKey(previewKey);
+            Path previewRoot = generatedPathResolver.resolveExistingDirectory(
+                    codeGenType, previewTokenService.appIdFromPreviewKey(previewKey));
+            if (CodeGenTypeEnum.VUE_PROJECT.getValue().equals(codeGenType)) {
+                previewRoot = generatedPathResolver.resolveExistingDirectory(previewRoot, "dist");
             }
 
             if (previewKey.startsWith(CodeGenTypeEnum.VUE_PROJECT.getValue() + "_")
@@ -216,17 +226,7 @@ public class StaticResourceController {
             }
 
             String relativeResourcePath = resourcePath.replaceFirst("^/+", "");
-            Path targetPath = previewRoot.resolve(relativeResourcePath).normalize();
-            if (!targetPath.startsWith(previewRoot) || !Files.isRegularFile(targetPath)) {
-                return ResponseEntity.notFound().build();
-            }
-
-            // 防止预览目录中的符号链接指向目录外部。
-            Path realPreviewRoot = previewRoot.toRealPath();
-            Path realTargetPath = targetPath.toRealPath();
-            if (!realTargetPath.startsWith(realPreviewRoot)) {
-                return ResponseEntity.notFound().build();
-            }
+            Path realTargetPath = generatedPathResolver.resolveExistingFile(previewRoot, relativeResourcePath);
 
             Resource resource = new FileSystemResource(realTargetPath);
             if (edit && previewKey.startsWith(CodeGenTypeEnum.VUE_PROJECT.getValue() + "_")
@@ -243,6 +243,8 @@ public class StaticResourceController {
             return buildResponse(resource, getContentTypeWithCharset(realTargetPath.toString()), previewKey);
         } catch (NoSuchFileException e) {
             // 预览目录或文件不存在（应用未生成/已删除/未构建）：语义是 404，不是服务错误
+            return ResponseEntity.notFound().build();
+        } catch (IOException e) {
             return ResponseEntity.notFound().build();
         } catch (Exception e) {
             log.error("预览静态资源服务异常 previewKey={}", previewKey, e);

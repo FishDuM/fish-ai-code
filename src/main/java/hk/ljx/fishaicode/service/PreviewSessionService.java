@@ -1,7 +1,7 @@
 package hk.ljx.fishaicode.service;
 
+import hk.ljx.fishaicode.common.GeneratedPathResolver;
 import hk.ljx.fishaicode.common.OriginUtils;
-import hk.ljx.fishaicode.constant.AppConstant;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
@@ -9,10 +9,8 @@ import hk.ljx.fishaicode.model.vo.PreviewSessionVO;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
+import java.io.IOException;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 
 /**
  * 预览会话服务：负责预览域名、生成目录检查和会话 URL 组装。
@@ -21,11 +19,14 @@ import java.nio.file.Paths;
 public class PreviewSessionService {
 
     private final PreviewTokenService previewTokenService;
+    private final GeneratedPathResolver generatedPathResolver;
     private final String previewOrigin;
 
     public PreviewSessionService(PreviewTokenService previewTokenService,
+                                 GeneratedPathResolver generatedPathResolver,
                                  @Value("${app.preview-origin:http://preview.localhost:3000}") String previewOrigin) {
         this.previewTokenService = previewTokenService;
+        this.generatedPathResolver = generatedPathResolver;
         this.previewOrigin = previewOrigin;
     }
 
@@ -52,15 +53,14 @@ public class PreviewSessionService {
     private boolean hasGeneratedCode(String previewKey) {
         long appId = previewTokenService.appIdFromPreviewKey(previewKey);
         String codeGenType = previewTokenService.codeGenTypeFromPreviewKey(previewKey);
-        Path previewRoot = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, codeGenType + "_" + appId)
-                .toAbsolutePath()
-                .normalize();
-        if (CodeGenTypeEnum.VUE_PROJECT.getValue().equals(codeGenType)) {
-            previewRoot = previewRoot.resolve("dist").normalize();
-        }
-        if (!Files.isDirectory(previewRoot)) {
+        try {
+            Path previewRoot = generatedPathResolver.resolveExistingDirectory(codeGenType, appId);
+            if (CodeGenTypeEnum.VUE_PROJECT.getValue().equals(codeGenType)) {
+                previewRoot = generatedPathResolver.resolveExistingDirectory(previewRoot, "dist");
+            }
+            return generatedPathResolver.resolveOptionalFile(previewRoot, "index.html") != null;
+        } catch (IOException e) {
             return false;
         }
-        return Files.isRegularFile(previewRoot.resolve("index.html"), LinkOption.NOFOLLOW_LINKS);
     }
 }

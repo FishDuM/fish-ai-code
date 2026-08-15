@@ -13,14 +13,13 @@ import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
 import hk.ljx.fishaicode.service.ChatHistoryService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
 @Slf4j
-@RequiredArgsConstructor
 public class AiCodeGeneratorServiceFactory {
 
     /** 最近一轮已完成对话：1 个用户消息 + 1 个 AI 消息。 */
@@ -40,6 +39,23 @@ public class AiCodeGeneratorServiceFactory {
     private final ObjectProvider<StreamingChatModel> reasoningStreamingChatModelPrototype;
 
     private final ObjectProvider<StreamingChatModel> streamingChatModelPrototype;
+
+    public AiCodeGeneratorServiceFactory(
+            OpenAiChatModelWrapper openAiChatModelWrapper,
+            RedisChatMemoryStore redisChatMemoryStore,
+            ChatHistoryService chatHistoryService,
+            ToolManager toolManager,
+            @Qualifier("reasoningStreamingChatModelPrototype")
+            ObjectProvider<StreamingChatModel> reasoningStreamingChatModelPrototype,
+            @Qualifier("streamingChatModelPrototype")
+            ObjectProvider<StreamingChatModel> streamingChatModelPrototype) {
+        this.openAiChatModelWrapper = openAiChatModelWrapper;
+        this.redisChatMemoryStore = redisChatMemoryStore;
+        this.chatHistoryService = chatHistoryService;
+        this.toolManager = toolManager;
+        this.reasoningStreamingChatModelPrototype = reasoningStreamingChatModelPrototype;
+        this.streamingChatModelPrototype = streamingChatModelPrototype;
+    }
 
     /**
      * ai 记忆服务

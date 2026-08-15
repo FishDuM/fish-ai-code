@@ -24,7 +24,6 @@ import hk.ljx.fishaicode.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -44,7 +43,7 @@ import static hk.ljx.fishaicode.constant.UserConstant.USER_LOGIN_STATE;
 @RequiredArgsConstructor
 public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements UserService{
 
-    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final PasswordEncoder passwordEncoder;
 
     private final CaptchaService captchaService;
 
@@ -61,7 +60,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
         captchaService.verifyCaptcha(captchaId, captchaCode);
         // 2. 检查是否重复
         QueryWrapper queryWrapper = new QueryWrapper();
-        queryWrapper.eq("userAccount", userAccount);
+        queryWrapper.eq(User::getUserAccount, userAccount);
         long count = this.mapper.selectCountByQuery(queryWrapper);
         if (count > 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "注册失败，请检查输入");
@@ -93,7 +92,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
                     ErrorCode.PARAMS_ERROR, "用户角色不合法");
         }
         // 2. 检查账号是否已存在
-        QueryWrapper queryWrapper = QueryWrapper.create().eq("userAccount", userAccount);
+        QueryWrapper queryWrapper = QueryWrapper.create().eq(User::getUserAccount, userAccount);
         long count = this.count(queryWrapper);
         ThrowUtils.throwIf(count > 0, ErrorCode.PARAMS_ERROR, "账号已存在");
         // 3. 构建用户实体
@@ -134,7 +133,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
         captchaService.verifyCaptcha(captchaId, captchaCode);
         // 2. 查询用户
         QueryWrapper queryWrapper = new QueryWrapper();
-        queryWrapper.eq("userAccount", userAccount);
+        queryWrapper.eq(User::getUserAccount, userAccount);
         User user = this.mapper.selectOneByQuery(queryWrapper);
         // 用户不存在或密码错误
         if (user == null || !passwordEncoder.matches(userPassword, user.getUserPassword())) {
@@ -212,11 +211,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
         String sortField = userQueryRequest.getSortField();
         String sortOrder = userQueryRequest.getSortOrder();
         QueryWrapper queryWrapper = QueryWrapper.create()
-                .eq("id", id, id != null)
-                .eq("userRole", userRole, StrUtil.isNotBlank(userRole))
-                .like("userAccount", userAccount, StrUtil.isNotBlank(userAccount))
-                .like("userName", userName, StrUtil.isNotBlank(userName))
-                .like("userProfile", userProfile, StrUtil.isNotBlank(userProfile));
+                .eq(User::getId, id, id != null)
+                .eq(User::getUserRole, userRole, StrUtil.isNotBlank(userRole))
+                .like(User::getUserAccount, userAccount, StrUtil.isNotBlank(userAccount))
+                .like(User::getUserName, userName, StrUtil.isNotBlank(userName))
+                .like(User::getUserProfile, userProfile, StrUtil.isNotBlank(userProfile));
         PageSortUtils.applySort(queryWrapper, sortField, sortOrder, ALLOWED_SORT_FIELDS);
         return queryWrapper;
     }

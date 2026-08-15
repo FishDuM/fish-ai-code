@@ -1,6 +1,7 @@
 package hk.ljx.fishaicode.controller;
 
 import hk.ljx.fishaicode.constant.AppConstant;
+import hk.ljx.fishaicode.common.GeneratedPathResolver;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.model.entity.App;
@@ -40,7 +41,8 @@ class StaticResourceControllerTest {
     private final AppService appService = mock(AppService.class);
     private final UserService userService = mock(UserService.class);
     private final PreviewTokenService tokenService = new PreviewTokenService("fish-ai-code-preview-secret-dev");
-    private final StaticResourceController controller = new StaticResourceController(appService, userService, tokenService);
+    private final StaticResourceController controller = new StaticResourceController(
+            appService, userService, tokenService, new GeneratedPathResolver());
     private final String testId = Long.toString(ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE));
     private final Path outputRoot = Path.of(AppConstant.CODE_OUTPUT_ROOT_DIR);
     private final String htmlPreviewKey = "html_" + testId;

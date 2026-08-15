@@ -105,19 +105,19 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
         if (beforeId != null) {
             // 先取同一秒内、ID 更小的记录，再取更早时间的记录，避免分页边界漏消息。
             descending.addAll(this.list(QueryWrapper.create()
-                    .eq("appId", appId)
-                    .eq("createTime", before)
-                    .lt("id", beforeId)
-                    .orderBy("id", false)
+                    .eq(ChatHistory::getAppId, appId)
+                    .eq(ChatHistory::getCreateTime, before)
+                    .lt(ChatHistory::getId, beforeId)
+                    .orderBy(ChatHistory::getId, false)
                     .limit(limit)));
         }
         int remaining = limit - descending.size();
         if (remaining > 0) {
             descending.addAll(this.list(QueryWrapper.create()
-                    .eq("appId", appId)
-                    .lt("createTime", before)
-                    .orderBy("createTime", false)
-                    .orderBy("id", false)
+                    .eq(ChatHistory::getAppId, appId)
+                    .lt(ChatHistory::getCreateTime, before)
+                    .orderBy(ChatHistory::getCreateTime, false)
+                    .orderBy(ChatHistory::getId, false)
                     .limit(remaining)));
         }
         Collections.reverse(descending);
@@ -129,9 +129,9 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
         limit = Math.min(Math.max(limit, 1), 20);
         // 查询最新的 limit 条（降序），然后在内存中反转为正序
         QueryWrapper queryWrapper = QueryWrapper.create()
-                .eq("appId", appId)
-                .orderBy("createTime", false)
-                .orderBy("id", false)
+                .eq(ChatHistory::getAppId, appId)
+                .orderBy(ChatHistory::getCreateTime, false)
+                .orderBy(ChatHistory::getId, false)
                 .limit(limit);
         List<ChatHistory> list = this.list(queryWrapper);
         // 反转为时间正序（旧消息在前，新消息在后）
@@ -143,7 +143,7 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
     public boolean removeByAppId(Long appId) {
         ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
         QueryWrapper queryWrapper = QueryWrapper.create()
-                .eq("appId", appId);
+                .eq(ChatHistory::getAppId, appId);
         return this.remove(queryWrapper);
     }
 
@@ -166,13 +166,13 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
         String sortField = adminChatHistoryQueryRequest.getSortField();
         String sortOrder = adminChatHistoryQueryRequest.getSortOrder();
         QueryWrapper queryWrapper = QueryWrapper.create()
-                .eq("appId", appId, appId != null)
-                .eq("userId", userId, userId != null)
-                .eq("messageType", messageType, StrUtil.isNotBlank(messageType));
+                .eq(ChatHistory::getAppId, appId, appId != null)
+                .eq(ChatHistory::getUserId, userId, userId != null)
+                .eq(ChatHistory::getMessageType, messageType, StrUtil.isNotBlank(messageType));
         PageSortUtils.applySort(queryWrapper, sortField, sortOrder, ALLOWED_SORT_FIELDS);
         if (StrUtil.isBlank(sortField) || !ALLOWED_SORT_FIELDS.contains(sortField)) {
             // 默认按时间降序
-            queryWrapper.orderBy("createTime", false);
+            queryWrapper.orderBy(ChatHistory::getCreateTime, false);
         }
         return queryWrapper;
     }

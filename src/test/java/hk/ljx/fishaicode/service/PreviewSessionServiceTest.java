@@ -1,6 +1,7 @@
 package hk.ljx.fishaicode.service;
 
 import hk.ljx.fishaicode.constant.AppConstant;
+import hk.ljx.fishaicode.common.GeneratedPathResolver;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.model.vo.PreviewSessionVO;
@@ -21,7 +22,7 @@ class PreviewSessionServiceTest {
 
     private final PreviewTokenService tokenService = new PreviewTokenService("test-secret");
     private final PreviewSessionService sessionService = new PreviewSessionService(
-            tokenService, "https://preview.example.com///");
+            tokenService, new GeneratedPathResolver(), "https://preview.example.com///");
     private final String suffix = Long.toString(ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE));
     private final Path outputRoot = Path.of(AppConstant.CODE_OUTPUT_ROOT_DIR);
 
@@ -89,7 +90,7 @@ class PreviewSessionServiceTest {
     @Test
     void createPreviewSession_rejectsMissingSecret() {
         PreviewSessionService serviceWithoutSecret = new PreviewSessionService(
-                new PreviewTokenService(""), "https://preview.example.com");
+                new PreviewTokenService(""), new GeneratedPathResolver(), "https://preview.example.com");
 
         BusinessException exception = assertThrows(BusinessException.class,
                 () -> serviceWithoutSecret.createPreviewSession("html_1"));
