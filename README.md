@@ -249,6 +249,7 @@ server {
 - `application-local.yaml` 的 `server.address: 0.0.0.0` 允许外部访问，请确保防火墙 / 安全组只开放必要端口
 - `PREVIEW_TOKEN_SECRET` 必须使用强随机值；预览 token 默认有效 15 分钟，前端会在约 12 分钟时自动续签并刷新预览 iframe，避免 Vue 懒加载资源因签名过期而失败
 - HTTPS 部署时设置 `SESSION_COOKIE_SECURE=true`，使登录 Cookie 只通过 HTTPS 发送；本地 HTTP 调试保持默认 `false`
+- AI 流式生成请求默认超时 600 秒（环境变量 `AI_STREAM_REQUEST_TIMEOUT`，Docker profile 默认 600s）。Vue 模式文件多、耗时长，一般够用；如遇断流/“生成失败”，可相应调大该值
 - 代码生成目录 `tmp/code_output/` 与部署目录 `tmp/code_deploy/` 在启动目录下生成，建议给足磁盘空间
 - 部署访问域名可在 `application.yaml` 的 `app.deploy.host` 配置（默认 `http://localhost`），Docker 方式在 `.env` 里配 `APP_DEPLOY_HOST`；部署链接格式为 `{host}/deploy/{deployKey}`，由 nginx 的 `location /deploy/` 服务
 
@@ -269,6 +270,7 @@ server {
 | 生成时提示"一分钟内请求次数过多" | 接口限流（默认 10 次/分钟），稍等再试或调大 `@RateLimit` |
 | 生成的页面没有图片 | Pexels / Undraw key 未配置或无效，图片收集失败不影响代码生成 |
 | 端口被占用 | 传统方式后端 8911 / 前端 3000；Docker 方式在 .env 中改 `BACKEND_PORT` / `FRONTEND_PORT` |
+| Vue 生成中途断开 / 报“生成失败” | 多为 AI 流式请求超时。默认已是 600 秒（`AI_STREAM_REQUEST_TIMEOUT`），如模型输出偏慢可在环境变量中调大该值后重启后端 |
 
 ---
 

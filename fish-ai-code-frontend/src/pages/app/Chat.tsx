@@ -98,7 +98,7 @@ export default function AppChat() {
   const backgroundGenerationRef = useRef(false);
   const backgroundGenerationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [backgroundGeneration, setBackgroundGeneration] = useState(false);
-  const historyInitedRef = useRef(false);
+  const [historyInited, setHistoryInited] = useState(false);
   const autoSentRef = useRef(false);
   const historyLoadFailedRef = useRef(false);
   const oldestCreateTimeRef = useRef<string>('');
@@ -297,6 +297,7 @@ export default function AppChat() {
     setDeployModalOpen(false);
     setDeployUrl('');
     setHistoryLoading(true);
+    setHistoryInited(false);
   }
 
   // 加载应用与历史
@@ -310,7 +311,6 @@ export default function AppChat() {
     historyLoadFailedRef.current = false;
     oldestCreateTimeRef.current = '';
     oldestChatHistoryIdRef.current = '';
-    historyInitedRef.current = false;
 
     const myAppId = appId;
     appIdRef.current = appId;
@@ -329,7 +329,7 @@ export default function AppChat() {
         if (myAppId !== appIdRef.current) return;
         appLoadFailed = true;
         setAppLoading(false);
-        historyInitedRef.current = true;
+        setHistoryInited(true);
         historyLoadFailedRef.current = true;
         setHistoryLoading(false);
         const status = (err as { response?: { status?: number } })?.response?.status;
@@ -353,7 +353,7 @@ export default function AppChat() {
           setHistoryLoading(false);
           return;
         }
-        historyInitedRef.current = true;
+        setHistoryInited(true);
         const loaded = history.map(toMessage);
         // 合并而非覆盖：保留历史加载期间用户新发的本地消息（local_ 开头）
         setMessages((prev) => {
@@ -370,7 +370,7 @@ export default function AppChat() {
       .catch((err: unknown) => {
         if (myAppId !== appIdRef.current) return;
         if (appLoadFailed) return;
-        historyInitedRef.current = true;
+        setHistoryInited(true);
         // 历史加载失败不等于历史为空：不能触发自动发送 initPrompt
         historyLoadFailedRef.current = true;
         setHistoryLoading(false);
@@ -419,7 +419,7 @@ export default function AppChat() {
 
   useEffect(() => {
     if (
-      !historyInitedRef.current ||
+      !historyInited ||
       historyLoadFailedRef.current ||
       autoSentRef.current ||
       backgroundGeneration ||
@@ -443,6 +443,7 @@ export default function AppChat() {
     beginStream(app.initPrompt);
   }, [
     messages.length,
+    historyInited,
     app,
     backgroundGeneration,
     canEdit,
