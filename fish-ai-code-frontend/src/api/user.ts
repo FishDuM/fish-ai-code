@@ -14,8 +14,8 @@ import type {
 } from './types';
 
 /**
- * 获取登录/注册验证码图片（base64 data URI），
- * 后端同时把验证码答案存入当前 session，登录/注册时携带 captchaCode 校验。
+ * 获取登录/注册验证码图片。
+ * 验证码答案存于 Redis，登录或注册时需携带 captchaId 与 captchaCode。
  */
 export async function getCaptcha(): Promise<CaptchaVO> {
   const res = await api.get<BaseResponse<CaptchaVO>>('/captcha');

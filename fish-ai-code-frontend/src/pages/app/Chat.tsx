@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router';
 import { Button, App, Tabs, Spin, Modal, Input, Switch, Tooltip } from 'antd';
 import {
@@ -81,6 +81,8 @@ export default function AppChat() {
   const [appLoading, setAppLoading] = useState(true);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(true);
+  // 记录上一个 appId：切换应用时在渲染期重置纯 UI 状态，避免在 effect 里同步 setState
+  const [prevAppId, setPrevAppId] = useState<string | undefined>(appId);
   const [loadingMore, setLoadingMore] = useState(false);
   const [previewTab, setPreviewTab] = useState('preview');
   const [mobilePanel, setMobilePanel] = useState<'chat' | 'preview'>('chat');
@@ -286,24 +288,29 @@ export default function AppChat() {
     }
   }, [messages, appId, app?.codeGenType, refreshHtmlPreview, isStreaming, markStreamStarted, markPreviewHandled, previewHandledRef]);
 
-  // 加载应用与历史
-  useEffect(() => {
-    if (!appId) return;
-    // 切换应用：立即清空旧应用状态（防加载期间误操作旧应用）、取消在途流与轮询
+  // 切换应用：在渲染期重置纯 UI 状态，避免在 effect 中同步 setState 引起级联渲染
+  if (prevAppId !== appId) {
+    setPrevAppId(appId);
     setApp(null);
     setAppLoading(true);
     setRenameOpen(false);
     setDeployModalOpen(false);
+    setDeployUrl('');
+    setHistoryLoading(true);
+  }
+
+  // 加载应用与历史
+  useEffect(() => {
+    if (!appId) return;
+    // 切换应用：取消在途流与轮询（纯 UI 状态已由上方渲染期重置）
     clearAll();
     resetAll();
     stopBackgroundGenerationCheck();
-    setDeployUrl('');
     autoSentRef.current = false;
     historyLoadFailedRef.current = false;
     oldestCreateTimeRef.current = '';
     oldestChatHistoryIdRef.current = '';
     historyInitedRef.current = false;
-    setHistoryLoading(true);
 
     const myAppId = appId;
     appIdRef.current = appId;

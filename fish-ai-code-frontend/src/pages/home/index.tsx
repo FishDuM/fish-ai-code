@@ -78,7 +78,6 @@ export default function Home() {
     requestAbortRef.current?.abort();
     const controller = new AbortController();
     requestAbortRef.current = controller;
-    setLoading(true);
     listFeaturedApps(query, controller.signal)
       .then((res) => {
         if (myId !== fetchIdRef.current) return;
@@ -124,6 +123,7 @@ export default function Home() {
   }, [prompt]);
 
   const handleSearch = (appName: string) => {
+    setLoading(true);
     setQuery((prev) => ({ ...prev, appName: appName || undefined, pageNum: 1 }));
   };
 
@@ -253,7 +253,10 @@ export default function Home() {
                   current={query.pageNum}
                   pageSize={query.pageSize}
                   total={total}
-                  onChange={(page) => setQuery((prev) => ({ ...prev, pageNum: page }))}
+                  onChange={(page) => {
+                    setLoading(true);
+                    setQuery((prev) => ({ ...prev, pageNum: page }));
+                  }}
                   showSizeChanger={false}
                 />
               </div>

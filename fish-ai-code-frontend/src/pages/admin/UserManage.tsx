@@ -26,7 +26,6 @@ export default function UserManage() {
 
   const fetchUsers = useCallback(() => {
     const fetchId = ++fetchIdRef.current;
-    setLoading(true);
     listUsers(query)
       .then((res) => {
         if (fetchId !== fetchIdRef.current) return;
@@ -64,6 +63,7 @@ export default function UserManage() {
       await updateUser({ id: editUser.id, ...values });
       message.success('更新成功');
       setEditUser(null);
+      setLoading(true);
       fetchUsers();
     } catch (err) {
       if (err instanceof Error && err.message) message.error(err.message);
@@ -80,6 +80,7 @@ export default function UserManage() {
       message.success(`新增用户成功（默认密码：${DEFAULT_PASSWORD}）`);
       setAddModalOpen(false);
       addForm.resetFields();
+      setLoading(true);
       fetchUsers();
     } catch (err) {
       if (err instanceof Error && err.message) message.error(err.message);
@@ -99,6 +100,7 @@ export default function UserManage() {
         try {
           await deleteUser(user.id);
           message.success('删除成功');
+          setLoading(true);
           fetchUsers();
         } catch (err) {
           message.error(err instanceof Error ? err.message : '删除失败');
@@ -189,20 +191,29 @@ export default function UserManage() {
           <Input.Search
             placeholder="搜索账号"
             allowClear
-            onSearch={(v) => setQuery((prev) => ({ ...prev, userAccount: v || undefined, pageNum: 1 }))}
+            onSearch={(v) => {
+              setLoading(true);
+              setQuery((prev) => ({ ...prev, userAccount: v || undefined, pageNum: 1 }));
+            }}
             style={{ width: 180 }}
           />
           <Input.Search
             placeholder="搜索昵称"
             allowClear
-            onSearch={(v) => setQuery((prev) => ({ ...prev, userName: v || undefined, pageNum: 1 }))}
+            onSearch={(v) => {
+              setLoading(true);
+              setQuery((prev) => ({ ...prev, userName: v || undefined, pageNum: 1 }));
+            }}
             style={{ width: 180 }}
           />
           <Select
             placeholder="角色筛选"
             allowClear
             style={{ width: 120 }}
-            onChange={(v) => setQuery((prev) => ({ ...prev, userRole: v || undefined, pageNum: 1 }))}
+            onChange={(v) => {
+              setLoading(true);
+              setQuery((prev) => ({ ...prev, userRole: v || undefined, pageNum: 1 }));
+            }}
             options={[
               { label: '用户', value: 'user' },
               { label: '管理员', value: 'admin' },
@@ -223,7 +234,10 @@ export default function UserManage() {
             pageSize: query.pageSize,
             total,
             showTotal: (t) => `共 ${t} 条`,
-            onChange: (page, pageSize) => setQuery((prev) => ({ ...prev, pageNum: page, pageSize })),
+            onChange: (page, pageSize) => {
+              setLoading(true);
+              setQuery((prev) => ({ ...prev, pageNum: page, pageSize }));
+            },
           }}
         />
       </div>

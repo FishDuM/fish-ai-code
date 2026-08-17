@@ -33,7 +33,6 @@ export default function Dashboard() {
     requestAbortRef.current?.abort();
     const controller = new AbortController();
     requestAbortRef.current = controller;
-    setLoading(true);
     listMyApps(query, controller.signal)
       .then((res) => {
         if (myId !== fetchIdRef.current) return;
@@ -56,6 +55,7 @@ export default function Dashboard() {
   }, [fetchApps]);
 
   const handleSearch = (appName: string) => {
+    setLoading(true);
     setQuery((prev) => ({ ...prev, appName: appName || undefined, pageNum: 1 }));
   };
 
@@ -76,6 +76,7 @@ export default function Dashboard() {
       setEditApp(null);
       // 这里 fetchApps() 同样会被 fetchIdRef 保护：若用户在编辑过程中已经
       // 触发了翻页/搜索，最新的 fetch 不会被这次编辑刷新覆盖。
+      setLoading(true);
       fetchApps();
     } catch (err) {
       message.error(err instanceof Error ? err.message : '操作失败');
@@ -95,6 +96,7 @@ export default function Dashboard() {
         try {
           await deleteMyApp(app.id);
           message.success('删除成功');
+          setLoading(true);
           fetchApps();
         } catch (err) {
           message.error(err instanceof Error ? err.message : '删除失败');
@@ -145,7 +147,10 @@ export default function Dashboard() {
                 current={query.pageNum}
                 pageSize={query.pageSize}
                 total={total}
-                onChange={(page) => setQuery((prev) => ({ ...prev, pageNum: page }))}
+                onChange={(page) => {
+                  setLoading(true);
+                  setQuery((prev) => ({ ...prev, pageNum: page }));
+                }}
                 showSizeChanger={false}
               />
             </div>

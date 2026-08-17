@@ -34,7 +34,6 @@ export default function AppManage() {
 
   const fetchApps = useCallback(() => {
     const fetchId = ++fetchIdRef.current;
-    setLoading(true);
     adminListApps(query)
       .then((res) => {
         if (fetchId !== fetchIdRef.current) return;
@@ -78,6 +77,7 @@ export default function AppManage() {
       });
       message.success('更新成功');
       setEditApp(null);
+      setLoading(true);
       fetchApps();
     } catch (err) {
       if (err instanceof Error && err.message) message.error(err.message);
@@ -97,6 +97,7 @@ export default function AppManage() {
         try {
           await adminDeleteApp(app.id);
           message.success('删除成功');
+          setLoading(true);
           fetchApps();
         } catch (err) {
           message.error(err instanceof Error ? err.message : '删除失败');
@@ -188,13 +189,19 @@ export default function AppManage() {
         <Input.Search
           placeholder="搜索应用名"
           allowClear
-          onSearch={(v) => setQuery((prev) => ({ ...prev, appName: v || undefined, pageNum: 1 }))}
+          onSearch={(v) => {
+            setLoading(true);
+            setQuery((prev) => ({ ...prev, appName: v || undefined, pageNum: 1 }));
+          }}
           style={{ width: 200 }}
         />
         <Input.Search
           placeholder="用户ID"
           allowClear
-          onSearch={(v) => setQuery((prev) => ({ ...prev, userId: v || undefined, pageNum: 1 }))}
+          onSearch={(v) => {
+            setLoading(true);
+            setQuery((prev) => ({ ...prev, userId: v || undefined, pageNum: 1 }));
+          }}
           style={{ width: 160 }}
         />
       </Space>
@@ -211,7 +218,10 @@ export default function AppManage() {
             pageSize: query.pageSize,
             total,
             showTotal: (t) => `共 ${t} 条`,
-            onChange: (page, pageSize) => setQuery((prev) => ({ ...prev, pageNum: page, pageSize })),
+            onChange: (page, pageSize) => {
+              setLoading(true);
+              setQuery((prev) => ({ ...prev, pageNum: page, pageSize }));
+            },
           }}
         />
       </div>

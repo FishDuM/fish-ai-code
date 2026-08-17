@@ -35,7 +35,6 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       typeof info?.componentStack === 'string'
         ? info.componentStack.split('\n')[1]?.trim()
         : undefined;
-    // eslint-disable-next-line no-console
     console.error('[ErrorBoundary]', error, '\n[ErrorBoundary] componentStack first frame:', firstFrame);
   }
 

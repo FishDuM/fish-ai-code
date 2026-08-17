@@ -19,7 +19,6 @@ export default function ChatManage() {
 
   const fetchData = useCallback(() => {
     const fetchId = ++fetchIdRef.current;
-    setLoading(true);
     adminListChatHistory(query)
       .then((res) => {
         if (fetchId !== fetchIdRef.current) return;
@@ -104,19 +103,28 @@ export default function ChatManage() {
         <Input.Search
           placeholder="应用ID"
           allowClear
-          onSearch={(v) => setQuery((prev) => ({ ...prev, appId: v || undefined, pageNum: 1 }))}
+          onSearch={(v) => {
+            setLoading(true);
+            setQuery((prev) => ({ ...prev, appId: v || undefined, pageNum: 1 }));
+          }}
           style={{ width: 160 }}
         />
         <Input.Search
           placeholder="用户ID"
           allowClear
-          onSearch={(v) => setQuery((prev) => ({ ...prev, userId: v || undefined, pageNum: 1 }))}
+          onSearch={(v) => {
+            setLoading(true);
+            setQuery((prev) => ({ ...prev, userId: v || undefined, pageNum: 1 }));
+          }}
           style={{ width: 160 }}
         />
         <Input.Search
           placeholder="消息类型 (user/ai)"
           allowClear
-          onSearch={(v) => setQuery((prev) => ({ ...prev, messageType: v || undefined, pageNum: 1 }))}
+          onSearch={(v) => {
+            setLoading(true);
+            setQuery((prev) => ({ ...prev, messageType: v || undefined, pageNum: 1 }));
+          }}
           style={{ width: 180 }}
         />
       </Space>
@@ -133,7 +141,10 @@ export default function ChatManage() {
             pageSize: query.pageSize,
             total,
             showTotal: (t) => `共 ${t} 条`,
-            onChange: (page, pageSize) => setQuery((prev) => ({ ...prev, pageNum: page, pageSize })),
+            onChange: (page, pageSize) => {
+              setLoading(true);
+              setQuery((prev) => ({ ...prev, pageNum: page, pageSize }));
+            },
           }}
         />
       </div>

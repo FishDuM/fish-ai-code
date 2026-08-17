@@ -44,7 +44,7 @@ export default function BasicLayout() {
         ? [{ key: '/admin/users', label: '管理后台' }]
         : []),
     ],
-    [loginUser, loginUser?.userRole]
+    [loginUser]
   );
 
   // 这个菜单只读 userRole 决定是否显示 admin 入口，deps 只放 role 即可更精准

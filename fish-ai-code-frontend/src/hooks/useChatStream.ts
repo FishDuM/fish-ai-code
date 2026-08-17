@@ -210,20 +210,24 @@ export function useChatStream({
     cancel();
   }, [cancel]);
 
+  const flushStreamingMessage = useCallback(() => {
+    const live = streamingMessageRef.current;
+    if (!live || !live.isStreaming) return;
+    if (live.content) {
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === live.id)) return prev;
+        return [...prev, { ...live, isStreaming: false }];
+      });
+    }
+    setStreamingMessage(null);
+  }, [setMessages]);
+
   // 兜底：流结束但未走 handleStreamComplete（传输异常）时提交残留气泡
   useEffect(() => {
     if (isStreaming) return;
-    setStreamingMessage((current) => {
-      if (!current || !current.isStreaming) return current;
-      if (current.content) {
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === current.id)) return prev;
-          return [...prev, { ...current, isStreaming: false }];
-        });
-      }
-      return null;
-    });
-  }, [isStreaming]);
+    const timer = window.setTimeout(flushStreamingMessage, 0);
+    return () => window.clearTimeout(timer);
+  }, [isStreaming, flushStreamingMessage]);
 
   // 批量发送完成后解除 saving 状态
   const wasStreamingRef = useRef(false);
