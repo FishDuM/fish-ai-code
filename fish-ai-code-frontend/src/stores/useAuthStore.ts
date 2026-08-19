@@ -58,7 +58,7 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true });
         try {
           const user = await userApi.login({ userAccount: account, userPassword: password, captchaId, captchaCode });
-          set({ loginUser: user, isLoading: false, authUnavailable: false });
+          set({ loginUser: user, isFetched: true, isLoading: false, authUnavailable: false });
         } catch (error) {
           set({ isLoading: false });
           throw error;
@@ -69,7 +69,7 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true });
         try {
           await userApi.register({ userAccount: account, userPassword: password, checkPassword, captchaId, captchaCode });
-          set({ isLoading: false });
+          set({ isFetched: true, isLoading: false, authUnavailable: false });
         } catch (error) {
           set({ isLoading: false });
           throw error;
@@ -91,20 +91,13 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'fish-ai-code-auth',
-      // Don't persist loginUser. The server-side session is the only source
-      // of truth for who's logged in; persisting stale user info here made
-      // the header briefly show the previous user's avatar/admin menu after
-      // a logout, password change, or a server-side role downgrade.
-      // isFetched is also intentionally excluded — it must start false on
-      // every page load so RequireAuth re-validates the session.
+      // 用户信息以服务端 Session 为准，本地不持久化敏感登录凭证
       partialize: () => ({}),
     }
   )
 );
 
-// Listen for external logout events (e.g. from axios interceptor on 401).
-// HMR 下此模块会反复执行，模块级 addEventListener 若不加幂等守卫会重复注册，
-// 导致一次 auth:logout 触发多次 setLoginUser(null)。用 window 上的 flag 防重入。
+// 监听 401 全局登出事件
 if (typeof window !== 'undefined' && !window.__fishAuthListenerInstalled) {
   window.addEventListener('auth:logout', () => {
     useAuthStore.getState().setLoginUser(null);

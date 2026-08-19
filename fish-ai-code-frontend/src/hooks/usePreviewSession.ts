@@ -41,7 +41,9 @@ export function usePreviewSession({ appId, codeGenType, canEdit, onProjectFilesL
 
   const previewSessionRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const vueFilesAbortRef = useRef<AbortController | null>(null);
+  const vueFilesRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appIdRef = useRef(appId);
+  const isMountedRef = useRef(true);
   // 流结束后是否已由 handleStreamFinalized 刷新过预览（避免历史兜底重复刷新）
   const previewHandledRef = useRef(false);
 
@@ -56,22 +58,39 @@ export function usePreviewSession({ appId, codeGenType, canEdit, onProjectFilesL
     }
   }, []);
 
+  const stopVueFilesPolling = useCallback(() => {
+    vueFilesAbortRef.current?.abort();
+    if (vueFilesRetryTimerRef.current) {
+      clearTimeout(vueFilesRetryTimerRef.current);
+      vueFilesRetryTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      stopVueFilesPolling();
+      stopPreviewSessionRefresh();
+    };
+  }, [stopVueFilesPolling, stopPreviewSessionRefresh]);
+
   /** 加载多文件源码（仅作者/管理员可访问；访客失败时保留预览、标记源码不可用） */
   const loadSourceCode = useCallback((targetAppId: string) => {
     setSourceLoading(true);
     getPreviewSource(targetAppId)
       .then((source) => {
-        if (targetAppId !== appIdRef.current) return;
+        if (!isMountedRef.current || targetAppId !== appIdRef.current) return;
         setSavedMultiFileCode({ htmlCode: source.html, cssCode: source.css, jsCode: source.javascript });
         setSourceUnavailable(false);
       })
       .catch(() => {
-        if (targetAppId !== appIdRef.current) return;
+        if (!isMountedRef.current || targetAppId !== appIdRef.current) return;
         setSourceUnavailable(true);
         setSavedMultiFileCode(null);
       })
       .finally(() => {
-        if (targetAppId === appIdRef.current) setSourceLoading(false);
+        if (isMountedRef.current && targetAppId === appIdRef.current) setSourceLoading(false);
       });
   }, []);
 
@@ -82,23 +101,23 @@ export function usePreviewSession({ appId, codeGenType, canEdit, onProjectFilesL
       setHtmlPreviewLoading(true);
       getPreviewSession(targetAppId)
         .then(({ previewUrl, expiresIn }) => {
-          if (targetAppId !== appIdRef.current) return;
+          if (!isMountedRef.current || targetAppId !== appIdRef.current) return;
           setHtmlPreviewUrl(genType === CODE_GEN_TYPES.VUE_PROJECT ? `${previewUrl}?edit=1` : previewUrl);
           setHtmlPreviewFrameLoading(true);
           // 会话到期前按比例提前续期（定时器回调取最新刷新函数）
           stopPreviewSessionRefresh();
           previewSessionRefreshTimerRef.current = window.setTimeout(() => {
-            if (targetAppId === appIdRef.current && genType) {
+            if (isMountedRef.current && targetAppId === appIdRef.current && genType) {
               refreshHtmlPreviewRef.current(targetAppId, genType);
             }
           }, Math.max(60_000, expiresIn * 800));
         })
         .catch(() => {
           // 预览会话获取失败才清空预览 URL（源码加载失败不影响预览，见 loadSourceCode）
-          if (targetAppId === appIdRef.current) setHtmlPreviewUrl('');
+          if (isMountedRef.current && targetAppId === appIdRef.current) setHtmlPreviewUrl('');
         })
         .finally(() => {
-          if (targetAppId === appIdRef.current) setHtmlPreviewLoading(false);
+          if (isMountedRef.current && targetAppId === appIdRef.current) setHtmlPreviewLoading(false);
         });
       // 多文件源码加载独立于预览：失败只标记不可用，不牵连预览 URL
       if (genType === CODE_GEN_TYPES.MULTI_FILE) {
@@ -138,27 +157,34 @@ export function usePreviewSession({ appId, codeGenType, canEdit, onProjectFilesL
             cache: 'no-store',
             credentials: 'include',
           });
-          if (targetAppId !== appIdRef.current) return;
+          if (!isMountedRef.current || targetAppId !== appIdRef.current) return;
           if (!res.ok) {
-            if (res.status !== 404 && !RETRYABLE_HTTP_STATUS.includes(res.status)) return;
+            if (res.status === 404) {
+              setProjectFiles([]);
+              return;
+            }
+            if (!RETRYABLE_HTTP_STATUS.includes(res.status)) return;
             throw new Error(`HTTP ${res.status}`);
           }
           const files: ProjectFile[] = await res.json();
-          if (targetAppId !== appIdRef.current) return;
+          if (!isMountedRef.current || targetAppId !== appIdRef.current) return;
           setProjectFiles((current) => (haveSameProjectFiles(current, files) ? current : files));
         } catch (error) {
           if (controller.signal.aborted) return;
-          if (targetAppId !== appIdRef.current) return;
+          if (!isMountedRef.current || targetAppId !== appIdRef.current) return;
           if (error instanceof SyntaxError) return;
           const delay = RETRY_DELAYS[retryIndex];
           if (delay == null) {
             onProjectFilesLoadFailedRef.current?.();
             return;
           }
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          if (targetAppId === appIdRef.current) {
-            await loadProjectFiles(retryIndex + 1);
-          }
+          if (vueFilesRetryTimerRef.current) clearTimeout(vueFilesRetryTimerRef.current);
+          vueFilesRetryTimerRef.current = setTimeout(async () => {
+            vueFilesRetryTimerRef.current = null;
+            if (isMountedRef.current && targetAppId === appIdRef.current) {
+              await loadProjectFiles(retryIndex + 1);
+            }
+          }, delay);
         }
       };
 
@@ -166,10 +192,6 @@ export function usePreviewSession({ appId, codeGenType, canEdit, onProjectFilesL
     },
     [canEdit],
   );
-
-  const stopVueFilesPolling = useCallback(() => {
-    vueFilesAbortRef.current?.abort();
-  }, []);
 
   // 进入 Vue 应用时拉取一次文件树
   useEffect(() => {

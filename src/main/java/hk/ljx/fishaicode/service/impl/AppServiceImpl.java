@@ -57,6 +57,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -68,6 +69,9 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppService {
+
+    private static final Pattern APP_NAME_PUNCTUATION_PATTERN = Pattern.compile("[\"'“”‘’《》【】「」『』]");
+    private static final Pattern APP_NAME_BORDER_PATTERN = Pattern.compile("^[\\s:：,，。.!！?？\\-—]+|[\\s:：,，。.!！?？\\-—]+$");
 
     private final AppDeployProperties appDeployProperties;
 
@@ -146,7 +150,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     }
 
     /**
-     * 由 AI 智能提炼应用名，任何异常都降级为提示词前 6 个字符截断，保证创建应用永远成功。
+     * 智能生成应用名称，若生成失败则降级截取提示词前缀
      */
     private String generateAppNameSafely(String initPrompt) {
         try {
@@ -158,25 +162,21 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         } catch (Exception e) {
             log.warn("AI 生成应用名失败，降级为截断，appName 前缀: {}", StrUtil.sub(initPrompt, 0, 6), e);
         }
-        // 降级：提示词前 6 个字符
         return initPrompt.length() > 6 ? initPrompt.substring(0, 6) : initPrompt;
     }
 
     /**
-     * 清洗 AI 返回的应用名：去空白、引号、首尾标点，超 15 字截断。
+     * 清洗应用名称：去除多余引号与首尾标点，限制最大长度为 15 字
      */
     static String cleanAppName(String name) {
-        if (name == null) {
+        if (StrUtil.isBlank(name)) {
             return "";
         }
-        String cleaned = StrUtil.trim(name)
-                .replaceAll("[\"'“”‘’《》【】「」『』]", "")
-                .replaceAll("^[\\s:：,，。.!！?？\\-—]+|[\\s:：,，。.!！?？\\-—]+$", "")
-                .trim();
-        if (StrUtil.isBlank(cleaned)) {
+        String cleaned = APP_NAME_PUNCTUATION_PATTERN.matcher(name).replaceAll("");
+        cleaned = APP_NAME_BORDER_PATTERN.matcher(cleaned).replaceAll("").trim();
+        if (cleaned.isEmpty()) {
             return "";
         }
-        // 截断保护：模型偶发超长时截到 15 字
         return cleaned.length() > 15 ? cleaned.substring(0, 15) : cleaned;
     }
 
@@ -195,6 +195,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         App app = new App();
         app.setId(id);
         app.setAppName(appName);
+        app.setEditTime(LocalDateTime.now());
         boolean result = this.updateById(app);
         if (!result) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "更新应用失败");
@@ -220,6 +221,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (priority != null) {
             app.setPriority(priority);
         }
+        app.setEditTime(LocalDateTime.now());
         boolean result = this.updateById(app);
         if (!result) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "更新应用失败");

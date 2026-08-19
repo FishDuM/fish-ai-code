@@ -39,15 +39,24 @@ public class ImageSearchTool {
                 .execute()) {
             if (response.isOk()) {
                 JSONObject result = JSONUtil.parseObj(response.body());
-                JSONArray photos = result.getJSONArray("photos");
-                for (int i = 0; i < photos.size(); i++) {
-                    JSONObject photo = photos.getJSONObject(i);
-                    JSONObject src = photo.getJSONObject("src");
-                    imageList.add(ImageResource.builder()
-                            .category(ImageCategoryEnum.CONTENT)
-                            .description(photo.getStr("alt", query))
-                            .url(src.getStr("medium"))
-                            .build());
+                if (result != null) {
+                    JSONArray photos = result.getJSONArray("photos");
+                    if (photos != null) {
+                        for (int i = 0; i < photos.size(); i++) {
+                            JSONObject photo = photos.getJSONObject(i);
+                            if (photo == null) continue;
+                            JSONObject src = photo.getJSONObject("src");
+                            if (src == null) continue;
+                            String url = src.getStr("medium");
+                            if (url != null && !url.isBlank()) {
+                                imageList.add(ImageResource.builder()
+                                        .category(ImageCategoryEnum.CONTENT)
+                                        .description(photo.getStr("alt", query))
+                                        .url(url)
+                                        .build());
+                            }
+                        }
+                    }
                 }
             }
         } catch (Exception e) {

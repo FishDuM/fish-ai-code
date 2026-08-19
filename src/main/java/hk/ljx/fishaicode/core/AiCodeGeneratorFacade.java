@@ -23,6 +23,8 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -116,10 +118,11 @@ public class AiCodeGeneratorFacade {
                                                     String userMessage, int attempt) {
         return Flux.create(sink -> {
             StringBuilder codeBuilder = new StringBuilder();
+            List<String> chunkList = new ArrayList<>();
             codeStream.subscribe(
                     chunk -> {
                         codeBuilder.append(chunk);
-                        sink.next(chunk);
+                        chunkList.add(chunk);
                     },
                     sink::error,
                     () -> {
@@ -139,7 +142,7 @@ public class AiCodeGeneratorFacade {
                                         .subscribe(sink::next, sink::error, sink::complete);
                                 return;
                             }
-                            // 重试后仍缺文件：不保存 css/js 为空的残次品，明确报错引导重试
+                            // 重试后若仍缺少关键代码文件则拒绝保存，避免落盘不完整文件
                             if (isMissingReferencedFiles(parsedResult)) {
                                 log.warn("多文件生成重试后仍缺少 CSS/JS 代码块，拒绝保存残缺产物，appId: {}", appId);
                                 sink.error(new BusinessException(ErrorCode.OPERATION_ERROR,
@@ -148,6 +151,9 @@ public class AiCodeGeneratorFacade {
                             }
                             File savedDir = CodeFileSaverExecutor.executeSaver(parsedResult, CodeGenTypeEnum.MULTI_FILE, appId);
                             log.info("保存成功，路径为：{}", savedDir.getAbsolutePath());
+                            for (String chunk : chunkList) {
+                                sink.next(chunk);
+                            }
                             sink.complete();
                         } catch (Exception e) {
                             log.error("代码保存失败，appId: {}, 类型: {}", appId, CodeGenTypeEnum.MULTI_FILE, e);

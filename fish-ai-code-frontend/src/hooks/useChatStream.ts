@@ -114,17 +114,22 @@ export function useChatStream({
     // 业务错误（限流等）：追加到流式气泡后转为普通消息，避免整段生成被覆盖。
     // 40100 会话过期：只收尾流状态（气泡转普通消息），不弹错——登出跳转由 SSE 层统一处理
     useCallback(
-      (code: number, errorMessage: string) => {
+      (code: number, errorMessage: string, finalAccumulated?: string) => {
         const isAuthExpired = code === 40100;
+        const genType = codeGenTypeRef.current;
+        const rawContent = finalAccumulated !== undefined ? finalAccumulated : '';
+        const cleanedFinal = genType === CODE_GEN_TYPES.VUE_PROJECT ? cleanVueOutput(rawContent) : rawContent;
+
         setStreamingMessage((current) => {
           if (!current || !current.isStreaming) return current;
           setMessages((prev) => {
             if (prev.some((m) => m.id === current.id)) return prev;
-            const hadContent = current.content && current.content.trim().length > 0;
+            const effectiveContent = cleanedFinal || current.content || '';
+            const hadContent = effectiveContent.trim().length > 0;
             const content = isAuthExpired
-              ? current.content
+              ? effectiveContent
               : hadContent
-                ? `${current.content}\n\n> ⚠️ ${errorMessage}`
+                ? `${effectiveContent}\n\n> ⚠️ ${errorMessage}`
                 : `❌ ${errorMessage}`;
             return [...prev, { ...current, content, isStreaming: false }];
           });

@@ -1,8 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 
-// Shape we need from react-syntax-highlighter. We only touch `Component` and
-// `style`, so a narrow structural type keeps the consumer honest without
-// pulling in the heavy default export type.
+// react-syntax-highlighter 样式类型定义
 export type HighlighterStyle = Record<string, React.CSSProperties>;
 
 export interface HighlighterBundle {
@@ -10,33 +8,13 @@ export interface HighlighterBundle {
     language?: string;
     style?: HighlighterStyle;
     customStyle?: React.CSSProperties;
-    // Real prop on react-syntax-highlighter; we use it to override the
-    // `text-shadow` baked into one-dark. Keep typing explicit so callers
-    // get autocomplete for the inner `style` object.
     codeTagProps?: { style?: React.CSSProperties };
     children?: React.ReactNode;
   }>;
   style: HighlighterStyle;
 }
 
-// Module-level shared lazy loader: every component on the page reuses the
-// same dynamic import promise so the syntax-highlighter + style bundles
-// only get fetched/parsed once.
-//
-// Use the light Prism renderer and register only languages this product can
-// generate or display. The full `Prism` export pulls in 297 grammars (almost
-// 1 MB minified in the production build) even though code generation is
-// overwhelmingly HTML/CSS/JS/Vue. Keeping the imports explicit also makes
-// adding a supported language a deliberate, measurable choice.
-//
-// 修复两点历史问题：
-//  1. 之前 reject 之后 highlighterPromise 永久缓存，一次打包/网络失败就让全站
-//     代码块永远走 <pre> fallback 且无法自愈 — 这里在 catch 里把 promise 重置
-//     为 null 并通知订阅者，允许下次挂载重新尝试。
-//  2. 之前每个 useHighlighter() 调用方各自一份 useState + useEffect，promise
-//     resolve 时 N 个组件各自 setState 触发 N 次独立重渲染（聊天列表每条消息
-//     一份）。现在用模块级单例 + useSyncExternalStore 订阅，加载完成只在
-//     全模块触发一次通知；订阅者各自在 React 调度的批处理里重新渲染。
+// 模块级单例缓存：按需加载轻量级 Prism 渲染器和语言包，避免重复加载
 let highlighterPromise: Promise<HighlighterBundle> | null = null;
 let cachedBundle: HighlighterBundle | null = null;
 const listeners = new Set<() => void>();
@@ -86,9 +64,6 @@ function loadBaseHighlighter(): Promise<HighlighterBundle> {
     highlighterPromise = (async () => {
       try {
         const [prismLightMod, styleMod] = await Promise.all([
-          // Import the light entry directly. Importing the package root as a
-          // namespace keeps the full Prism export reachable and defeats tree
-          // shaking, even when we only read PrismLight from that namespace.
           import('react-syntax-highlighter/dist/esm/prism-light'),
           import('react-syntax-highlighter/dist/esm/styles/prism/one-dark'),
         ]);
@@ -96,16 +71,9 @@ function loadBaseHighlighter(): Promise<HighlighterBundle> {
           Component: prismLightMod.default as unknown as LightPrismComponent,
           style: styleMod.default as HighlighterStyle,
         };
-        // 一次通知唤醒所有订阅者；每个订阅组件在自己的 React 调度里重新渲染，
-        // 不再是 N 个独立 setState。cachedBundle 是稳定引用，后续 React 的
-        // bail-out 可以直接跳过无变化的渲染。
         notify();
         return cachedBundle;
       } catch (err) {
-        // reject 后清空缓存的 promise，下次调用 loadHighlighter 会重新发起 import。
-        // 否则一次失败就会让全站代码块永久走 <pre> fallback 且无任何自愈路径。
-        // 这里同步触发一次通知：订阅者重新渲染时 snapshot 仍是 null，所以视觉
-        // 上仍是 fallback <pre>，但状态机已经被清干净，下次挂载能重试。
         highlighterPromise = null;
         notify();
         throw err;
@@ -133,6 +101,9 @@ async function ensureLanguage(language: string): Promise<void> {
       component.registerLanguage('xml', languageModule.default);
     }
     registeredLanguages.add(canonical);
+    if (cachedBundle) {
+      cachedBundle = { ...cachedBundle };
+    }
     notify();
   })();
   languagePromises.set(canonical, promise);
@@ -151,9 +122,6 @@ function loadHighlighter(languages: readonly string[] = []): Promise<Highlighter
   });
 }
 
-// useSyncExternalStore 的 subscribe：把订阅回调放进模块级 Set，
-// loadHighlighter resolve/reject 时统一 notify。cachedBundle 是稳定引用，
-// 满足 useSyncExternalStore 对 getSnapshot 返回值引用稳定的要求。
 function subscribe(cb: () => void): () => void {
   listeners.add(cb);
   return () => {
@@ -165,19 +133,12 @@ function getSnapshot(): HighlighterBundle | null {
   return cachedBundle;
 }
 
-// 本项目不做 SSR；服务端 snapshot 直接返回 null（"尚未加载"）。
 function getServerSnapshot(): HighlighterBundle | null {
   return null;
 }
 
 /**
- * Subscribe a component to the shared lazy-loaded syntax highlighter.
- * Returns the bundle once it has loaded, or null while still loading
- * (or if loading permanently failed — see comments above for retry).
- *
- * Return shape is intentionally identical to the previous implementation
- * (`HighlighterBundle | null`) so callers (ChatMessage, CodePreview, ...)
- * don't need to change.
+ * 订阅语法高亮器（按需异步加载）
  */
 export function useHighlighter(language?: string): HighlighterBundle | null {
   // 首次需要代码高亮时才加载基础渲染器和对应语法；重复调用共享 promise。

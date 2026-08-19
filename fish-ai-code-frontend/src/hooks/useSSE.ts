@@ -7,7 +7,11 @@ interface ToolExecutedInfo {
   content?: string;
 }
 
-export function useSSE(onComplete?: (finalCode: string) => void, onToolExecuted?: (info: ToolExecutedInfo) => void, onBusinessError?: (code: number, message: string) => void) {
+export function useSSE(
+  onComplete?: (finalCode: string) => void,
+  onToolExecuted?: (info: ToolExecutedInfo) => void,
+  onBusinessError?: (code: number, message: string, finalAccumulated?: string) => void
+) {
   const [isStreaming, setIsStreaming] = useState(false);
   const [currentCode, setCurrentCode] = useState('');
   const [error, setError] = useState<Error | null>(null);
@@ -105,7 +109,7 @@ export function useSSE(onComplete?: (finalCode: string) => void, onToolExecuted?
         isStreamingRef.current = false;
         setIsStreaming(false);
         setPreparing(false);
-        onBusinessErrorRef.current?.(code, message);
+        onBusinessErrorRef.current?.(code, message, accumulated);
       },
     });
   }, []); // No external deps — refs stay current

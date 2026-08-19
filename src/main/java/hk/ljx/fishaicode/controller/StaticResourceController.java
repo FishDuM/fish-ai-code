@@ -92,7 +92,7 @@ public class StaticResourceController {
                     previewTokenService.codeGenTypeFromPreviewKey(previewKey),
                     previewTokenService.appIdFromPreviewKey(previewKey));
         } catch (Exception e) {
-            return ResponseEntity.notFound().build();
+            return ResponseEntity.ok(List.of());
         }
         Path sourceRoot;
         try {
@@ -295,18 +295,38 @@ public class StaticResourceController {
                 && app.getCodeGenType().equals(previewTokenService.codeGenTypeFromPreviewKey(previewKey));
     }
 
+    private static final Map<String, String> MIME_TYPES = Map.ofEntries(
+            Map.entry("html", "text/html; charset=UTF-8"),
+            Map.entry("htm", "text/html; charset=UTF-8"),
+            Map.entry("css", "text/css; charset=UTF-8"),
+            Map.entry("js", "application/javascript; charset=UTF-8"),
+            Map.entry("mjs", "application/javascript; charset=UTF-8"),
+            Map.entry("json", "application/json; charset=UTF-8"),
+            Map.entry("png", "image/png"),
+            Map.entry("jpg", "image/jpeg"),
+            Map.entry("jpeg", "image/jpeg"),
+            Map.entry("gif", "image/gif"),
+            Map.entry("svg", "image/svg+xml"),
+            Map.entry("webp", "image/webp"),
+            Map.entry("ico", "image/x-icon"),
+            Map.entry("woff2", "font/woff2"),
+            Map.entry("woff", "font/woff"),
+            Map.entry("ttf", "font/ttf"),
+            Map.entry("map", "application/json")
+    );
+
     /**
      * 根据文件扩展名返回带字符编码的 Content-Type
      */
     private String getContentTypeWithCharset(String filePath) {
-        if (filePath.endsWith(".html")) return "text/html; charset=UTF-8";
-        if (filePath.endsWith(".css")) return "text/css; charset=UTF-8";
-        if (filePath.endsWith(".js")) return "application/javascript; charset=UTF-8";
-        if (filePath.endsWith(".png")) return "image/png";
-        if (filePath.endsWith(".jpg")) return "image/jpeg";
-        if (filePath.endsWith(".svg")) return "image/svg+xml";
-        if (filePath.endsWith(".webp")) return "image/webp";
-        if (filePath.endsWith(".woff2")) return "font/woff2";
+        if (filePath == null) {
+            return "application/octet-stream";
+        }
+        int lastDot = filePath.lastIndexOf('.');
+        if (lastDot >= 0 && lastDot < filePath.length() - 1) {
+            String ext = filePath.substring(lastDot + 1).toLowerCase();
+            return MIME_TYPES.getOrDefault(ext, "application/octet-stream");
+        }
         return "application/octet-stream";
     }
 

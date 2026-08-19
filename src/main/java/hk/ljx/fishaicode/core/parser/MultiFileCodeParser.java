@@ -18,6 +18,9 @@ public class MultiFileCodeParser implements CodeParser<MultiFileCodeResult> {
     @Override
     public MultiFileCodeResult parseCode(String codeContent) {
         MultiFileCodeResult result = new MultiFileCodeResult();
+        if (codeContent == null) {
+            return result;
+        }
         // 提取各类代码
         String htmlCode = extractCodeByPattern(codeContent, HTML_CODE_PATTERN);
         String cssCode = extractCodeByPattern(codeContent, CSS_CODE_PATTERN);

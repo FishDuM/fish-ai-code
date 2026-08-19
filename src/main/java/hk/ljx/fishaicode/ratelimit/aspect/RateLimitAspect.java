@@ -1,5 +1,6 @@
 package hk.ljx.fishaicode.ratelimit.aspect;
 
+import cn.hutool.json.JSONUtil;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.model.entity.User;
@@ -9,33 +10,51 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.JoinPoint;
+import org.aspectj.lang.ProceedingJoinPoint;
+import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
-import org.aspectj.lang.annotation.Before;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.redisson.api.RRateLimiter;
 import org.redisson.api.RateIntervalUnit;
 import org.redisson.api.RateType;
 import org.redisson.api.RedissonClient;
+import org.springframework.core.annotation.Order;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+import reactor.core.publisher.Flux;
 
 import java.lang.reflect.Method;
 import java.time.Duration;
+import java.util.Map;
 
 /**
  * 限流切面
  */
 @Aspect
 @Component
+@Order(2)
 @Slf4j
 @RequiredArgsConstructor
 public class RateLimitAspect {
     private final RedissonClient redissonClient;
     private final UserService userService;
 
-    @Before("@annotation(rateLimit)")
-    public void doBefore(JoinPoint point, RateLimit rateLimit) {
+    @Around("@annotation(rateLimit)")
+    public Object doAround(ProceedingJoinPoint point, RateLimit rateLimit) throws Throwable {
+        try {
+            checkRateLimit(point, rateLimit);
+            return point.proceed();
+        } catch (BusinessException e) {
+            if (isSseFluxMethod(point)) {
+                return buildErrorSseFlux(e);
+            }
+            throw e;
+        }
+    }
+
+    private void checkRateLimit(JoinPoint point, RateLimit rateLimit) {
         String key = generateRateLimitKey(point, rateLimit);
         // 使用Redisson的分布式限流器
         RRateLimiter rateLimiter = redissonClient.getRateLimiter(key);
@@ -48,6 +67,23 @@ public class RateLimitAspect {
         if (!rateLimiter.tryAcquire(1)) {
             throw new BusinessException(ErrorCode.TOO_MANY_REQUEST, rateLimit.message());
         }
+    }
+
+    private boolean isSseFluxMethod(ProceedingJoinPoint joinPoint) {
+        MethodSignature signature = (MethodSignature) joinPoint.getSignature();
+        return Flux.class.isAssignableFrom(signature.getReturnType());
+    }
+
+    private Object buildErrorSseFlux(BusinessException e) {
+        String data = JSONUtil.toJsonStr(Map.of(
+                "error", true,
+                "code", e.getCode(),
+                "message", e.getMessage()
+        ));
+        ServerSentEvent<String> event = ServerSentEvent.<String>builder(data)
+                .event("business-error")
+                .build();
+        return Flux.just(event);
     }
 
     private String generateRateLimitKey(JoinPoint point, RateLimit rateLimit) {

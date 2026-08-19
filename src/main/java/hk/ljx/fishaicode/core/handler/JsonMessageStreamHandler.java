@@ -113,7 +113,18 @@ public class JsonMessageStreamHandler {
      * 解析并收集 TokenStream 数据
      */
     private String handleJsonMessageChunk(String chunk, StringBuilder chatHistoryStringBuilder, Set<String> seenToolIds) {
-        StreamMessage streamMessage = JSONUtil.toBean(chunk, StreamMessage.class);
+        if (chunk == null || !chunk.trim().startsWith("{")) {
+            return "";
+        }
+        StreamMessage streamMessage;
+        try {
+            streamMessage = JSONUtil.toBean(chunk, StreamMessage.class);
+        } catch (Exception e) {
+            return "";
+        }
+        if (streamMessage == null || streamMessage.getType() == null) {
+            return "";
+        }
         StreamMessageTypeEnum typeEnum = StreamMessageTypeEnum.getEnumByValue(streamMessage.getType());
         if (typeEnum == null) {
             log.warn("收到未知消息类型: {}", streamMessage.getType());
@@ -123,9 +134,11 @@ public class JsonMessageStreamHandler {
             case AI_RESPONSE -> {
                 AiResponseMessage aiMessage = JSONUtil.toBean(chunk, AiResponseMessage.class);
                 String data = aiMessage.getData();
-                // 直接拼接响应
-                chatHistoryStringBuilder.append(data);
-                return data;
+                if (data != null) {
+                    chatHistoryStringBuilder.append(data);
+                    return data;
+                }
+                return "";
             }
             case TOOL_REQUEST -> {
                 ToolRequestMessage toolRequestMessage = JSONUtil.toBean(chunk, ToolRequestMessage.class);

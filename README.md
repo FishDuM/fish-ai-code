@@ -234,12 +234,24 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
-    # 后端 API 反向代理
+    # 部署产物静态访问
+    location /deploy/ {
+        alias /path/to/tmp/code_deploy/;
+        index index.html index.htm;
+        autoindex off;
+    }
+
+    # 后端 API 反向代理（含 SSE 流式响应）
     location /api/ {
         proxy_pass http://127.0.0.1:8911;
+        proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
     }
 }
 ```

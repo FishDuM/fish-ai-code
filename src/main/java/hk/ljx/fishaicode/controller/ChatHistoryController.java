@@ -18,6 +18,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -75,7 +76,7 @@ public class ChatHistoryController {
     @GetMapping("/list/before")
     public BaseResponse<List<ChatHistory>> listChatHistoryBefore(
             @NotNull(message = "应用 ID 不能为空") @Min(value = 1, message = "应用 ID 不合法") @RequestParam("appId") Long appId,
-            @NotNull(message = "游标时间不能为空") @RequestParam("before") LocalDateTime before,
+            @NotNull(message = "游标时间不能为空") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME, fallbackPatterns = {"yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd'T'HH:mm:ss"}) @RequestParam("before") LocalDateTime before,
             @RequestParam(value = "beforeId", required = false) @Min(value = 1, message = "游标消息 ID 不合法") Long beforeId,
             @RequestParam(value = "limit", defaultValue = "10") @Min(value = 1, message = "limit 至少为 1") @Max(value = 20, message = "limit 最多为 20") int limit,
             HttpServletRequest request) {

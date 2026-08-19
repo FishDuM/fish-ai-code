@@ -114,6 +114,9 @@ public class WorkflowService {
         try {
             // 1. 获取图片收集计划
             ImageCollectionPlan plan = imageCollectionPlanService.planImageCollection(prompt);
+            if (plan == null) {
+                return collectedImages;
+            }
             log.info("获取到图片收集计划");
 
             // 2. 并发执行图片收集（最多取前 3 个搜索任务，避免太多）
@@ -125,18 +128,22 @@ public class WorkflowService {
             if (plan.getContentImageTasks() != null) {
                 for (ImageCollectionPlan.ImageSearchTask task : plan.getContentImageTasks()) {
                     if (taskCount >= maxTasks) break;
-                    futures.add(CompletableFuture.supplyAsync(() ->
-                            imageSearchTool.searchContentImages(task.query()), virtualThreadExecutor));
-                    taskCount++;
+                    if (task != null && task.query() != null && !task.query().isBlank()) {
+                        futures.add(CompletableFuture.supplyAsync(() ->
+                                imageSearchTool.searchContentImages(task.query()), virtualThreadExecutor));
+                        taskCount++;
+                    }
                 }
             }
 
             if (plan.getIllustrationTasks() != null && taskCount < maxTasks) {
                 for (ImageCollectionPlan.IllustrationTask task : plan.getIllustrationTasks()) {
                     if (taskCount >= maxTasks) break;
-                    futures.add(CompletableFuture.supplyAsync(() ->
-                            undrawIllustrationTool.searchIllustrations(task.query()), virtualThreadExecutor));
-                    taskCount++;
+                    if (task != null && task.query() != null && !task.query().isBlank()) {
+                        futures.add(CompletableFuture.supplyAsync(() ->
+                                undrawIllustrationTool.searchIllustrations(task.query()), virtualThreadExecutor));
+                        taskCount++;
+                    }
                 }
             }
 
@@ -170,10 +177,15 @@ public class WorkflowService {
         int maxImages = Math.min(imageList.size(), 6);
         for (int i = 0; i < maxImages; i++) {
             ImageResource image = imageList.get(i);
+            if (image == null || image.getUrl() == null || image.getUrl().isBlank()) {
+                continue;
+            }
+            String categoryText = image.getCategory() != null ? image.getCategory().getText() : "图片";
+            String desc = image.getDescription() != null ? image.getDescription() : "网站配图";
             enhancedPromptBuilder.append("- ")
-                    .append(image.getCategory().getText())
+                    .append(categoryText)
                     .append("：")
-                    .append(image.getDescription())
+                    .append(desc)
                     .append("（")
                     .append(image.getUrl())
                     .append("）\n");

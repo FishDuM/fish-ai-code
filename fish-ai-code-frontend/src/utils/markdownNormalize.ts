@@ -1,26 +1,7 @@
 /**
- * Streaming-friendly markdown normalisation.
- *
- * CommonMark requires fenced code blocks to start at the beginning of a
- * line (with up to 3 spaces of leading indentation). When the AI streams
- * a response it often concatenates the opening prose and the code fence
- * onto the same physical line — e.g.
- *
- *     好的，我来帮您```html
- *     <!DOCTYPE html>...
- *
- * react-markdown (via remark) parses this as a single paragraph with
- * literal backticks and inline-escaped HTML, which renders as a wall of
- * text rather than a properly formatted code block.
- *
- * This helper scans line by line, tracking open/close fence state, and:
- *   - inserts a newline before an opening fence that follows prose,
- *   - splits `</html>```css` (closing fence fused with next opening fence),
- *   - splits language tags fused with first code line (` ```css body{}`),
- *   - splits a closing fence fused with trailing prose (` ```###说明`).
- *
- * Inline backticks aren't affected because these rules only touch fence
- * sequences (3+ backticks) in line-leading or content-fusing positions.
+ * 流式 Markdown 代码块格式化工具
+ * 处理 AI 流式输出中粘连的代码围栏（如正文与 ```html 粘连、闭合标签与开围栏粘连等），
+ * 确保 react-markdown 能正确识别并渲染为代码块。
  */
 
 // 已知语言名单：围栏后跟这些词才被认为是"开围栏 + 语言名"，

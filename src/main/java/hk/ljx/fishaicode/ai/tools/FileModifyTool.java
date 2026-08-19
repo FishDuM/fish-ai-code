@@ -46,10 +46,15 @@ public class FileModifyTool extends BaseTool {
                 return "错误：文件过大，无法修改 - " + relativeFilePath;
             }
             String originalContent = Files.readString(path);
-            if (!originalContent.contains(oldContent)) {
+            int firstIndex = originalContent.indexOf(oldContent);
+            if (firstIndex == -1) {
                 return "警告：文件中未找到要替换的内容，文件未修改 - " + relativeFilePath;
             }
-            String modifiedContent = originalContent.replace(oldContent, newContent);
+            int lastIndex = originalContent.lastIndexOf(oldContent);
+            if (firstIndex != lastIndex) {
+                return "错误：在文件中找到多处匹配内容，请提供更多上下文以唯一定位要修改的代码块 - " + relativeFilePath;
+            }
+            String modifiedContent = originalContent.substring(0, firstIndex) + newContent + originalContent.substring(firstIndex + oldContent.length());
             if (modifiedContent.getBytes(StandardCharsets.UTF_8).length > MAX_FILE_SIZE_BYTES) {
                 return "错误：修改后的文件超过 1 MB - " + relativeFilePath;
             }

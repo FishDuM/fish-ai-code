@@ -9,15 +9,21 @@ function stripSSEPrefix(line: string): string {
   return line
     .split('\n')
     .map((l) => {
-      let s = l.trim();
-      if (s.startsWith('data:') || s.startsWith('event:') || s.startsWith('id:') || s.startsWith('retry:')) {
-        const colon = s.indexOf(':');
-        s = s.slice(colon + 1).trim();
+      if (l.startsWith('data: ')) return l.slice(6);
+      if (l.startsWith('data:')) return l.slice(5);
+      if (l.startsWith('event: ')) return l.slice(7);
+      if (l.startsWith('event:')) return l.slice(6);
+      if (l.startsWith('id: ') || l.startsWith('retry: ')) {
+        const colon = l.indexOf(':');
+        return l.slice(colon + 2);
       }
-      return s;
+      if (l.startsWith('id:') || l.startsWith('retry:')) {
+        const colon = l.indexOf(':');
+        return l.slice(colon + 1);
+      }
+      return l;
     })
-    .join('\n')
-    .trim();
+    .join('\n');
 }
 
 export interface SSECallbacks {
@@ -38,16 +44,19 @@ interface ParsedSSEEvent {
  * Handles multi-line data values (consecutive "data:" lines).
  */
 function parseSSEEventBlock(block: string): ParsedSSEEvent {
-  const lines = block.trim().split('\n');
+  const lines = block.split('\n');
   let eventType = '';
   const dataLines: string[] = [];
 
   for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith('event:')) {
-      eventType = trimmed.slice(6).trim();
-    } else if (trimmed.startsWith('data:')) {
-      dataLines.push(trimmed.slice(5).trimStart());
+    if (line.startsWith('event: ')) {
+      eventType = line.slice(7).trim();
+    } else if (line.startsWith('event:')) {
+      eventType = line.slice(6).trim();
+    } else if (line.startsWith('data: ')) {
+      dataLines.push(line.slice(6));
+    } else if (line.startsWith('data:')) {
+      dataLines.push(line.slice(5));
     }
   }
 
@@ -77,6 +86,7 @@ export function startCodeGenSSE(
   callbacks: SSECallbacks
 ): AbortController {
   const controller = new AbortController();
+  let receivedBusinessError = false;
 
   /** 统一处理 business-error 事件：40100 视为会话过期，走统一登出 */
   const handleBusinessError = (raw: string) => {
@@ -113,6 +123,13 @@ export function startCodeGenSSE(
         const parsed = JSON.parse(maybeJson);
         const type = parsed.type;
 
+        // 后端全局异常处理返回的 BaseResponse 格式错误（如限流 42900、参数校验失败等）
+        if (parsed.code !== undefined && typeof parsed.code === 'number' && parsed.code !== 0) {
+          receivedBusinessError = true;
+          handleBusinessError(maybeJson);
+          return;
+        }
+
         if (type === 'ai_response' && parsed.data != null) {
           callbacks.onChunk(parsed.data);
         } else if (type === 'tool_request') {
@@ -147,7 +164,6 @@ export function startCodeGenSSE(
 
   (async () => {
     try {
-      let receivedBusinessError = false;
       const url = `${API_BASE_URL}/app/chat/gen/code`;
       const response = await fetch(url, {
         method: 'POST',

@@ -216,22 +216,20 @@ export function useEditMode({
   const handleAddEdit = useCallback(
     (instruction: string) => {
       if (!instruction || !selectedElement || !appId) return;
-      setPendingEdits((prev) => {
-        if (prev.length >= MAX_EDITS) {
-          message.warning('最多只能添加 15 条编辑，请先保存');
-          return prev;
-        }
-        return [
-          ...prev,
-          { id: newMsgId(), element: selectedElement, instruction: instruction.trim() },
-        ];
-      });
+      if (pendingEdits.length >= MAX_EDITS) {
+        message.warning('最多只能添加 15 条编辑，请先保存');
+        return;
+      }
+      setPendingEdits((prev) => [
+        ...prev,
+        { id: newMsgId(), element: selectedElement, instruction: instruction.trim() },
+      ]);
       setPendingEditsOwnerAppId(appId);
       postEditModeMessage({ type: 'unselect' });
       setSelectedElement(null);
       setPopoverPosition(null);
     },
-    [selectedElement, appId, postEditModeMessage, message],
+    [selectedElement, appId, postEditModeMessage, message, pendingEdits.length],
   );
 
   const handleRemoveEdit = useCallback((id: string) => {
