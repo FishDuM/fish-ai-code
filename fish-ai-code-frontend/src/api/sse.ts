@@ -1,30 +1,6 @@
 import { API_BASE_URL, ERROR_CODES } from '@/constants';
 import { handleAuthExpired } from './authExpired';
 
-/**
- * SSE 事件块可能跨多行（一个事件多个 data: 行），每行剥一次前缀即可。
- * 不能 while 循环反复剥：AI 生成的代码里 `data: [...]`、`event: click` 会被误改写。
- */
-function stripSSEPrefix(line: string): string {
-  return line
-    .split('\n')
-    .map((l) => {
-      if (l.startsWith('data: ')) return l.slice(6);
-      if (l.startsWith('data:')) return l.slice(5);
-      if (l.startsWith('event: ')) return l.slice(7);
-      if (l.startsWith('event:')) return l.slice(6);
-      if (l.startsWith('id: ') || l.startsWith('retry: ')) {
-        const colon = l.indexOf(':');
-        return l.slice(colon + 2);
-      }
-      if (l.startsWith('id:') || l.startsWith('retry:')) {
-        const colon = l.indexOf(':');
-        return l.slice(colon + 1);
-      }
-      return l;
-    })
-    .join('\n');
-}
 
 export interface SSECallbacks {
   onChunk: (chunk: string) => void;
@@ -230,9 +206,9 @@ export function startCodeGenSSE(
             continue;
           }
 
-          // Strip SSE protocol prefixes (Spring WebFlux adds "data:" prefix)
-          const rawData = stripSSEPrefix(block);
-          handleRawData(rawData);
+          if (parsed.data) {
+            handleRawData(parsed.data);
+          }
         }
 
         // Trim processed portion to keep the buffer bounded
@@ -266,8 +242,9 @@ export function startCodeGenSSE(
           handleBusinessError(parsed.data);
           continue;
         }
-        const rawData = stripSSEPrefix(block);
-        handleRawData(rawData);
+        if (parsed.data) {
+          handleRawData(parsed.data);
+        }
       }
       // 收尾：残留 buffer 没有 `\n\n` 也当成一段事件解析 —— 这是修尾帧丢失的关键。
       if (searchStart < buffer.length) {
@@ -277,9 +254,8 @@ export function startCodeGenSSE(
           if (parsed.event === 'business-error') {
             receivedBusinessError = true;
             handleBusinessError(parsed.data);
-          } else {
-            const rawData = stripSSEPrefix(tailBlock);
-            handleRawData(rawData);
+          } else if (parsed.data) {
+            handleRawData(parsed.data);
           }
         }
       }

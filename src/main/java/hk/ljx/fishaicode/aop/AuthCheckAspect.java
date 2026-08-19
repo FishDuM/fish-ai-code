@@ -2,6 +2,7 @@ package hk.ljx.fishaicode.aop;
 
 import cn.hutool.json.JSONUtil;
 import hk.ljx.fishaicode.annotation.AuthCheck;
+import hk.ljx.fishaicode.common.SseResultUtils;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.model.entity.User;
@@ -99,17 +100,9 @@ public class AuthCheckAspect {
     }
 
     /**
-     * 构造 SSE 错误事件流，与 AppController 的 business-error 事件格式保持一致
+     * 构造 SSE 错误事件流
      */
     private Object buildErrorSseFlux(BusinessException e) {
-        String data = JSONUtil.toJsonStr(Map.of(
-                "error", true,
-                "code", e.getCode(),
-                "message", e.getMessage()
-        ));
-        ServerSentEvent<String> event = ServerSentEvent.<String>builder(data)
-                .event("business-error")
-                .build();
-        return Flux.just(event);
+        return SseResultUtils.buildErrorFlux(e);
     }
 }

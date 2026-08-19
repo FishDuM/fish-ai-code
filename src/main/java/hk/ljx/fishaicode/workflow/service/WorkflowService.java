@@ -16,9 +16,11 @@ import org.springframework.stereotype.Service;
 import java.io.File;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 代码生成工作流服务 - 串联图片收集 → 提示词增强 → 产物完整性校验 → 项目构建
@@ -130,7 +132,15 @@ public class WorkflowService {
                     if (taskCount >= maxTasks) break;
                     if (task != null && task.query() != null && !task.query().isBlank()) {
                         futures.add(CompletableFuture.supplyAsync(() ->
-                                imageSearchTool.searchContentImages(task.query()), virtualThreadExecutor));
+                                imageSearchTool.searchContentImages(task.query()), virtualThreadExecutor)
+                                .orTimeout(8, TimeUnit.SECONDS)
+                                .handle((res, ex) -> {
+                                    if (ex != null) {
+                                        log.warn("搜索内容图片异常 [query: {}]: {}", task.query(), ex.getMessage());
+                                        return Collections.<ImageResource>emptyList();
+                                    }
+                                    return res != null ? res : Collections.<ImageResource>emptyList();
+                                }));
                         taskCount++;
                     }
                 }
@@ -141,18 +151,31 @@ public class WorkflowService {
                     if (taskCount >= maxTasks) break;
                     if (task != null && task.query() != null && !task.query().isBlank()) {
                         futures.add(CompletableFuture.supplyAsync(() ->
-                                undrawIllustrationTool.searchIllustrations(task.query()), virtualThreadExecutor));
+                                undrawIllustrationTool.searchIllustrations(task.query()), virtualThreadExecutor)
+                                .orTimeout(8, TimeUnit.SECONDS)
+                                .handle((res, ex) -> {
+                                    if (ex != null) {
+                                        log.warn("搜索插画异常 [query: {}]: {}", task.query(), ex.getMessage());
+                                        return Collections.<ImageResource>emptyList();
+                                    }
+                                    return res != null ? res : Collections.<ImageResource>emptyList();
+                                }));
                         taskCount++;
                     }
                 }
             }
 
-            // 3. 等待所有任务完成
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            // 3. 等待所有任务完成（单个任务异常/超时已降级为 emptyList）
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                    .orTimeout(10, TimeUnit.SECONDS)
+                    .join();
             for (CompletableFuture<List<ImageResource>> future : futures) {
-                List<ImageResource> images = future.get();
-                if (images != null) {
-                    collectedImages.addAll(images);
+                try {
+                    List<ImageResource> images = future.getNow(Collections.emptyList());
+                    if (images != null) {
+                        collectedImages.addAll(images);
+                    }
+                } catch (Exception ignored) {
                 }
             }
             log.info("图片收集完成，共收集到 {} 张图片", collectedImages.size());

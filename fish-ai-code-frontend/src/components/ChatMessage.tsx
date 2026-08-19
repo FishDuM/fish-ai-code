@@ -56,16 +56,39 @@ function ChatMessageInner({ role, content, isStreaming }: ChatMessageProps) {
       return <CodeBlock language={language} rawCode={codeString} isStreaming={isStreaming}>{displayCode}</CodeBlock>;
     }
 
-    // 工具调用段落：[工具调用]/[选择工具]/[写入文件] 等标记渲染为带图标的卡片。
+    // 工具调用段落：支持中文动作（写入文件/修改文件等）与英文函数名（writeToFile/modifyFile等），
     // 动作词白名单限定，避免把 "[注意]" 这类普通文本误渲染
-    const TOOL_ACTIONS = '写入文件|修改文件|删除文件|读取文件|读取目录';
+    const TOOL_ACTION_CONFIG: Record<string, { label: string; icon: typeof ToolOutlined }> = {
+      '写入文件': { label: '写入文件', icon: FileTextOutlined },
+      '写入': { label: '写入文件', icon: FileTextOutlined },
+      'writeToFile': { label: '写入文件', icon: FileTextOutlined },
+      'fileWrite': { label: '写入文件', icon: FileTextOutlined },
+      '修改文件': { label: '修改文件', icon: EditOutlined },
+      '修改': { label: '修改文件', icon: EditOutlined },
+      'modifyFile': { label: '修改文件', icon: EditOutlined },
+      'fileModify': { label: '修改文件', icon: EditOutlined },
+      '删除文件': { label: '删除文件', icon: DeleteOutlined },
+      '删除': { label: '删除文件', icon: DeleteOutlined },
+      'deleteFile': { label: '删除文件', icon: DeleteOutlined },
+      'fileDelete': { label: '删除文件', icon: DeleteOutlined },
+      '读取文件': { label: '读取文件', icon: FileSearchOutlined },
+      '读取': { label: '读取文件', icon: FileSearchOutlined },
+      'readFile': { label: '读取文件', icon: FileSearchOutlined },
+      'fileRead': { label: '读取文件', icon: FileSearchOutlined },
+      '读取目录': { label: '读取目录', icon: FolderOpenOutlined },
+      'readDir': { label: '读取目录', icon: FolderOpenOutlined },
+      'listDir': { label: '读取目录', icon: FolderOpenOutlined },
+    };
+
+    const TOOL_ACTION_KEYS = Object.keys(TOOL_ACTION_CONFIG).join('|');
     const TOOL_CALL_SPLIT_RE = new RegExp(
-      `((?:\\[(?:工具调用|选择工具)\\]\\s*(?:${TOOL_ACTIONS})\\s*(?:[^\\s[\\]，。、；：（）()]*?\\.[a-zA-Z0-9]{1,6}|[^\\s[\\]，。、；：（）()]+)?)|(?:\\[(?:${TOOL_ACTIONS})\\]\\s+(?:[^\\s[\\]，。、；：（）()]*?\\.[a-zA-Z0-9]{1,6}|[^\\s[\\]，。、；：（）()]+)))`,
+      `((?:\\[(?:工具调用|选择工具|tool_call|tool|action)\\]\\s*(?:${TOOL_ACTION_KEYS})\\s*(?:[^\\s[\\]，。、；：（）()]*?\\.[a-zA-Z0-9]{1,6}|[^\\s[\\]，。、；：（）()]+)?)|(?:\\[(?:${TOOL_ACTION_KEYS})\\]\\s+(?:[^\\s[\\]，。、；：（）()]*?\\.[a-zA-Z0-9]{1,6}|[^\\s[\\]，。、；：（）()]+)))`,
       'g',
     );
     const TOOL_ACTION_RE = new RegExp(
-      `^(?:\\[(?:工具调用|选择工具)\\]\\s*)?\\[?(${TOOL_ACTIONS})\\]?(?:\\s+(?:([^\\s[\\]，。、；：（）()]*?\\.[a-zA-Z0-9]{1,6})|([^\\s[\\]，。、；：（）()]+)))?$`,
+      `^(?:\\[(?:工具调用|选择工具|tool_call|tool|action)\\]\\s*)?\\[?(${TOOL_ACTION_KEYS})\\]?(?:\\s+(?:([^\\s[\\]，。、；：（）()]*?\\.[a-zA-Z0-9]{1,6})|([^\\s[\\]，。、；：（）()]+)))?$`,
     );
+
     function ToolCallParagraph({ children }: { children?: React.ReactNode }) {
       const text = toCodeString(children);
       const parts = text.split(TOOL_CALL_SPLIT_RE);
@@ -87,13 +110,9 @@ function ChatMessageInner({ role, content, isStreaming }: ChatMessageProps) {
             const action = m[1];
             const [, , extPath, rawPath] = m;
             const filePath = extPath ?? rawPath;
-            const Icon =
-              action === '写入文件' ? FileTextOutlined :
-              action === '修改文件' ? EditOutlined :
-              action === '删除文件' ? DeleteOutlined :
-              action === '读取文件' ? FileSearchOutlined :
-              action === '读取目录' ? FolderOpenOutlined :
-              ToolOutlined;
+            const actionConfig = TOOL_ACTION_CONFIG[action] ?? { label: action, icon: ToolOutlined };
+            const Icon = actionConfig.icon;
+            const displayLabel = actionConfig.label;
             return (
               <span
                 key={i}
@@ -123,19 +142,24 @@ function ChatMessageInner({ role, content, isStreaming }: ChatMessageProps) {
                   }}
                 >
                   <Icon style={{ fontSize: 16, color: '#16ab9c' }} />
-                  {action}
+                  {filePath ? `${displayLabel}:` : displayLabel}
                 </span>
-                {filePath ? (
-                  <code
+                {filePath && (
+                  <span
                     style={{
-                      fontFamily: 'inherit',
+                      fontFamily: 'monospace',
+                      fontSize: '0.9em',
+                      color: '#1e293b',
+                      background: 'rgba(255,255,255,0.85)',
+                      padding: '2px 8px',
+                      borderRadius: 6,
+                      border: '1px solid rgba(0,0,0,0.06)',
                       wordBreak: 'break-all',
-                      color: '#374151',
                     }}
                   >
                     {filePath}
-                  </code>
-                ) : null}
+                  </span>
+                )}
               </span>
             );
           })}

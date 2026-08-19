@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CODE_GEN_TYPES } from '@/constants';
 import { getPreviewSession, getPreviewSource } from '@/api/app';
 import { getVueFilesListUrl } from '@/utils/vueProjectUrls';
@@ -95,7 +95,7 @@ export function usePreviewSession({ appId, codeGenType, canEdit, onProjectFilesL
   }, []);
 
   const refreshHtmlPreview = useCallback(
-    (targetAppId: string, genType: string | null | undefined) => {
+    function doRefresh(targetAppId: string, genType: string | null | undefined) {
       if (!targetAppId || !genType) return;
       if (targetAppId === appIdRef.current) stopPreviewSessionRefresh();
       setHtmlPreviewLoading(true);
@@ -104,11 +104,11 @@ export function usePreviewSession({ appId, codeGenType, canEdit, onProjectFilesL
           if (!isMountedRef.current || targetAppId !== appIdRef.current) return;
           setHtmlPreviewUrl(genType === CODE_GEN_TYPES.VUE_PROJECT ? `${previewUrl}?edit=1` : previewUrl);
           setHtmlPreviewFrameLoading(true);
-          // 会话到期前按比例提前续期（定时器回调取最新刷新函数）
+          // 会话到期前按比例提前续期
           stopPreviewSessionRefresh();
           previewSessionRefreshTimerRef.current = window.setTimeout(() => {
             if (isMountedRef.current && targetAppId === appIdRef.current && genType) {
-              refreshHtmlPreviewRef.current(targetAppId, genType);
+              doRefresh(targetAppId, genType);
             }
           }, Math.max(60_000, expiresIn * 800));
         })
@@ -126,19 +126,6 @@ export function usePreviewSession({ appId, codeGenType, canEdit, onProjectFilesL
     },
     [stopPreviewSessionRefresh, loadSourceCode],
   );
-
-  // 定时器回调引用最新的 refreshHtmlPreview（latest-ref 模式，同 useSSE.ts）
-  const refreshHtmlPreviewRef = useRef(refreshHtmlPreview);
-  useLayoutEffect(() => {
-    // eslint-disable-next-line react-hooks/immutability -- latest-ref 模式；useSSE.ts 同款写法
-    refreshHtmlPreviewRef.current = refreshHtmlPreview;
-  }, [refreshHtmlPreview]);
-
-  // 回调经 ref 中转，避免调用方内联回调导致 fetchVueProjectFiles 每次渲染重建、effect 重复触发
-  const onProjectFilesLoadFailedRef = useRef(onProjectFilesLoadFailed);
-  useLayoutEffect(() => {
-    onProjectFilesLoadFailedRef.current = onProjectFilesLoadFailed;
-  }, [onProjectFilesLoadFailed]);
 
   const fetchVueProjectFiles = useCallback(
     async (targetAppId: string) => {
@@ -175,7 +162,7 @@ export function usePreviewSession({ appId, codeGenType, canEdit, onProjectFilesL
           if (error instanceof SyntaxError) return;
           const delay = RETRY_DELAYS[retryIndex];
           if (delay == null) {
-            onProjectFilesLoadFailedRef.current?.();
+            onProjectFilesLoadFailed?.();
             return;
           }
           if (vueFilesRetryTimerRef.current) clearTimeout(vueFilesRetryTimerRef.current);
@@ -190,7 +177,7 @@ export function usePreviewSession({ appId, codeGenType, canEdit, onProjectFilesL
 
       await loadProjectFiles(0);
     },
-    [canEdit],
+    [canEdit, onProjectFilesLoadFailed],
   );
 
   // 进入 Vue 应用时拉取一次文件树

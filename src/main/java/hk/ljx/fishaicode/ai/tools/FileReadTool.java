@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -36,7 +37,7 @@ public class FileReadTool extends BaseTool{
             if (Files.size(path) > MAX_FILE_SIZE_BYTES) {
                 return "错误：文件过大，无法读取 - " + relativeFilePath;
             }
-            return Files.readString(path);
+            return Files.readString(path, StandardCharsets.UTF_8);
         } catch (IllegalArgumentException e) {
             log.warn("拒绝读取项目外文件: {}", relativeFilePath);
             return "错误：文件路径不合法 - " + relativeFilePath;

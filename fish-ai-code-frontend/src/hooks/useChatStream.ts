@@ -45,32 +45,12 @@ export function useChatStream({
     streamingMessageRef.current = streamingMessage;
   }, [streamingMessage]);
 
-  // 回调与最新值经 ref 中转，避免闭包过期
-  const onStreamFinalizedRef = useRef(onStreamFinalized);
-  const onToolFileRef = useRef(onToolFile);
-  const codeGenTypeRef = useRef(codeGenType);
-  const appIdRef = useRef(appId);
-  useEffect(() => {
-    onStreamFinalizedRef.current = onStreamFinalized;
-  }, [onStreamFinalized]);
-  useEffect(() => {
-    onToolFileRef.current = onToolFile;
-  }, [onToolFile]);
-  useEffect(() => {
-    codeGenTypeRef.current = codeGenType;
-  }, [codeGenType]);
-  useEffect(() => {
-    appIdRef.current = appId;
-  }, [appId]);
-
   const handleStreamComplete = useCallback((finalCode: string) => {
-    const genType = codeGenTypeRef.current;
-    const cleaned = genType === CODE_GEN_TYPES.VUE_PROJECT ? cleanVueOutput(finalCode) : finalCode;
+    const cleaned = codeGenType === CODE_GEN_TYPES.VUE_PROJECT ? cleanVueOutput(finalCode) : finalCode;
     if (!cleaned) {
       setStreamingMessage(null);
-      const myAppId = appIdRef.current;
-      if (myAppId) {
-        onStreamFinalizedRef.current(myAppId, genType, false);
+      if (appId) {
+        onStreamFinalized(appId, codeGenType, false);
       }
       return;
     }
@@ -87,11 +67,44 @@ export function useChatStream({
         { id: newMsgId(), role: 'ai', content: cleaned, createTime: new Date().toISOString() },
       ]);
     }
-    const myAppId = appIdRef.current;
-    if (myAppId) {
-      onStreamFinalizedRef.current(myAppId, genType, true);
+    if (appId) {
+      onStreamFinalized(appId, codeGenType, true);
     }
-  }, []);
+  }, [codeGenType, appId, onStreamFinalized]);
+
+  const handleToolExecuted = useCallback(
+    (info: { toolName: string; filePath: string; content?: string }) => {
+      if (!info.filePath || !info.content) return;
+      onToolFile?.(info.filePath, info.content);
+    },
+    [onToolFile],
+  );
+
+  const handleBusinessError = useCallback(
+    (code: number, errorMessage: string, finalAccumulated?: string) => {
+      const isAuthExpired = code === 40100;
+      const rawContent = finalAccumulated !== undefined ? finalAccumulated : '';
+      const cleanedFinal = codeGenType === CODE_GEN_TYPES.VUE_PROJECT ? cleanVueOutput(rawContent) : rawContent;
+
+      setStreamingMessage((current) => {
+        if (!current || !current.isStreaming) return current;
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === current.id)) return prev;
+          const effectiveContent = cleanedFinal || current.content || '';
+          const hadContent = effectiveContent.trim().length > 0;
+          const content = isAuthExpired
+            ? effectiveContent
+            : hadContent
+              ? `${effectiveContent}\n\n> ⚠️ ${errorMessage}`
+              : `❌ ${errorMessage}`;
+          return [...prev, { ...current, content, isStreaming: false }];
+        });
+        return null;
+      });
+      if (!isAuthExpired) message.error(errorMessage);
+    },
+    [codeGenType, message],
+  );
 
   const {
     isStreaming,
@@ -102,44 +115,7 @@ export function useChatStream({
     start,
     cancel,
     reset,
-  } = useSSE(
-    handleStreamComplete,
-    useCallback(
-      (info: { toolName: string; filePath: string; content?: string }) => {
-        if (!info.filePath || !info.content) return;
-        onToolFileRef.current?.(info.filePath, info.content);
-      },
-      [],
-    ),
-    // 业务错误（限流等）：追加到流式气泡后转为普通消息，避免整段生成被覆盖。
-    // 40100 会话过期：只收尾流状态（气泡转普通消息），不弹错——登出跳转由 SSE 层统一处理
-    useCallback(
-      (code: number, errorMessage: string, finalAccumulated?: string) => {
-        const isAuthExpired = code === 40100;
-        const genType = codeGenTypeRef.current;
-        const rawContent = finalAccumulated !== undefined ? finalAccumulated : '';
-        const cleanedFinal = genType === CODE_GEN_TYPES.VUE_PROJECT ? cleanVueOutput(rawContent) : rawContent;
-
-        setStreamingMessage((current) => {
-          if (!current || !current.isStreaming) return current;
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === current.id)) return prev;
-            const effectiveContent = cleanedFinal || current.content || '';
-            const hadContent = effectiveContent.trim().length > 0;
-            const content = isAuthExpired
-              ? effectiveContent
-              : hadContent
-                ? `${effectiveContent}\n\n> ⚠️ ${errorMessage}`
-                : `❌ ${errorMessage}`;
-            return [...prev, { ...current, content, isStreaming: false }];
-          });
-          return null;
-        });
-        if (!isAuthExpired) message.error(errorMessage);
-      },
-      [message],
-    ),
-  );
+  } = useSSE(handleStreamComplete, handleToolExecuted, handleBusinessError);
 
   const cleanedCode = useMemo(
     () => (codeGenType === CODE_GEN_TYPES.VUE_PROJECT ? cleanVueOutput(currentCode) : currentCode),

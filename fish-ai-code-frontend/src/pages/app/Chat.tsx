@@ -60,7 +60,7 @@ interface ChatLocationState {
 const autoSendChannel: BroadcastChannel | null =
   typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('fish-auto-send') : null;
 
-export default function AppChat() {
+function AppChatContent() {
   const { id: appId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -81,8 +81,6 @@ export default function AppChat() {
   const [appLoading, setAppLoading] = useState(true);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(true);
-  // 记录上一个 appId：切换应用时在渲染期重置纯 UI 状态，避免在 effect 里同步 setState
-  const [prevAppId, setPrevAppId] = useState<string | undefined>(appId);
   const [loadingMore, setLoadingMore] = useState(false);
   const [previewTab, setPreviewTab] = useState('preview');
   const [mobilePanel, setMobilePanel] = useState<'chat' | 'preview'>('chat');
@@ -287,18 +285,6 @@ export default function AppChat() {
       }
     }
   }, [messages, appId, app?.codeGenType, refreshHtmlPreview, isStreaming, markStreamStarted, markPreviewHandled, previewHandledRef]);
-
-  // 切换应用：在渲染期重置纯 UI 状态，避免在 effect 中同步 setState 引起级联渲染
-  if (prevAppId !== appId) {
-    setPrevAppId(appId);
-    setApp(null);
-    setAppLoading(true);
-    setRenameOpen(false);
-    setDeployModalOpen(false);
-    setDeployUrl('');
-    setHistoryLoading(true);
-    setHistoryInited(false);
-  }
 
   // 加载应用与历史
   useEffect(() => {
@@ -1136,7 +1122,7 @@ export default function AppChat() {
                       )
                     ) : (
                       <CodePreview
-                        code={currentCode}
+                        code={currentCode || (messages.filter((m) => m.role === 'ai').pop()?.content ?? '')}
                         language="html"
                         isStreaming={isStreaming}
                       />
@@ -1150,4 +1136,9 @@ export default function AppChat() {
       </div>
     </div>
   );
+}
+
+export default function AppChat() {
+  const { id } = useParams<{ id: string }>();
+  return <AppChatContent key={id || 'chat'} />;
 }

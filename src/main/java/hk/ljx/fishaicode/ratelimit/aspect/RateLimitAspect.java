@@ -1,6 +1,7 @@
 package hk.ljx.fishaicode.ratelimit.aspect;
 
 import cn.hutool.json.JSONUtil;
+import hk.ljx.fishaicode.common.SseResultUtils;
 import hk.ljx.fishaicode.exception.BusinessException;
 import hk.ljx.fishaicode.exception.ErrorCode;
 import hk.ljx.fishaicode.model.entity.User;
@@ -75,15 +76,7 @@ public class RateLimitAspect {
     }
 
     private Object buildErrorSseFlux(BusinessException e) {
-        String data = JSONUtil.toJsonStr(Map.of(
-                "error", true,
-                "code", e.getCode(),
-                "message", e.getMessage()
-        ));
-        ServerSentEvent<String> event = ServerSentEvent.<String>builder(data)
-                .event("business-error")
-                .build();
-        return Flux.just(event);
+        return SseResultUtils.buildErrorFlux(e);
     }
 
     private String generateRateLimitKey(JoinPoint point, RateLimit rateLimit) {

@@ -45,20 +45,25 @@ public class FileModifyTool extends BaseTool {
             if (Files.size(path) > MAX_FILE_SIZE_BYTES) {
                 return "错误：文件过大，无法修改 - " + relativeFilePath;
             }
-            String originalContent = Files.readString(path);
-            int firstIndex = originalContent.indexOf(oldContent);
+            String originalContent = Files.readString(path, StandardCharsets.UTF_8);
+            // 换行符统一归一化为 \n 处理，避免 Windows 下 \r\n 与模型生成的 \n 不匹配导致无法定位
+            String normalizedOriginal = originalContent.replace("\r\n", "\n");
+            String normalizedOld = oldContent.replace("\r\n", "\n");
+            String normalizedNew = newContent.replace("\r\n", "\n");
+
+            int firstIndex = normalizedOriginal.indexOf(normalizedOld);
             if (firstIndex == -1) {
                 return "警告：文件中未找到要替换的内容，文件未修改 - " + relativeFilePath;
             }
-            int lastIndex = originalContent.lastIndexOf(oldContent);
+            int lastIndex = normalizedOriginal.lastIndexOf(normalizedOld);
             if (firstIndex != lastIndex) {
                 return "错误：在文件中找到多处匹配内容，请提供更多上下文以唯一定位要修改的代码块 - " + relativeFilePath;
             }
-            String modifiedContent = originalContent.substring(0, firstIndex) + newContent + originalContent.substring(firstIndex + oldContent.length());
+            String modifiedContent = normalizedOriginal.substring(0, firstIndex) + normalizedNew + normalizedOriginal.substring(firstIndex + normalizedOld.length());
             if (modifiedContent.getBytes(StandardCharsets.UTF_8).length > MAX_FILE_SIZE_BYTES) {
                 return "错误：修改后的文件超过 1 MB - " + relativeFilePath;
             }
-            if (originalContent.equals(modifiedContent)) {
+            if (normalizedOriginal.equals(modifiedContent)) {
                 return "信息：替换后文件内容未发生变化 - " + relativeFilePath;
             }
             Files.writeString(path, modifiedContent, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);

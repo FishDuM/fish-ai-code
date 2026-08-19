@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Row, Col, Button, Pagination, Empty, Modal, Input, App, Typography, Space } from 'antd';
+import { Row, Col, Button, Pagination, Empty, Modal, Input, App, Typography, Space, Spin } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router';
 import AppCard from '@/components/AppCard';
@@ -121,42 +121,46 @@ export default function Dashboard() {
       </div>
 
       <div className="glass-panel">
-        {!loading && apps.length === 0 ? (
-        <Empty description="你还没有创建应用" className="page-empty">
-          <Button type="primary" onClick={() => navigate('/')}>
-            创建第一个应用
-          </Button>
-        </Empty>
-      ) : !loading && (
-        <>
-          <Row gutter={[16, 16]}>
-            {apps.map((app) => (
-              <Col key={app.id} xs={24} sm={12} md={8} lg={6}>
-                <AppCard
-                  app={app}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                  onOpen={(a) => navigate(`/app/${a.id}/chat`, { state: { from: '/dashboard' } })}
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '60px 0' }}>
+            <Spin size="large" />
+          </div>
+        ) : apps.length === 0 ? (
+          <Empty description="你还没有创建应用" className="page-empty">
+            <Button type="primary" onClick={() => navigate('/')}>
+              创建第一个应用
+            </Button>
+          </Empty>
+        ) : (
+          <>
+            <Row gutter={[16, 16]}>
+              {apps.map((app) => (
+                <Col key={app.id} xs={24} sm={12} md={8} lg={6}>
+                  <AppCard
+                    app={app}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                    onOpen={(a) => navigate(`/app/${a.id}/chat`, { state: { from: '/dashboard' } })}
+                  />
+                </Col>
+              ))}
+            </Row>
+            {total > query.pageSize! && (
+              <div style={{ textAlign: 'center', marginTop: 24 }}>
+                <Pagination
+                  current={query.pageNum}
+                  pageSize={query.pageSize}
+                  total={total}
+                  onChange={(page) => {
+                    setLoading(true);
+                    setQuery((prev) => ({ ...prev, pageNum: page }));
+                  }}
+                  showSizeChanger={false}
                 />
-              </Col>
-            ))}
-          </Row>
-          {total > query.pageSize! && (
-            <div style={{ textAlign: 'center', marginTop: 24 }}>
-              <Pagination
-                current={query.pageNum}
-                pageSize={query.pageSize}
-                total={total}
-                onChange={(page) => {
-                  setLoading(true);
-                  setQuery((prev) => ({ ...prev, pageNum: page }));
-                }}
-                showSizeChanger={false}
-              />
-            </div>
-          )}
-        </>
-      )}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       <Modal

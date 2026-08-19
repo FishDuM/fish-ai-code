@@ -9,6 +9,7 @@ import hk.ljx.fishaicode.common.BaseResponse;
 import hk.ljx.fishaicode.common.DeleteRequest;
 import hk.ljx.fishaicode.common.GeneratedPathResolver;
 import hk.ljx.fishaicode.common.ResultUtils;
+import hk.ljx.fishaicode.common.SseResultUtils;
 import hk.ljx.fishaicode.constant.UserConstant;
 import hk.ljx.fishaicode.core.GenerationCoordinator;
 import hk.ljx.fishaicode.exception.BusinessException;
@@ -191,31 +192,10 @@ public class AppController {
             User loginUser = userService.getLoginUser(request);
             return appService.chatToGenCode(appChatRequest.getAppId(), appChatRequest.getMessage(), loginUser)
                     .map(content -> ServerSentEvent.builder(content).build())
-                    .onErrorResume(error -> Flux.just(toSseError(error)));
+                    .onErrorResume(error -> Flux.just(SseResultUtils.buildErrorEvent(error)));
         } catch (Exception e) {
-            return Flux.just(toSseError(e));
+            return Flux.just(SseResultUtils.buildErrorEvent(e));
         }
-    }
-
-    /**
-     * 将异常转为前端可识别的 SSE business-error 事件。
-     * 适用于流内（onErrorResume）和流前（try-catch）两种异常场景。
-     */
-    private static ServerSentEvent<String> toSseError(Throwable error) {
-        int code = ErrorCode.SYSTEM_ERROR.getCode();
-        String errorMessage = "生成失败，请稍后重试";
-        if (error instanceof BusinessException businessException) {
-            code = businessException.getCode();
-            errorMessage = businessException.getMessage();
-        }
-        String data = JSONUtil.toJsonStr(Map.of(
-                "error", true,
-                "code", code,
-                "message", errorMessage
-        ));
-        return ServerSentEvent.<String>builder(data)
-                .event("business-error")
-                .build();
     }
 
     /**

@@ -9,6 +9,9 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
+
+import java.util.concurrent.CompletionException;
 
 @Hidden
 @RestControllerAdvice
@@ -51,9 +54,32 @@ public class GlobalExceptionHandler {
         return ResultUtils.error(ErrorCode.PARAMS_ERROR, "请求参数格式错误");
     }
 
+    @ExceptionHandler(NoResourceFoundException.class)
+    public BaseResponse<?> noResourceFoundExceptionHandler(NoResourceFoundException e) {
+        return ResultUtils.error(ErrorCode.NOT_FOUND_ERROR, "资源不存在");
+    }
+
+    @ExceptionHandler(CompletionException.class)
+    public BaseResponse<?> completionExceptionHandler(CompletionException e) {
+        Throwable cause = e.getCause();
+        if (cause instanceof BusinessException businessException) {
+            return businessExceptionHandler(businessException);
+        }
+        if (cause instanceof RuntimeException runtimeException) {
+            return runtimeExceptionHandler(runtimeException);
+        }
+        return exceptionHandler(e);
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public BaseResponse<?> runtimeExceptionHandler(RuntimeException e) {
         log.error("RuntimeException", e);
+        return ResultUtils.error(ErrorCode.SYSTEM_ERROR, "系统错误");
+    }
+
+    @ExceptionHandler(Exception.class)
+    public BaseResponse<?> exceptionHandler(Exception e) {
+        log.error("Exception", e);
         return ResultUtils.error(ErrorCode.SYSTEM_ERROR, "系统错误");
     }
 }

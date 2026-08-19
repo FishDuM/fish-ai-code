@@ -9,9 +9,9 @@ import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import dev.langchain4j.community.store.memory.chat.redis.RedisChatMemoryStore;
+import hk.ljx.fishaicode.ai.AiAppNameService;
 import hk.ljx.fishaicode.ai.AiCodeGenTypeRoutingService;
-import hk.ljx.fishaicode.ai.AiCodeGenTypeRoutingServiceFactory;
-import hk.ljx.fishaicode.ai.AiAppNameServiceFactory;
+import hk.ljx.fishaicode.ai.SensitiveCheck;
 import hk.ljx.fishaicode.common.PageSortUtils;
 import hk.ljx.fishaicode.constant.AppConstant;
 import hk.ljx.fishaicode.constant.AppDeployProperties;
@@ -33,7 +33,6 @@ import hk.ljx.fishaicode.model.enums.CodeGenTypeEnum;
 import hk.ljx.fishaicode.model.enums.MessageTypeEnum;
 import hk.ljx.fishaicode.model.vo.AppVO;
 import hk.ljx.fishaicode.model.vo.PublicAppVO;
-import hk.ljx.fishaicode.ai.SensitiveCheckFactory;
 import hk.ljx.fishaicode.workflow.service.WorkflowService;
 import hk.ljx.fishaicode.service.AppService;
 import hk.ljx.fishaicode.service.ChatHistoryService;
@@ -87,11 +86,11 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     private final VueProjectBuilder vueProjectBuilder;
 
-    private final AiCodeGenTypeRoutingServiceFactory aiCodeGenTypeRoutingServiceFactory;
+    private final AiCodeGenTypeRoutingService aiCodeGenTypeRoutingService;
 
-    private final AiAppNameServiceFactory aiAppNameServiceFactory;
+    private final AiAppNameService aiAppNameService;
 
-    private final SensitiveCheckFactory sensitiveCheckFactory;
+    private final SensitiveCheck sensitiveCheck;
 
     private final WorkflowService workflowService;
 
@@ -112,21 +111,23 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "请求参数为空");
         }
         String initPrompt = appAddRequest.getInitPrompt();
-        // 前置 AI 调用并行化：敏感审查、应用名生成、类型路由互不依赖，
-        // 用虚拟线程并发执行（都是短输出任务，max-tokens:100 限长后单次 ~2s）。
-        // 敏感审查是硬门槛——失败必须提前中断，不等待其余两个。
+
         CompletableFuture<String> checkFuture = CompletableFuture.supplyAsync(
-                () -> sensitiveCheckFactory.create().verify(initPrompt), virtualThreadExecutor);
+                () -> sensitiveCheck.verify(initPrompt), virtualThreadExecutor);
         CompletableFuture<String> nameFuture = CompletableFuture.supplyAsync(
                 () -> generateAppNameSafely(initPrompt), virtualThreadExecutor);
-        CompletableFuture<CodeGenTypeEnum> typeFuture = CompletableFuture.supplyAsync(() -> {
-            AiCodeGenTypeRoutingService routingService = aiCodeGenTypeRoutingServiceFactory.createAiCodeGenTypeRoutingService();
-            return routingService.routeCodeGenType(initPrompt);
-        }, virtualThreadExecutor);
+        CompletableFuture<CodeGenTypeEnum> typeFuture = CompletableFuture.supplyAsync(
+                () -> aiCodeGenTypeRoutingService.routeCodeGenType(initPrompt), virtualThreadExecutor);
 
-        // 先等敏感审查：失败立即抛（此时其余两个仍在后台跑，但不会再被使用）
-        String checkResult = checkFuture.join();
-        validateSensitiveCheckResult(checkResult);
+        // 先等敏感审查：失败立即取消其余后台任务并抛出异常
+        try {
+            String checkResult = checkFuture.join();
+            validateSensitiveCheckResult(checkResult);
+        } catch (Exception e) {
+            nameFuture.cancel(true);
+            typeFuture.cancel(true);
+            throw e;
+        }
 
         // 审查通过，取应用名与类型（生成应用名失败已降级为截断，不会抛）
         String appName = nameFuture.join();
@@ -154,7 +155,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
      */
     private String generateAppNameSafely(String initPrompt) {
         try {
-            String name = aiAppNameServiceFactory.createAiAppNameService().generateAppName(initPrompt);
+            String name = aiAppNameService.generateAppName(initPrompt);
             String cleaned = cleanAppName(name);
             if (StrUtil.isNotBlank(cleaned)) {
                 return cleaned;
@@ -315,8 +316,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     }
 
     /**
-     * 独立事务删除应用与对话历史：事务提交后调用方才清理磁盘，
-     * 避免事务边界与锁边界错位（锁内提交、锁内清理）。
+     * 事务内删除应用和聊天记录
      */
     private boolean deleteAppInTransaction(long id) {
         return Boolean.TRUE.equals(transactionTemplate.execute(status -> {
@@ -544,25 +544,27 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             throw new BusinessException(ErrorCode.PARAMS_ERROR ,"应用代码生成类型错误");
         }
 
-        // 前置校验并行化：敏感审查与提示词增强（含图片收集）互不依赖，用虚拟线程并发执行。
-        // 敏感审查是硬门槛——失败必须提前中断，不等待图片收集；通过后再等增强完成。
+        // 并发执行敏感审查与提示词增强
         final CodeGenTypeEnum genType = enumByValue;
         CompletableFuture<String> checkFuture = CompletableFuture.supplyAsync(
-                () -> sensitiveCheckFactory.create().verify(message), virtualThreadExecutor);
+                () -> sensitiveCheck.verify(message), virtualThreadExecutor);
         CompletableFuture<String> enhanceFuture = CompletableFuture.supplyAsync(
                 () -> workflowService.enhancePrompt(message), virtualThreadExecutor);
 
-        // 先等敏感审查：失败立即抛（此时图片收集仍在后台跑，但不会再被使用）
-        String checkResult = checkFuture.join();
-        validateSensitiveCheckResult(checkResult);
-        // 审查通过，等提示词增强（图片收集）完成
+        // 敏感审查校验
+        try {
+            String checkResult = checkFuture.join();
+            validateSensitiveCheckResult(checkResult);
+        } catch (Exception e) {
+            enhanceFuture.cancel(true);
+            throw e;
+        }
         String enhancedMessage = enhanceFuture.join();
         log.info("提示词增强完成（增强前长度:{} → 增强后长度:{}）", message.length(), enhancedMessage.length());
 
         return generationCoordinator.execute(appId, () -> {
             Flux<String> stringFlux = aiCodeGeneratorFacade.generateAndSaveCodeStream(
                     enhancedMessage, genType, appId, app.getInitPrompt());
-            // 锁获取成功且流创建就绪后才持久化用户消息，避免流初始化异常导致写入了用户消息但没有 AI 回复。
             chatHistoryService.addChatHistory(appId, loginUser.getId(), message, MessageTypeEnum.USER.getValue());
             return streamHandlerExecutor.doExecute(stringFlux, chatHistoryService, appId, loginUser, genType)
                     .doOnComplete(() -> {
@@ -592,11 +594,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     }
 
     /**
-     * 部署一致性设计说明（有意不加 @Transactional）：
-     * 1. deployKey 在复制文件前落库，依靠 DB 唯一索引 uk_deployKey 抢占标识，防止并发生成重复 key；
-     * 2. 文件复制/构建为文件系统操作，无法参与数据库事务，回滚无意义；
-     * 3. DB 以 deployedTime 为部署成功标志：文件操作失败时不更新 deployedTime，下次部署复用同一 deployKey 重试，幂等安全；
-     * 4. 部署在分布式锁内执行，若在此开长事务，Docker 构建（最长 180s）期间会一直占用数据库连接。
+     * 部署应用
      */
     @Override
     public String deployApp(Long appId, User loginUser) {

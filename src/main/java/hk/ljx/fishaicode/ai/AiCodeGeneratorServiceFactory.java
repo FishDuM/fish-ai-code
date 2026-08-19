@@ -22,10 +22,8 @@ import org.springframework.context.annotation.Configuration;
 @Slf4j
 public class AiCodeGeneratorServiceFactory {
 
-    /** 最近一轮已完成对话：1 个用户消息 + 1 个 AI 消息。 */
     private static final int HISTORY_WINDOW_MESSAGES = 2;
 
-    /** 初始需求长期保留，但不能无限挤占模型上下文。 */
     private static final int INITIAL_PROMPT_MAX_CHARS = 2_000;
 
     private final OpenAiChatModelWrapper openAiChatModelWrapper;
@@ -68,8 +66,7 @@ public class AiCodeGeneratorServiceFactory {
     }
 
     /**
-     * 创建一次生成任务专用的 AI 服务。
-     * 初始需求作为稳定项目背景，历史仅回放最近一轮，避免每次把旧网站源码全部重新发送给模型。
+     * 创建生成任务专用的 AI 服务实例
      */
     public AiCodeGeneratorService createAiCodeGeneratorService(long appId, CodeGenTypeEnum type, String initPrompt) {
         log.info("为 appId: {} 创建新的 AI 服务实例", appId);
@@ -78,8 +75,6 @@ public class AiCodeGeneratorServiceFactory {
                 .chatMemoryStore(redisChatMemoryStore)
                 .maxMessages(50)
                 .build();
-        // Redis 仅作为本次流式工具调用期间的存储。每轮均从受控滑动窗口重建，
-        // 防止 Redis 中的旧工具调用和源码跨请求累积。
         chatMemory.clear();
         addInitialProjectBrief(chatMemory, initPrompt);
         chatHistoryService.loadChatHistoryToMemory(appId, chatMemory, type, HISTORY_WINDOW_MESSAGES);

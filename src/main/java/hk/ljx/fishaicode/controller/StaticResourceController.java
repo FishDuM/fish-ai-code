@@ -189,7 +189,7 @@ public class StaticResourceController {
                     pathToken = firstSegment;
                     String afterToken = rest.substring(firstSegment.length());
                     resourcePath = afterToken.isEmpty()
-                            ? "/"
+                            ? ""
                             : afterToken.startsWith("/") ? afterToken : "/" + afterToken;
                 }
             }

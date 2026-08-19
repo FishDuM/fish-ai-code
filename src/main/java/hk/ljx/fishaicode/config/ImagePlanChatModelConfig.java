@@ -11,10 +11,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Scope;
 
 /**
- * 图片收集规划模型配置。
- *
- * <p>图片规划只需产出搜索关键词，属于短输出任务，用轻量模型（qwen-flash）即可，
- * 避免推理模型（qwen3.7-max）耗时数十秒且产生大量无用的 reasoning token。</p>
+ * 图片规划模型配置
  */
 @Configuration
 @ConfigurationProperties(prefix = "langchain4j.open-ai.image-plan-chat-model")

@@ -51,23 +51,6 @@ export function useEditMode({
   const [pendingEditsOwnerAppId, setPendingEditsOwnerAppId] = useState<string | null>(null);
   // 上次选中的 selector：AI 重写页面后重新高亮
   const [pendingHighlightSelector, setPendingHighlightSelector] = useState<string | null>(null);
-  const pendingEditsRef = useRef(pendingEdits);
-  const pendingEditsOwnerAppIdRef = useRef(pendingEditsOwnerAppId);
-  const pendingHighlightSelectorRef = useRef<string | null>(pendingHighlightSelector);
-  const editModeRef = useRef(editMode);
-
-  useEffect(() => {
-    pendingEditsRef.current = pendingEdits;
-  }, [pendingEdits]);
-  useEffect(() => {
-    pendingEditsOwnerAppIdRef.current = pendingEditsOwnerAppId;
-  }, [pendingEditsOwnerAppId]);
-  useEffect(() => {
-    pendingHighlightSelectorRef.current = pendingHighlightSelector;
-  }, [pendingHighlightSelector]);
-  useEffect(() => {
-    editModeRef.current = editMode;
-  }, [editMode]);
 
   const postEditModeMessage = useCallback(
     (msg: EditModeControlMessage) => {
@@ -109,9 +92,9 @@ export function useEditMode({
         | undefined;
       if (!data || data.source !== EDIT_MODE_SOURCE) return;
       if (data.type === 'ready') {
-        postEditModeMessage({ type: editModeRef.current ? 'enable' : 'disable' });
-        if (editModeRef.current && pendingHighlightSelectorRef.current) {
-          postEditModeMessage({ type: 'highlight', selector: pendingHighlightSelectorRef.current });
+        postEditModeMessage({ type: editMode ? 'enable' : 'disable' });
+        if (editMode && pendingHighlightSelector) {
+          postEditModeMessage({ type: 'highlight', selector: pendingHighlightSelector });
         }
       } else if (data.type === 'select') {
         if (!data.element) {
@@ -126,7 +109,7 @@ export function useEditMode({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [iframeRef, computePopoverPosition, postEditModeMessage]);
+  }, [iframeRef, computePopoverPosition, postEditModeMessage, editMode, pendingHighlightSelector]);
 
   // iframe 加载新内容后重新绘制高亮（注入脚本每次加载自动运行，只需等 load）
   useEffect(() => {
@@ -244,11 +227,11 @@ export function useEditMode({
 
   /** 批量发送：合并队列为一条 prompt 交给流式链路 */
   const handleSendAllEdits = useCallback(() => {
-    const queue = pendingEditsRef.current;
+    const queue = pendingEdits;
     if (!queue.length || savingEdits) return;
     if (!appId) return;
     // 队列不属于当前应用时拒绝发送
-    if (pendingEditsOwnerAppIdRef.current !== appId) {
+    if (pendingEditsOwnerAppId !== appId) {
       message.warning('当前编辑内容已失效，请重新添加');
       setPendingEdits([]);
       setPendingEditsOwnerAppId(null);
@@ -275,7 +258,19 @@ export function useEditMode({
     ]);
     postEditModeMessage({ type: 'unselect' });
     sendBatchEdits(composed);
-  }, [appId, canEdit, message, savingEdits, sendBatchEdits, isStreamingRef, backgroundGeneration, setMessages, postEditModeMessage]);
+  }, [
+    pendingEdits,
+    pendingEditsOwnerAppId,
+    appId,
+    canEdit,
+    message,
+    savingEdits,
+    sendBatchEdits,
+    isStreamingRef,
+    backgroundGeneration,
+    setMessages,
+    postEditModeMessage,
+  ]);
 
   return {
     editMode,

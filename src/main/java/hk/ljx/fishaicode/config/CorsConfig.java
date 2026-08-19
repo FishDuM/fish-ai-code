@@ -16,13 +16,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * CORS 白名单计算规则：
- * 1. 显式配置了 app.cors-allowed-origins 时直接使用（逗号分隔）；
- * 2. 未配置时自动合并 app-origin（主站）与 preview-origin（预览域），过滤空值/重复；
- * 3. 配置了 preview-origin 但最终白名单中缺失它时启动直接报错，
- *    避免部署后才发现 Vue 预览 iframe 的 JS/CSS 跨域请求被 403。
- *
- * 该逻辑保证 compose 空环境变量（CORS_ALLOWED_ORIGINS=）不会覆盖 Spring 的 fallback。
+ * 全局跨域配置
  */
 @Slf4j
 @Configuration
